@@ -4,14 +4,21 @@ Guidelines for creating effective software roadmaps based on best practices from
 
 ## Directory Structure
 
-Roadmap phase documents follow the same directory structure as tickets and ERDs:
+Roadmap phase documents are organized in a nested structure with sprints and tickets:
 
 ```
 phases/
-├── todo/          # Phase documents that need to be created or refined
-├── in-progress/   # Phase documents currently being worked on
-├── done/          # Completed phase documents
-└── not-doing/     # Phase documents that are cancelled or will not be done
+  {state}/                    # todo, in-progress, done, not-doing
+    NNN-phase-name/
+      NNN-phase-name.md       # Phase document
+      sprints/
+        {state}/              # todo, in-progress, done, not-doing
+          NNN-sprint-name/
+            prd.md            # Product Requirements Document
+            erd.md            # Engineering Requirements Document
+            tickets/
+              {state}/        # todo, in-progress, done, not-doing
+                NNN-ticket-name.md
 ```
 
 ## Roadmap Document: README.md
@@ -84,48 +91,55 @@ Phase documents break down into ERDs, which in turn break down into tickets. See
 ## Directory Descriptions
 
 ### `phases/`
-The primary directory containing all phase document subdirectories.
+The primary directory containing all phase directories. Each phase is a directory containing the phase document and nested sprints.
 
-### `phases/todo/`
-Phase documents that are planned but not yet started. These represent roadmap phases that need to be created or refined.
+### `phases/{state}/NNN-phase-name/`
+Each phase is a directory containing:
+- `NNN-phase-name.md` - The phase document itself
+- `sprints/` - Directory containing sprints organized by state
 
-### `phases/in-progress/`
-Phase documents that are currently being actively worked on. Move phase documents here when work begins.
+### Phase States
+- `phases/todo/` - Phase directories that are planned but not yet started
+- `phases/in-progress/` - Phase directories currently being actively worked on
+- `phases/done/` - Completed phase directories (only if all sprints are done)
+- `phases/not-doing/` - Phase directories that are cancelled or deferred
 
-### `phases/done/`
-Completed phase documents. Move phase documents here when they are finished and approved.
-
-### `phases/not-doing/`
-Phase documents that have been cancelled, deferred indefinitely, or decided against. Use this for phase documents that will not be completed.
+### Sprint States
+Within each phase, sprints have their own states:
+- `sprints/todo/` - Sprints planned but not started
+- `sprints/in-progress/` - Sprints currently being worked on
+- `sprints/done/` - Completed sprints (only if all tickets are done)
+- `sprints/not-doing/` - Sprints that are cancelled or deferred
 
 ## Workflow
 
-1. **Create**: New phase documents start in `phases/todo/`
-2. **Start**: Move phase documents to `phases/in-progress/` when work begins
-3. **Complete**: Move phase documents to `phases/done/` when finished and approved
-4. **Cancel**: Move phase documents to `phases/not-doing/` if they won't be completed
+1. **Create**: New phase directories start in `phases/todo/`
+2. **Start**: Move phase directories to `phases/in-progress/` when work begins
+3. **Complete**: Move phase directories to `phases/done/` when all sprints are completed
+4. **Cancel**: Move phase directories to `phases/not-doing/` if they won't be completed
+
+**Important**: Phases and sprints have independent states. A phase can be in-progress while its sprints are in various states.
 
 ## Phase Document File Format
 
 ### File Naming Convention
 
-Phase documents must follow a specific naming format to enable lexicographical sorting by phase number:
+Phase directories and documents must follow a specific naming format:
 
-**Format**: `NNN-description.md`
+**Phase Directory Format**: `NNN-description/`
 
 Where:
 - `NNN` is a zero-padded phase number (e.g., `001`, `002`, `010`, `100`)
 - `description` is a short, descriptive name using hyphens or underscores
-- File extension is `.md`
+- The directory contains `NNN-description.md` (the phase document)
 
 **Examples**:
-- `001-q1-foundation.md`
-- `002-q2-user-authentication.md`
-- `010-q3-platform-scaling.md`
-- `100-q4-market-expansion.md`
+- `001-q1-foundation/` containing `001-q1-foundation.md`
+- `002-q2-user-authentication/` containing `002-q2-user-authentication.md`
+- `010-q3-platform-scaling/` containing `010-q3-platform-scaling.md`
 
 **Why zero-padding?**
-Zero-padding ensures that when files are sorted lexicographically (alphabetically), they are also sorted numerically. Without zero-padding, `10-phase.md` would sort before `2-phase.md`, which is incorrect.
+Zero-padding ensures that when directories are sorted lexicographically (alphabetically), they are also sorted numerically. Without zero-padding, `10-phase/` would sort before `2-phase/`, which is incorrect.
 
 ### File Content
 
@@ -208,12 +222,12 @@ Each phase document should contain the roadmap structure outlined below.
 - **Change Process**: When and how roadmap changes are made
 - **Communication Plan**: How roadmap is shared with different audiences
 
-### 9. Technical Debt PRDs
+### 9. Technical Debt Sprints
 
-**Rule**: Every 5th PRD (e.g., PRD-005, PRD-010, PRD-015, PRD-020, etc.) must be a **technical debt paydown PRD**.
+**Rule**: Every 5th sprint (e.g., Sprint-005, Sprint-010, Sprint-015, Sprint-020, etc.) must be a **technical debt paydown sprint**.
 
 #### Purpose
-This ensures regular, systematic attention to technical debt at the roadmap level. Technical debt PRDs can be very short and focus on high-level technical improvements rather than feature development.
+This ensures regular, systematic attention to technical debt at the roadmap level. Technical debt sprints can be very short and focus on high-level technical improvements rather than feature development.
 
 #### What to Include
 - **Theme**: Technical debt reduction (e.g., "Improve Code Quality", "Modernize Infrastructure", "Reduce Security Debt")
@@ -222,13 +236,14 @@ This ensures regular, systematic attention to technical debt at the roadmap leve
 - **Success Metrics**: How to measure debt reduction (e.g., reduced bug rate, faster build times, improved test coverage)
 
 #### Examples
-- PRD-005: Reduce code debt and improve maintainability
-- PRD-010: Modernize infrastructure and update dependencies
-- PRD-015: Improve test coverage and reduce flaky tests
-- PRD-020: Enhance security posture and patch vulnerabilities
+- Sprint-005: Reduce code debt and improve maintainability
+- Sprint-010: Modernize infrastructure and update dependencies
+- Sprint-015: Improve test coverage and reduce flaky tests
+- Sprint-020: Enhance security posture and patch vulnerabilities
 
-#### Relationship to ERDs
-- Each technical debt PRD maps to one technical debt ERD
+#### Sprint Structure
+- Each technical debt sprint contains both a PRD (`prd.md`) and ERD (`erd.md`)
+- The PRD provides high-level context and business justification
 - The ERD provides detailed requirements for addressing the technical debt
 - See `erd.md` for technical debt ERD guidelines
 
@@ -273,34 +288,42 @@ This ensures regular, systematic attention to technical debt at the roadmap leve
 - **Include**: Themes (customer-benefit focused), high-level timeline, value propositions
 - **Exclude**: Internal dependencies, technical details, resource constraints
 
-## Integration with ERD and Ticket System
+## Integration with Sprint and Ticket System
 
-Phase documents, ERDs, and tickets share the same directory structure pattern:
-- Phase documents are managed in `phases/` with subdirectories: `todo/`, `in-progress/`, `done/`, `not-doing/`
-- ERDs are managed in `erds/` with the same subdirectories
-- Tickets are managed in `tickets/` with the same subdirectories
+Phase documents, sprints, and tickets are organized in a nested hierarchy:
+- Phase directories are managed in `phases/` with subdirectories: `todo/`, `in-progress/`, `done/`, `not-doing/`
+- Sprints are nested under phases in `sprints/` with the same subdirectories
+- Tickets are nested under sprints in `tickets/` with the same subdirectories
 - All use zero-padded numbering for lexicographical sorting
 - All avoid status in file content (status is implied by directory location)
 
-### From Roadmap to ERD
-- Phase document themes and initiatives inform ERD creation
-- ERDs should align with phase document priorities
-- ERDs break down phase document initiatives into detailed requirements
-- **Every 5th PRD/ERD must be a technical debt paydown PRD/ERD** (see ERD guidelines)
+### From Roadmap to Sprint
+- Phase document themes and initiatives inform sprint creation
+- Sprints should align with phase document priorities
+- Each sprint contains both a PRD (`prd.md`) and ERD (`erd.md`)
+- **Every 5th sprint must be a technical debt paydown sprint** (see ERD guidelines)
 
-### From ERD to Tickets
-- ERDs decompose phase document initiatives into requirements
-- Tickets implement ERD requirements
-- Maintain traceability: Phase Document → ERD → Tickets
+### From Sprint ERD to Tickets
+- Sprint ERDs decompose phase document initiatives into detailed requirements
+- Tickets implement sprint ERD requirements
+- Tickets are created within the sprint's `tickets/todo/` directory
+- Maintain traceability: Phase Document → Sprint (PRD + ERD) → Tickets
 
 ### Traceability Chain
 ```
-Phase Document Theme/Initiative (phases/001-phase-name.md)
+Phase Document Theme/Initiative (phases/{state}/NNN-phase-name/NNN-phase-name.md)
   ↓
-ERD Requirements (erds/001-erd-name.md with REQ-001, REQ-002, ...)
+Sprint (phases/{state}/NNN-phase-name/sprints/{state}/NNN-sprint-name/)
+  ├── prd.md (Product Requirements)
+  └── erd.md (Engineering Requirements with REQ-001, REQ-002, ...)
   ↓
-Tickets (tickets/001-implement-feature.md, tickets/002-add-ui.md, ...)
+Tickets (phases/{state}/NNN-phase-name/sprints/{state}/NNN-sprint-name/tickets/{state}/NNN-ticket-name.md)
 ```
+
+### Sprint Completion Rules
+- A sprint cannot be moved to `done` if it has any tickets in `todo` or `in-progress` states
+- All tickets must be completed or moved to `not-doing` before closing a sprint
+- Use `./sdlc.sh move sprint <number> done` to move sprints (validation is automatic)
 
 ## Phase Document Format
 
@@ -392,10 +415,11 @@ Before finalizing a phase document:
 - [ ] Risks are acknowledged with mitigation strategies
 - [ ] Review cadence and process are established
 - [ ] Phase document is tailored for different audiences
-- [ ] Phase document aligns with ERD priorities
-- [ ] Phase document can be traced to ERDs and tickets
-- [ ] Phase document follows naming convention (zero-padded number)
+- [ ] Phase document aligns with sprint priorities
+- [ ] Phase document can be traced to sprints and tickets
+- [ ] Phase directory follows naming convention (zero-padded number)
 - [ ] Phase document does not include status (status is implied by directory location)
+- [ ] Sprints are properly nested under the phase directory
 
 ### README.md Roadmap Checklist
 

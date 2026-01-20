@@ -429,15 +429,17 @@ When prioritizing technical debt, consider:
 
 4. **Quadrant Classification**: Deliberate/Inadvertent × Prudent/Reckless
 
-### Integration with Ticket System
+### Integration with Sprint and Ticket System
 
-Technical debt should be tracked as tickets in the ticket system:
+Technical debt should be tracked as sprints and tickets:
 
-- **File Naming**: Use zero-padded numbers (e.g., `001-fix-duplicated-logic.md`)
+- **Sprint Structure**: Technical debt sprints follow the same structure as feature sprints (contain `prd.md` and `erd.md`)
+- **Every 5th Sprint**: Must be a technical debt sprint (see `roadmap.md` and `erd.md`)
+- **Ticket Naming**: Use zero-padded numbers (e.g., `001-fix-duplicated-logic.md`)
 - **Category Tag**: Include debt type in ticket (e.g., `[Code Debt]`, `[Security Debt]`)
 - **Priority**: Based on quadrant and impact assessment
 - **Acceptance Criteria**: Define what "debt resolved" means
-- **Link to ERDs**: If debt blocks or relates to ERD requirements
+- **Link to Sprint ERD**: Tickets reference sprint ERD requirements
 
 ### Example Ticket Format
 

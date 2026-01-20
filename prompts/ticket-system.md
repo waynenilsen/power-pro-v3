@@ -4,37 +4,39 @@ An in-filesystem ticket system for managing tasks and work items.
 
 ## Directory Structure
 
+Tickets are nested under sprints, which are nested under phases:
+
 ```
-tickets/
-├── todo/          # Tickets that need to be done
-├── in-progress/   # Tickets currently being worked on
-├── done/          # Completed tickets
-└── not-doing/     # Tickets that are cancelled or will not be done
+phases/
+  {phase-state}/                    # todo, in-progress, done, not-doing
+    NNN-phase-name/
+      sprints/
+        {sprint-state}/             # todo, in-progress, done, not-doing
+          NNN-sprint-name/
+            tickets/
+              {ticket-state}/       # todo, in-progress, done, not-doing
+                NNN-ticket-name.md
 ```
 
 ## Directory Descriptions
 
-### `tickets/`
-The primary directory containing all ticket subdirectories.
+### Ticket Location
+Tickets are created within sprint directories under `tickets/{state}/` subdirectories. Each sprint has its own `tickets/` directory with state subdirectories.
 
-### `tickets/todo/`
-Tickets that are planned but not yet started. These represent work items that need to be completed.
-
-### `tickets/in-progress/`
-Tickets that are currently being actively worked on. Move tickets here when work begins.
-
-### `tickets/done/`
-Completed tickets. Move tickets here when they are finished.
-
-### `tickets/not-doing/`
-Tickets that have been cancelled, deferred indefinitely, or decided against. Use this for tickets that will not be completed.
+### Ticket States
+- `tickets/todo/` - Tickets that are planned but not yet started
+- `tickets/in-progress/` - Tickets currently being actively worked on
+- `tickets/done/` - Completed tickets
+- `tickets/not-doing/` - Tickets that are cancelled or deferred
 
 ## Workflow
 
-1. **Create**: New tickets start in `tickets/todo/`
-2. **Start**: Move tickets to `tickets/in-progress/` when work begins
-3. **Complete**: Move tickets to `tickets/done/` when finished
-4. **Cancel**: Move tickets to `tickets/not-doing/` if they won't be completed
+1. **Create**: New tickets start in the sprint's `tickets/todo/` directory
+2. **Start**: Move tickets to `tickets/in-progress/` when work begins (use `./sdlc.sh move ticket <number> in-progress`)
+3. **Complete**: Move tickets to `tickets/done/` when finished (use `./sdlc.sh move ticket <number> done`)
+4. **Cancel**: Move tickets to `tickets/not-doing/` if they won't be completed (use `./sdlc.sh move ticket <number> not-doing`)
+
+**Important**: Use `./sdlc.sh` commands to manage tickets. The tool automatically finds tickets across all sprints by number or name.
 
 ## Ticket File Format
 
@@ -74,14 +76,14 @@ Each ticket file should contain:
 **Critical Rule**: When a ticket involves database schema changes, the schema change must be in a **separate ticket and commit** from the code that uses the schema.
 
 ### Process
-1. **Schema Change Ticket**: Create a ticket for the schema change itself
+1. **Schema Change Ticket**: Create a ticket in the sprint's `tickets/todo/` directory for the schema change itself
    - Includes the schema modification
    - Includes the goose migration file
    - Migration must consider what's currently in production
    - Migration must include data migration strategies
    - Performance optimization is not required (yet)
 
-2. **Implementation Ticket**: Create a separate ticket for code that uses the schema
+2. **Implementation Ticket**: Create a separate ticket in the same sprint's `tickets/todo/` directory for code that uses the schema
    - Depends on the schema change ticket
    - Uses the new schema structure
    - Implements the feature/functionality
@@ -91,10 +93,12 @@ Each ticket file should contain:
   - Creates `users` table with email, password_hash, name columns
   - Includes goose migration
   - Handles data migration if needed
+  - Located in: `phases/{state}/NNN-phase/sprints/{state}/NNN-sprint/tickets/todo/001-add-users-table.md`
   
 - **Ticket 002**: Implement user registration API (blocked by 001)
   - Uses the `users` table created in Ticket 001
   - Implements registration logic
+  - Located in: `phases/{state}/NNN-phase/sprints/{state}/NNN-sprint/tickets/todo/002-implement-registration-api.md`
 
 ### Why Separate?
 - Schema changes can be reviewed independently

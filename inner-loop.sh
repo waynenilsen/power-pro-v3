@@ -1,228 +1,287 @@
 #!/usr/bin/env bash
 #
-# new-inner-loop.sh - Deterministically compose and run prompts based on ralph logic
+# inner-loop.sh - SDLC workflow automation
 #
-# This script deterministically builds prompts using bash logic instead of
-# relying on relative path resolution in Claude Max.
+# Hands-off workflow automation that manages the full SDLC:
+# - Implements tickets
+# - Moves tickets through states
+# - Closes sprints when all tickets are done
+# - Breaks down sprint ERDs into tickets
+# - Creates sprints from phases
+# - Creates phases from README
 
-# Enable alias expansion in non-interactive shell
+set -euo pipefail
+
+# Enable alias expansion
 shopt -s expand_aliases
 
-# Source no-guard-bashrc.sh to give node bun bla bla all tools to claude as well as to get the claude alias
+# Source environment
 [ -f ~/.no-guard-bashrc.sh ] && source ~/.no-guard-bashrc.sh
 
-# Debug: Script start
-echo "[DEBUG] new-inner-loop.sh: Starting"
-
-# Get absolute path to this script's directory
+# Get absolute path to script directory
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-PROMPTS_DIR="$SCRIPT_DIR"
-echo "[DEBUG] new-inner-loop.sh: SCRIPT_DIR=$SCRIPT_DIR"
-echo "[DEBUG] new-inner-loop.sh: PROMPTS_DIR=$PROMPTS_DIR"
 
-# Main execution
-main() {
-  echo "[DEBUG] new-inner-loop.sh: Entering main()"
+# Colors for output
+CYAN='\033[0;36m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m'
+
+# ============================================================================
+# Helper Functions
+# ============================================================================
+
+log() {
+  echo -e "${CYAN}[inner-loop]${NC} $*"
+}
+
+log_success() {
+  echo -e "${GREEN}[inner-loop]${NC} $*"
+}
+
+log_warning() {
+  echo -e "${YELLOW}[inner-loop]${NC} $*"
+}
+
+# Find next available sprint number across all phases
+find_next_sprint_number() {
+  local max_num=0
   
-  # Get the next in-progress ticket using sdlc.sh
-  echo "[DEBUG] Getting next in-progress ticket..."
-  NEXT_TICKET=$(./sdlc.sh get-next ticket in-progress 2>&1)
-  
-  if [ $? -eq 0 ]; then
-    echo "[DEBUG] Found ticket: $NEXT_TICKET"
-    echo "Next ticket: $NEXT_TICKET"
-    
-    # Tell Claude to implement the ticket
-    echo "[DEBUG] Calling Claude to implement ticket..."
-    ./claude-wrapper.sh "Implement the ticket at $NEXT_TICKET. Read the ticket file and implement all requirements specified in it."
-    exit 0
-  fi
-  
-  echo "[DEBUG] No in-progress tickets found: $NEXT_TICKET"
-  echo "No in-progress tickets available"
-  
-  # Get the next todo ticket using sdlc.sh
-  echo "[DEBUG] Getting next todo ticket..."
-  NEXT_TICKET=$(./sdlc.sh get-next ticket todo 2>&1)
-  
-  if [ $? -eq 0 ]; then
-    echo "[DEBUG] Found ticket: $NEXT_TICKET"
-    echo "Next ticket: $NEXT_TICKET"
-    
-    # Move ticket to in-progress
-    echo "[DEBUG] Moving ticket to in-progress..."
-    ./sdlc.sh move ticket "$NEXT_TICKET" in-progress
-    exit 0
-  fi
-  
-  echo "[DEBUG] No todo tickets found: $NEXT_TICKET"
-  echo "No todo tickets available"
-  
-  # Move all in-progress ERDs to done
-  echo "[DEBUG] Moving all in-progress ERDs to done..."
-  while true; do
-    NEXT_ERD=$(./sdlc.sh get-next erd in-progress 2>&1)
-    if [ $? -ne 0 ]; then
-      break
+  # Search all phases for sprint directories
+  for phase_state_dir in "$SCRIPT_DIR/phases"/*; do
+    if [ ! -d "$phase_state_dir" ]; then
+      continue
     fi
-    echo "[DEBUG] Moving ERD to done: $NEXT_ERD"
-    ./sdlc.sh move erd "$NEXT_ERD" done
-  done
-  
-  # Move all in-progress PRDs to done
-  echo "[DEBUG] Moving all in-progress PRDs to done..."
-  while true; do
-    NEXT_PRD=$(./sdlc.sh get-next prd in-progress 2>&1)
-    if [ $? -ne 0 ]; then
-      break
-    fi
-    echo "[DEBUG] Moving PRD to done: $NEXT_PRD"
-    ./sdlc.sh move prd "$NEXT_PRD" done
-  done
-  
-  # Move next todo ERD to in-progress
-  echo "[DEBUG] Getting next todo ERD..."
-  NEXT_ERD=$(./sdlc.sh get-next erd todo 2>&1)
-  
-  if [ $? -eq 0 ]; then
-    echo "[DEBUG] Found ERD: $NEXT_ERD"
-    echo "Next ERD: $NEXT_ERD"
     
-    # Move ERD to in-progress
-    echo "[DEBUG] Moving ERD to in-progress..."
-    ./sdlc.sh move erd "$NEXT_ERD" in-progress
-    exit 0
-  fi
-  
-  # Move next todo PRD to in-progress
-  echo "[DEBUG] Getting next todo PRD..."
-  NEXT_PRD=$(./sdlc.sh get-next prd todo 2>&1)
-  
-  if [ $? -eq 0 ]; then
-    echo "[DEBUG] Found PRD: $NEXT_PRD"
-    echo "Next PRD: $NEXT_PRD"
-    
-    # Move PRD to in-progress
-    echo "[DEBUG] Moving PRD to in-progress..."
-    ./sdlc.sh move prd "$NEXT_PRD" in-progress
-    exit 0
-  fi
-  
-  # Check for in-progress ERD and break it down into tickets
-  echo "[DEBUG] Checking for in-progress ERD to break down into tickets..."
-  NEXT_ERD=$(./sdlc.sh get-next erd in-progress 2>&1)
-  
-  if [ $? -eq 0 ]; then
-    echo "[DEBUG] Found in-progress ERD: $NEXT_ERD"
-    echo "Breaking down ERD into tickets: $NEXT_ERD"
-    
-    # Extract ERD number from filename (e.g., "001-erd-name.md" -> "001")
-    ERD_FILENAME=$(basename "$NEXT_ERD")
-    ERD_NUMBER=$(echo "$ERD_FILENAME" | sed -E 's/^([0-9]+)-.*/\1/')
-    
-    # Find associated PRD (same number)
-    PRD_PATH=""
-    for dir in prds/todo prds/in-progress prds/done prds/not-doing; do
-      if [ -d "$SCRIPT_DIR/$dir" ]; then
-        PRD_CANDIDATE=$(find "$SCRIPT_DIR/$dir" -maxdepth 1 -type f -name "${ERD_NUMBER}-*.md" 2>/dev/null | head -n 1)
-        if [ -n "$PRD_CANDIDATE" ]; then
-          PRD_PATH="$PRD_CANDIDATE"
-          break
-        fi
+    for phase_dir in "$phase_state_dir"/*; do
+      if [ ! -d "$phase_dir" ] || [ ! -f "$phase_dir"/*.md ]; then
+        continue
       fi
-    done
-    
-    # Build prompt for Claude
-    PROMPT="Read the ERD at $NEXT_ERD"
-    if [ -n "$PRD_PATH" ]; then
-      PROMPT="$PROMPT and the associated PRD at $PRD_PATH"
-    fi
-    PROMPT="$PROMPT. Also read the guide at $SCRIPT_DIR/prompts/erd-to-tickets.md. Break down the ERD into tickets following the guidelines in erd-to-tickets.md. Use ./sdlc.sh commands to manage tickets. Create tickets in the tickets/todo/ directory with appropriate naming (NNN-description.md format). Ensure all tickets reference the ERD requirements they implement."
-    
-    echo "[DEBUG] Calling Claude to break down ERD into tickets..."
-    ./claude-wrapper.sh "$PROMPT"
-    exit 0
-  fi
-  
-  echo "[DEBUG] No in-progress ERDs found to break down"
-  echo "[DEBUG] No todo ERDs or PRDs available"
-  
-  # Check if there are any todo phases that need to be broken down into PRDs
-  echo "[DEBUG] Checking for todo phases..."
-  NEXT_PHASE=$(./sdlc.sh get-next phase todo 2>&1)
-  
-  if [ $? -eq 0 ]; then
-    echo "[DEBUG] Found todo phase: $NEXT_PHASE"
-    echo "Creating PRD and ERD from phase: $NEXT_PHASE"
-    
-    # Move phase to in-progress
-    echo "[DEBUG] Moving phase to in-progress..."
-    ./sdlc.sh move phase "$NEXT_PHASE" in-progress
-    
-    # Extract phase number from filename (e.g., "001-phase-name.md" -> "001")
-    PHASE_FILENAME=$(basename "$NEXT_PHASE")
-    PHASE_NUMBER=$(echo "$PHASE_FILENAME" | sed -E 's/^([0-9]+)-.*/\1/')
-    
-    # Find the next available PRD/ERD number
-    # Check existing PRDs and ERDs to determine next number
-    MAX_NUM=0
-    for dir in prds/todo prds/in-progress prds/done prds/not-doing erds/todo erds/in-progress erds/done erds/not-doing; do
-      if [ -d "$SCRIPT_DIR/$dir" ]; then
-        for file in "$SCRIPT_DIR/$dir"/*.md; do
-          if [ -f "$file" ]; then
-            FILENAME=$(basename "$file")
-            FILE_NUM=$(echo "$FILENAME" | sed -E 's/^([0-9]+)-.*/\1/' | sed 's/^0*//')
-            if [ -n "$FILE_NUM" ] && [ "$FILE_NUM" -gt "$MAX_NUM" ] 2>/dev/null; then
-              MAX_NUM=$FILE_NUM
-            fi
+      
+      local sprints_dir="$phase_dir/sprints"
+      if [ ! -d "$sprints_dir" ]; then
+        continue
+      fi
+      
+      # Check all sprint state directories
+      for sprint_state_dir in "$sprints_dir"/*; do
+        if [ ! -d "$sprint_state_dir" ]; then
+          continue
+        fi
+        
+        # Check all sprint directories
+        for sprint_dir in "$sprint_state_dir"/*; do
+          if [ ! -d "$sprint_dir" ]; then
+            continue
+          fi
+          
+          local sprint_name=$(basename "$sprint_dir")
+          local sprint_num=$(echo "$sprint_name" | sed -E 's/^([0-9]+)-.*/\1/' | sed 's/^0*//')
+          if [ -n "$sprint_num" ] && [ "$sprint_num" -gt "$max_num" ] 2>/dev/null; then
+            max_num=$sprint_num
           fi
         done
+      done
+    done
+  done
+  
+  echo $((max_num + 1))
+}
+
+# Find next available phase number
+find_next_phase_number() {
+  local max_num=0
+  
+  for phase_state_dir in "$SCRIPT_DIR/phases"/*; do
+    if [ ! -d "$phase_state_dir" ]; then
+      continue
+    fi
+    
+    for phase_dir in "$phase_state_dir"/*; do
+      if [ ! -d "$phase_dir" ]; then
+        continue
+      fi
+      
+      local phase_name=$(basename "$phase_dir")
+      local phase_num=$(echo "$phase_name" | sed -E 's/^([0-9]+)-.*/\1/' | sed 's/^0*//')
+      if [ -n "$phase_num" ] && [ "$phase_num" -gt "$max_num" ] 2>/dev/null; then
+        max_num=$phase_num
       fi
     done
-    
-    # Calculate numbers for at least 3 PRD/ERD pairs
-    FIRST_NUM=$((MAX_NUM + 1))
-    SECOND_NUM=$((MAX_NUM + 2))
-    THIRD_NUM=$((MAX_NUM + 3))
-    FIRST_NUM_PADDED=$(printf "%03d" "$FIRST_NUM")
-    SECOND_NUM_PADDED=$(printf "%03d" "$SECOND_NUM")
-    THIRD_NUM_PADDED=$(printf "%03d" "$THIRD_NUM")
-    
-    # Build prompt for Claude
-    PROMPT="Read the phase document at $NEXT_PHASE. Also read the ERD guidelines at $SCRIPT_DIR/prompts/erd.md and the roadmap guidelines at $SCRIPT_DIR/prompts/roadmap.md. One phase must correspond to at least 3 PRDs and ERDs. Create at least 3 PRD (Product Requirements Document) and ERD (Engineering Requirements Document) pairs from this phase with the following numbers: $FIRST_NUM_PADDED, $SECOND_NUM_PADDED, $THIRD_NUM_PADDED (create more if the phase warrants it). Each PRD and its associated ERD must share the same number (e.g., PRD $FIRST_NUM_PADDED pairs with ERD $FIRST_NUM_PADDED). Create all files in their respective todo directories (prds/todo/ and erds/todo/) with the naming format NNN-description.md. After creating all files, use ./sdlc.sh move prd and ./sdlc.sh move erd commands to move ONLY the FIRST pair ($FIRST_NUM_PADDED) to in-progress. Leave all other PRD/ERD pairs in todo. Remember: 1 PRD maps to precisely 1 ERD, and every 5th PRD/ERD must be a technical debt paydown PRD/ERD."
-    
-    echo "[DEBUG] Calling Claude to create PRD and ERD from phase..."
-    ./claude-wrapper.sh "$PROMPT"
+  done
+  
+  echo $((max_num + 1))
+}
+
+# ============================================================================
+# Main Workflow
+# ============================================================================
+
+main() {
+  log "Starting SDLC workflow automation"
+  
+  # ========================================================================
+  # Step 1: Implement in-progress tickets
+  # ========================================================================
+  log "Checking for in-progress tickets..."
+  if NEXT_TICKET=$("./sdlc.sh" get-next ticket in-progress 2>&1); then
+    log_success "Found in-progress ticket: $NEXT_TICKET"
+    log "Implementing ticket..."
+    "$SCRIPT_DIR/claude-wrapper.sh" "Implement the ticket at $NEXT_TICKET. Read the ticket file and implement all requirements specified in it."
     exit 0
   fi
   
-  # If we get here, there are no phases - create one from README
-  echo "[DEBUG] No phases available, creating new phase from README..."
+  # ========================================================================
+  # Step 2: Move todo tickets to in-progress
+  # ========================================================================
+  log "Checking for todo tickets..."
+  if NEXT_TICKET=$("./sdlc.sh" get-next ticket todo 2>&1); then
+    log_success "Found todo ticket: $NEXT_TICKET"
+    log "Moving ticket to in-progress..."
+    "./sdlc.sh" move ticket "$(basename "$NEXT_TICKET" .md)" in-progress
+    exit 0
+  fi
   
-  # Find the next available phase number
-  MAX_NUM=0
-  for dir in phases/todo phases/in-progress phases/done phases/not-doing; do
-    if [ -d "$SCRIPT_DIR/$dir" ]; then
-      for file in "$SCRIPT_DIR/$dir"/*.md; do
-        if [ -f "$file" ]; then
-          FILENAME=$(basename "$file")
-          FILE_NUM=$(echo "$FILENAME" | sed -E 's/^([0-9]+)-.*/\1/' | sed 's/^0*//')
-          if [ -n "$FILE_NUM" ] && [ "$FILE_NUM" -gt "$MAX_NUM" ] 2>/dev/null; then
-            MAX_NUM=$FILE_NUM
-          fi
+  # ========================================================================
+  # Step 3: Close sprints that are ready (all tickets done)
+  # ========================================================================
+  log "Checking for sprints ready to close..."
+  while true; do
+    if NEXT_SPRINT=$("./sdlc.sh" get-next sprint in-progress 2>&1); then
+      # Try to move to done - sdlc.sh will validate that all tickets are done
+      if "./sdlc.sh" move sprint "$(basename "$NEXT_SPRINT")" done 2>&1; then
+        log_success "Closed sprint: $(basename "$NEXT_SPRINT")"
+        # Continue checking for more sprints to close
+      else
+        # Sprint has active tickets, skip it
+        break
+      fi
+    else
+      break
+    fi
+  done
+  
+  # ========================================================================
+  # Step 4: Move todo sprints to in-progress
+  # ========================================================================
+  log "Checking for todo sprints..."
+  if NEXT_SPRINT=$("./sdlc.sh" get-next sprint todo 2>&1); then
+    log_success "Found todo sprint: $NEXT_SPRINT"
+    log "Moving sprint to in-progress..."
+    "./sdlc.sh" move sprint "$(basename "$NEXT_SPRINT")" in-progress
+    exit 0
+  fi
+  
+  # ========================================================================
+  # Step 5: Break down in-progress sprint ERD into tickets
+  # ========================================================================
+  log "Checking for in-progress sprints to break down..."
+  if NEXT_SPRINT=$("./sdlc.sh" get-next sprint in-progress 2>&1); then
+    log_success "Found in-progress sprint: $NEXT_SPRINT"
+    
+    # Check if sprint already has tickets
+    local tickets_dir="$NEXT_SPRINT/tickets"
+    local has_tickets=false
+    
+    if [ -d "$tickets_dir" ]; then
+      for state_dir in "$tickets_dir"/*; do
+        if [ -d "$state_dir" ] && [ -n "$(find "$state_dir" -maxdepth 1 -type f -name "*.md" 2>/dev/null)" ]; then
+          has_tickets=true
+          break
         fi
       done
     fi
-  done
-  NEXT_NUM=$((MAX_NUM + 1))
-  NEXT_NUM_PADDED=$(printf "%03d" "$NEXT_NUM")
+    
+    if [ "$has_tickets" = "false" ]; then
+      log "Breaking down sprint ERD into tickets..."
+      
+      local erd_file="$NEXT_SPRINT/erd.md"
+      local prd_file="$NEXT_SPRINT/prd.md"
+      
+      local prompt="Read the sprint ERD at $erd_file"
+      if [ -f "$prd_file" ]; then
+        prompt="$prompt and the associated PRD at $prd_file"
+      fi
+      prompt="$prompt. Also read the guide at $SCRIPT_DIR/prompts/erd-to-tickets.md. Break down the sprint ERD into tickets following the guidelines in erd-to-tickets.md. Use ./sdlc.sh commands to manage tickets. Create tickets in the sprint's tickets/todo/ directory (at $tickets_dir/todo/) with appropriate naming (NNN-description.md format). Ensure all tickets reference the ERD requirements they implement."
+      
+      "$SCRIPT_DIR/claude-wrapper.sh" "$prompt"
+      exit 0
+    else
+      log "Sprint already has tickets, skipping breakdown"
+    fi
+  fi
   
-  # Build prompt for Claude
-  PROMPT="Read the README.md file at $SCRIPT_DIR/README.md which serves as the roadmap document. Also read the roadmap guidelines at $SCRIPT_DIR/prompts/roadmap.md. Create a new phase document based on the product vision and roadmap in README.md. The phase should be numbered $NEXT_NUM_PADDED and follow the naming format NNN-description.md. Create the phase document in the phases/todo/ directory. Follow the phase document format specified in the roadmap guidelines, including Vision & Strategic Objectives, Themes & Initiatives, Timeline, Success Metrics, and Review & Update Process. The phase should align with the product vision in README.md do not create any PRDs or ERDs or tickets, just the phase document."
+  # ========================================================================
+  # Step 6: Create sprints from in-progress phase
+  # ========================================================================
+  log "Checking for in-progress phases to create sprints from..."
+  if NEXT_PHASE=$("./sdlc.sh" get-next phase in-progress 2>&1); then
+    log_success "Found in-progress phase: $NEXT_PHASE"
+    
+    # Check if phase already has sprints
+    local sprints_dir="$NEXT_PHASE/sprints"
+    local has_sprints=false
+    
+    if [ -d "$sprints_dir" ]; then
+      for state_dir in "$sprints_dir"/*; do
+        if [ -d "$state_dir" ] && [ -n "$(find "$state_dir" -maxdepth 1 -type d ! -path "$state_dir" 2>/dev/null)" ]; then
+          has_sprints=true
+          break
+        fi
+      done
+    fi
+    
+    if [ "$has_sprints" = "false" ]; then
+      log "Creating sprints from phase..."
+      
+      local phase_file="$NEXT_PHASE/$(basename "$NEXT_PHASE").md"
+      if [ ! -f "$phase_file" ]; then
+        # Try to find the phase document
+        phase_file=$(find "$NEXT_PHASE" -maxdepth 1 -type f -name "*.md" | head -n 1)
+      fi
+      
+      # Find next sprint numbers (need at least 3 sprints)
+      local first_num=$(find_next_sprint_number)
+      local second_num=$((first_num + 1))
+      local third_num=$((first_num + 2))
+      local first_padded=$(printf "%03d" "$first_num")
+      local second_padded=$(printf "%03d" "$second_num")
+      local third_padded=$(printf "%03d" "$third_num")
+      
+      local prompt="Read the phase document at $phase_file. Also read the ERD guidelines at $SCRIPT_DIR/prompts/erd.md and the roadmap guidelines at $SCRIPT_DIR/prompts/roadmap.md. One phase must correspond to at least 3 sprints. Create at least 3 sprints from this phase with the following numbers: $first_padded, $second_padded, $third_padded (create more if the phase warrants it). Each sprint is a directory containing both prd.md and erd.md files. Create sprint directories in $sprints_dir/todo/ with the naming format NNN-description/. After creating all sprints, use ./sdlc.sh move sprint commands to move ONLY the FIRST sprint ($first_padded) to in-progress. Leave all other sprints in todo. Remember: every 5th sprint must be a technical debt paydown sprint."
+      
+      "$SCRIPT_DIR/claude-wrapper.sh" "$prompt"
+      exit 0
+    else
+      log "Phase already has sprints, skipping sprint creation"
+    fi
+  fi
   
-  echo "[DEBUG] Calling Claude to create phase from README..."
-  ./claude-wrapper.sh "$PROMPT"
+  # ========================================================================
+  # Step 7: Move todo phase to in-progress
+  # ========================================================================
+  log "Checking for todo phases..."
+  if NEXT_PHASE=$("./sdlc.sh" get-next phase todo 2>&1); then
+    log_success "Found todo phase: $NEXT_PHASE"
+    log "Moving phase to in-progress..."
+    "./sdlc.sh" move phase "$(basename "$NEXT_PHASE")" in-progress
+    exit 0
+  fi
+  
+  # ========================================================================
+  # Step 8: Create new phase from README
+  # ========================================================================
+  log "No phases available, creating new phase from README..."
+  
+  local next_phase_num=$(find_next_phase_number)
+  local next_phase_padded=$(printf "%03d" "$next_phase_num")
+  local phases_todo_dir="$SCRIPT_DIR/phases/todo"
+  
+  local prompt="Read the README.md file at $SCRIPT_DIR/README.md which serves as the roadmap document. Also read the roadmap guidelines at $SCRIPT_DIR/prompts/roadmap.md. Create a new phase directory and document based on the product vision and roadmap in README.md. The phase should be numbered $next_phase_padded and follow the naming format NNN-description. Create the phase directory in $phases_todo_dir/ with the naming format NNN-description/. Inside the phase directory, create the phase document file NNN-description.md. Follow the phase document format specified in the roadmap guidelines, including Vision & Strategic Objectives, Themes & Initiatives, Timeline, Success Metrics, and Review & Update Process. The phase should align with the product vision in README.md. Do not create any sprints, PRDs, ERDs, or tickets, just the phase directory and document."
+  
+  "$SCRIPT_DIR/claude-wrapper.sh" "$prompt"
   exit 0
 }
 
+# Run main function
 main

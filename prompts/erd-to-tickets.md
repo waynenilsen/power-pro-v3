@@ -1,10 +1,12 @@
-# Breaking Down ERD into Tickets
+# Breaking Down Sprint ERD into Tickets
 
-Guidelines for decomposing an Engineering Requirements Document (ERD) into actionable tickets that can be managed in the ticket system.
+Guidelines for decomposing a sprint's Engineering Requirements Document (ERD) into actionable tickets that can be managed in the ticket system.
 
 ## Overview
 
-An ERD defines **what** needs to be built at a high level. Tickets break this down into **actionable work items** that can be implemented, tested, and completed. This process bridges requirements and implementation.
+A sprint contains both a PRD (`prd.md`) and an ERD (`erd.md`) that together define **what** needs to be built at a high level. Tickets break this down into **actionable work items** that can be implemented, tested, and completed. This process bridges requirements and implementation.
+
+**Structure**: Tickets are created within the sprint's `tickets/todo/` directory, nested under the sprint.
 
 ## Decomposition Principles
 
@@ -125,9 +127,10 @@ See `tech-stack.md` and `ticket-system.md` for more details.
 All ticket operations should use the `sdlc.sh` script rather than manually moving files. This ensures consistency and proper tracking.
 
 ### Creating Tickets
-- Create ticket files directly in `tickets/todo/` directory with the naming format `NNN-description.md`
+- Create ticket files directly in the sprint's `tickets/todo/` directory with the naming format `NNN-description.md`
 - Use zero-padded numbers (001, 002, etc.) for proper lexicographical sorting
-- The ticket will be automatically discovered by `sdlc.sh`
+- The ticket will be automatically discovered by `sdlc.sh` which searches across all sprints
+- Example path: `phases/{phase-state}/NNN-phase-name/sprints/{sprint-state}/NNN-sprint-name/tickets/todo/NNN-description.md`
 
 ### Moving Tickets Between States
 Use `sdlc.sh move` command to move tickets:
@@ -143,14 +146,16 @@ Use `sdlc.sh move` command to move tickets:
 ./sdlc.sh move ticket 001 not-doing
 ```
 
+**Note**: `sdlc.sh` automatically finds tickets across all sprints by number or name.
+
 ### Finding Tickets
 Use `sdlc.sh get-next` to find tickets:
 
 ```bash
-# Get next todo ticket
+# Get next todo ticket (searches across all sprints)
 ./sdlc.sh get-next ticket todo
 
-# Get next in-progress ticket
+# Get next in-progress ticket (searches across all sprints)
 ./sdlc.sh get-next ticket in-progress
 ```
 
@@ -158,22 +163,23 @@ Use `sdlc.sh get-next` to find tickets:
 Use `sdlc.sh list` to see all tickets in a state:
 
 ```bash
-# List all todo tickets
+# List all todo tickets (across all sprints)
 ./sdlc.sh list ticket todo
 
-# List all in-progress tickets
+# List all in-progress tickets (across all sprints)
 ./sdlc.sh list ticket in-progress
 ```
 
-**Important**: Always use `sdlc.sh` commands rather than manually moving files between directories. This ensures the system maintains proper state tracking.
+**Important**: Always use `sdlc.sh` commands rather than manually moving files between directories. This ensures the system maintains proper state tracking and respects sprint completion rules.
 
 ## Ticket Creation Process
 
-### Step 1: Review ERD Requirements
-- Read through the entire ERD
-- Identify all functional and non-functional requirements
+### Step 1: Review Sprint Requirements
+- Read through the entire sprint's ERD (`erd.md`) and PRD (`prd.md`)
+- Identify all functional and non-functional requirements from the ERD
 - Note dependencies between requirements
 - Understand priorities (Must/Should/Could/Won't)
+- Consider the sprint's context from the PRD
 
 ### Step 2: Group Related Requirements
 - Identify requirements that work together
@@ -208,11 +214,12 @@ After creating all tickets, commit and push the changes using conventional commi
 git add .
 
 # Commit using conventional commit format
-git commit -m "feat(tickets): break down ERD-XXX into implementation tickets
+git commit -m "feat(tickets): break down sprint-XXX ERD into implementation tickets
 
 - Created N tickets for [brief description of what was broken down]
 - All tickets reference ERD requirements
-- Dependencies documented between tickets"
+- Dependencies documented between tickets
+- Tickets created in sprint's tickets/todo/ directory"
 
 # Push to remote repository
 git push
@@ -226,7 +233,7 @@ git push
 
 **Important**: 
 - Always use `git add .` to ensure all ticket files are staged (file-based changes can be easy to miss)
-- Use descriptive commit messages that reference the ERD number
+- Use descriptive commit messages that reference the sprint number
 - Include a count of tickets created in the commit message
 - Push immediately after committing to ensure changes are saved
 
@@ -286,17 +293,18 @@ Related to: REQ-002
 - **Don't change acceptance criteria**: Ticket criteria should match ERD unless explicitly refined
 - **Don't create tickets without ERD reference**: Always link back to source requirement
 
-## Handling ERD Changes
+## Handling Sprint ERD Changes
 
-When ERD requirements change:
+When sprint ERD requirements change:
 
-1. **Identify affected tickets**: Use traceability to find tickets implementing changed requirements
+1. **Identify affected tickets**: Use traceability to find tickets implementing changed requirements (tickets are in the sprint's `tickets/` directory)
 2. **Update or create tickets**: 
    - Update existing tickets if requirements refined
-   - Create new tickets if requirements added
+   - Create new tickets in the sprint's `tickets/todo/` if requirements added
    - Move tickets to `not-doing/` using `./sdlc.sh move ticket <number> not-doing` if requirements removed
 3. **Review dependencies**: Check if changes affect ticket dependencies
 4. **Update acceptance criteria**: Ensure ticket criteria match updated ERD requirements
+5. **Sprint completion**: Remember that a sprint cannot be moved to `done` if it has any tickets in `todo` or `in-progress`
 
 ## Example: Complete Breakdown
 
@@ -344,7 +352,7 @@ Priority: Must
 
 ## Validation Checklist
 
-Before considering ERD breakdown complete:
+Before considering sprint ERD breakdown complete:
 
 - [ ] Every ERD requirement maps to at least one ticket
 - [ ] All tickets reference their ERD requirement(s)
@@ -354,5 +362,7 @@ Before considering ERD breakdown complete:
 - [ ] Tickets are appropriately sized (not too large, not too small)
 - [ ] Related tickets are grouped logically
 - [ ] Non-functional requirements have corresponding tickets
+- [ ] All tickets are created in the sprint's `tickets/todo/` directory
 - [ ] All ticket files have been committed using conventional commits
 - [ ] Changes have been pushed to the remote repository
+- [ ] Sprint structure is correct (tickets nested under sprint)

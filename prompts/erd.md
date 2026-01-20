@@ -4,61 +4,67 @@ Guidelines for creating high-quality Engineering Requirements Documents based on
 
 ## Directory Structure
 
-ERD documents follow the same directory structure as tickets:
+ERD documents are part of sprints, which are nested under phases in a hierarchical structure:
 
 ```
-erds/
-├── todo/          # ERDs that need to be created or refined
-├── in-progress/   # ERDs currently being worked on
-├── done/          # Completed ERDs
-└── not-doing/     # ERDs that are cancelled or will not be done
+phases/
+  {state}/                    # todo, in-progress, done, not-doing
+    NNN-phase-name/
+      NNN-phase-name.md       # Phase document
+      sprints/
+        {state}/              # todo, in-progress, done, not-doing
+          NNN-sprint-name/
+            prd.md            # Product Requirements Document
+            erd.md            # Engineering Requirements Document
+            tickets/
+              {state}/        # todo, in-progress, done, not-doing
+                NNN-ticket-name.md
 ```
 
 ## Directory Descriptions
 
-### `erds/`
-The primary directory containing all ERD subdirectories.
+### Sprint Structure
+Each sprint contains both a PRD (`prd.md`) and an ERD (`erd.md`) in the same directory. The sprint directory is organized under phases, and tickets are nested under sprints.
 
-### `erds/todo/`
-ERDs that are planned but not yet started. These represent requirements documents that need to be created or refined.
+### Sprint States
+Sprints move between states independently:
+- `sprints/todo/` - Sprints that are planned but not yet started
+- `sprints/in-progress/` - Sprints currently being actively worked on
+- `sprints/done/` - Completed sprints (only if all tickets are done)
+- `sprints/not-doing/` - Sprints that are cancelled or deferred
 
-### `erds/in-progress/`
-ERDs that are currently being actively worked on. Move ERDs here when work begins.
-
-### `erds/done/`
-Completed ERDs. Move ERDs here when they are finished and approved.
-
-### `erds/not-doing/`
-ERDs that have been cancelled, deferred indefinitely, or decided against. Use this for ERDs that will not be completed.
+### ERD Location
+The ERD file (`erd.md`) lives within the sprint directory alongside the PRD (`prd.md`). Both documents share the same sprint number and are managed together.
 
 ## Workflow
 
-1. **Create**: New ERDs start in `erds/todo/`
-2. **Start**: Move ERDs to `erds/in-progress/` when work begins
-3. **Complete**: Move ERDs to `erds/done/` when finished and approved
-4. **Cancel**: Move ERDs to `erds/not-doing/` if they won't be completed
+1. **Create**: New sprints (with PRD and ERD) start in `sprints/todo/`
+2. **Start**: Move sprints to `sprints/in-progress/` when work begins
+3. **Complete**: Move sprints to `sprints/done/` only after all tickets are completed
+4. **Cancel**: Move sprints to `sprints/not-doing/` if they won't be completed
+
+**Important**: A sprint cannot be moved to `done` if it has any tickets in `todo` or `in-progress` states.
 
 ## ERD File Format
 
 ### File Naming Convention
 
-ERDs must follow a specific naming format to enable lexicographical sorting by ERD number:
+ERDs are always named `erd.md` and live within sprint directories. Sprint directories follow a naming format:
 
-**Format**: `NNN-description.md`
+**Sprint Directory Format**: `NNN-description/`
 
 Where:
-- `NNN` is a zero-padded ERD number (e.g., `001`, `002`, `010`, `100`)
+- `NNN` is a zero-padded sprint number (e.g., `001`, `002`, `010`, `100`)
 - `description` is a short, descriptive name using hyphens or underscores
-- File extension is `.md`
+- The sprint directory contains both `prd.md` and `erd.md` files
 
 **Examples**:
-- `001-user-authentication-system.md`
-- `002-payment-processing.md`
-- `010-api-integration.md`
-- `100-deployment-infrastructure.md`
+- `001-user-authentication-system/` containing `prd.md` and `erd.md`
+- `002-payment-processing/` containing `prd.md` and `erd.md`
+- `010-api-integration/` containing `prd.md` and `erd.md`
 
 **Why zero-padding?**
-Zero-padding ensures that when files are sorted lexicographically (alphabetically), they are also sorted numerically. Without zero-padding, `10-erd.md` would sort before `2-erd.md`, which is incorrect.
+Zero-padding ensures that when directories are sorted lexicographically (alphabetically), they are also sorted numerically. Without zero-padding, `10-sprint/` would sort before `2-sprint/`, which is incorrect.
 
 ### File Content
 
@@ -212,28 +218,30 @@ Dependencies: [Other requirements this depends on]
 
 ## Integration with Ticket System
 
-ERDs and tickets share the same directory structure pattern:
-- ERDs are managed in `erds/` with subdirectories: `todo/`, `in-progress/`, `done/`, `not-doing/`
-- Tickets are managed in `tickets/` with the same subdirectories
+ERDs and tickets are nested within sprints:
+- ERDs are `erd.md` files within sprint directories
+- Tickets are nested under sprints: `sprints/{state}/NNN-sprint-name/tickets/{state}/`
 - Both use zero-padded numbering for lexicographical sorting
 - Both avoid status in file content (status is implied by directory location)
 
 When creating tickets from ERD requirements:
+- Create tickets in the sprint's `tickets/todo/` directory
 - Link ticket to requirement ID (e.g., "Implements REQ-001")
 - Ensure ticket acceptance criteria match ERD acceptance criteria
 - Maintain traceability between ERD and implementation tickets
+- Use `./sdlc.sh` commands to manage tickets (see `erd-to-tickets.md`)
 
-## Technical Debt ERDs
+## Technical Debt Sprints
 
-### Every 5th ERD Must Be Technical Debt
+### Every 5th Sprint Must Be Technical Debt
 
-**Rule**: Every 5th ERD (e.g., ERD-005, ERD-010, ERD-015, ERD-020, etc.) must be a **technical debt paydown ERD**.
+**Rule**: Every 5th sprint (e.g., Sprint-005, Sprint-010, Sprint-015, Sprint-020, etc.) must be a **technical debt paydown sprint**.
 
 ### Purpose
-This ensures regular, systematic attention to technical debt and prevents it from accumulating unchecked. Technical debt ERDs focus on improving code quality, architecture, infrastructure, or processes rather than adding new features.
+This ensures regular, systematic attention to technical debt and prevents it from accumulating unchecked. Technical debt sprints focus on improving code quality, architecture, infrastructure, or processes rather than adding new features.
 
 ### Scope & Format
-- **Technical debt ERDs can be very short** - they don't need the full structure of feature ERDs
+- **Technical debt sprints can be very short** - the PRD and ERD don't need the full structure of feature sprints
 - Focus on the specific technical debt items being addressed
 - Reference the technical debt tracking system (see `tech-debt.md`)
 - Include clear acceptance criteria for debt resolution
@@ -247,12 +255,12 @@ This ensures regular, systematic attention to technical debt and prevents it fro
 - **Success Criteria**: How to verify the debt is resolved
 
 ### Examples
-- ERD-005: Refactor large files for AI compatibility
-- ERD-010: Improve test infrastructure and reduce flakiness
-- ERD-015: Update security dependencies and patch vulnerabilities
-- ERD-020: Break down monolithic components into smaller modules
+- Sprint-005: Refactor large files for AI compatibility
+- Sprint-010: Improve test infrastructure and reduce flakiness
+- Sprint-015: Update security dependencies and patch vulnerabilities
+- Sprint-020: Break down monolithic components into smaller modules
 
 ### Counting
-- Count ERDs sequentially by their number (005, 010, 015, 020, etc.)
-- If an ERD is moved to `not-doing/`, it still counts toward the sequence
-- Technical debt ERDs themselves count toward the sequence
+- Count sprints sequentially by their number (005, 010, 015, 020, etc.)
+- If a sprint is moved to `not-doing/`, it still counts toward the sequence
+- Technical debt sprints themselves count toward the sequence
