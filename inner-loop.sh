@@ -171,19 +171,7 @@ main() {
   fi
   
   # ========================================================================
-  # Step 3: Move todo sprints to in-progress
-  # ========================================================================
-  log "Checking for todo sprints..."
-  if NEXT_SPRINT=$("./sdlc.sh" get-next sprint todo 2>&1); then
-    log_success "Found todo sprint: $NEXT_SPRINT"
-    log "Moving sprint to in-progress..."
-    "./sdlc.sh" move sprint "$(basename "$NEXT_SPRINT")" in-progress
-    commit_changes "chore" "sprint" "move $(basename "$NEXT_SPRINT") to in-progress"
-    exit 0
-  fi
-  
-  # ========================================================================
-  # Step 4: Break down in-progress sprint ERD into tickets
+  # Step 3: Break down in-progress sprint ERD into tickets
   # ========================================================================
   log "Checking for in-progress sprints to break down..."
   if NEXT_SPRINT=$("./sdlc.sh" get-next sprint in-progress 2>&1); then
@@ -219,6 +207,18 @@ main() {
     else
       log "Sprint already has tickets, skipping breakdown"
     fi
+  fi
+  
+  # ========================================================================
+  # Step 4: Move todo sprints to in-progress
+  # ========================================================================
+  log "Checking for todo sprints..."
+  if NEXT_SPRINT=$("./sdlc.sh" get-next sprint todo 2>&1); then
+    log_success "Found todo sprint: $NEXT_SPRINT"
+    log "Moving sprint to in-progress..."
+    "./sdlc.sh" move sprint "$(basename "$NEXT_SPRINT")" in-progress
+    commit_changes "chore" "sprint" "move $(basename "$NEXT_SPRINT") to in-progress"
+    exit 0
   fi
   
   # ========================================================================
@@ -294,7 +294,7 @@ main() {
   fi
   
   # ========================================================================
-  # Step 7: Move todo phase to in-progress
+  # Step 8: Move todo phase to in-progress
   # ========================================================================
   log "Checking for todo phases..."
   if NEXT_PHASE=$("./sdlc.sh" get-next phase todo 2>&1); then
@@ -306,7 +306,7 @@ main() {
   fi
   
   # ========================================================================
-  # Step 8: Create new phase from README
+  # Step 9: Create new phase from README
   # ========================================================================
   log "No phases available, creating new phase from README..."
   
