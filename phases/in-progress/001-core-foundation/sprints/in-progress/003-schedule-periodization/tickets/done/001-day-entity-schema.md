@@ -10,12 +10,12 @@ Create the database schema for the Day entity and DayPrescription join table, in
 A Day is a named training session with ordered exercise slots. All programs organize work by training days. Days can have metadata (like intensity level), a unique slug for API URLs, and contain ordered prescriptions.
 
 ## Acceptance Criteria
-- [ ] Day table created with: id (UUID), name (VARCHAR 50, NOT NULL), slug (VARCHAR 50, NOT NULL), metadata (JSONB, nullable)
-- [ ] DayPrescription join table created with: day_id, prescription_id, order (INTEGER)
-- [ ] Proper foreign key constraints to prescriptions table
-- [ ] Slug uniqueness constraint (within program context)
-- [ ] Goose migration file created
-- [ ] Migration tested (up and down)
+- [x] Day table created with: id (UUID), name (VARCHAR 50, NOT NULL), slug (VARCHAR 50, NOT NULL), metadata (JSONB, nullable)
+- [x] DayPrescription join table created with: day_id, prescription_id, order (INTEGER)
+- [x] Proper foreign key constraints to prescriptions table
+- [x] Slug uniqueness constraint (within program context)
+- [x] Goose migration file created
+- [x] Migration tested (up and down)
 
 ## Technical Notes
 - Day table: `days` with columns: id, name, slug, metadata, program_id, created_at, updated_at
