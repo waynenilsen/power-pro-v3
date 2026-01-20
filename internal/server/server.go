@@ -29,6 +29,7 @@ type Server struct {
 	liftRepo         *repository.LiftRepository
 	liftMaxRepo      *repository.LiftMaxRepository
 	prescriptionRepo *repository.PrescriptionRepository
+	dayRepo          *repository.DayRepository
 	strategyFactory  *loadstrategy.StrategyFactory
 	schemeFactory    *setscheme.SchemeFactory
 }
@@ -47,12 +48,14 @@ func New(cfg Config) *Server {
 	setscheme.RegisterRampScheme(schemeFactory)
 
 	prescriptionRepo := repository.NewPrescriptionRepository(cfg.DB, strategyFactory, schemeFactory)
+	dayRepo := repository.NewDayRepository(cfg.DB)
 
 	s := &Server{
 		config:           cfg,
 		liftRepo:         liftRepo,
 		liftMaxRepo:      liftMaxRepo,
 		prescriptionRepo: prescriptionRepo,
+		dayRepo:          dayRepo,
 		strategyFactory:  strategyFactory,
 		schemeFactory:    schemeFactory,
 	}
@@ -77,6 +80,7 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	liftHandler := api.NewLiftHandler(s.liftRepo)
 	liftMaxHandler := api.NewLiftMaxHandler(s.liftMaxRepo, s.liftRepo)
 	prescriptionHandler := api.NewPrescriptionHandler(s.prescriptionRepo, s.liftRepo, s.liftMaxRepo, s.strategyFactory, s.schemeFactory)
+	dayHandler := api.NewDayHandler(s.dayRepo, s.prescriptionRepo)
 
 	// Auth middleware configuration
 	authCfg := middleware.AuthConfig{
@@ -151,6 +155,19 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	mux.Handle("DELETE /prescriptions/{id}", withAdmin(prescriptionHandler.Delete))
 	mux.Handle("POST /prescriptions/{id}/resolve", withAuth(prescriptionHandler.Resolve))
 	mux.Handle("POST /prescriptions/resolve-batch", withAuth(prescriptionHandler.ResolveBatch))
+
+	// Day routes:
+	// - All authenticated users can read day data
+	// - Only admins can create/update/delete days and manage prescriptions
+	mux.Handle("GET /days", withAuth(dayHandler.List))
+	mux.Handle("GET /days/{id}", withAuth(dayHandler.Get))
+	mux.Handle("GET /days/by-slug/{slug}", withAuth(dayHandler.GetBySlug))
+	mux.Handle("POST /days", withAdmin(dayHandler.Create))
+	mux.Handle("PUT /days/{id}", withAdmin(dayHandler.Update))
+	mux.Handle("DELETE /days/{id}", withAdmin(dayHandler.Delete))
+	mux.Handle("POST /days/{id}/prescriptions", withAdmin(dayHandler.AddPrescription))
+	mux.Handle("DELETE /days/{id}/prescriptions/{prescriptionId}", withAdmin(dayHandler.RemovePrescription))
+	mux.Handle("PUT /days/{id}/prescriptions/reorder", withAdmin(dayHandler.ReorderPrescriptions))
 }
 
 // Start starts the HTTP server.

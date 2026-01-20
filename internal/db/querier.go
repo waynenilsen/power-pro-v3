@@ -10,6 +10,9 @@ import (
 )
 
 type Querier interface {
+	CountDayPrescriptions(ctx context.Context, dayID string) (int64, error)
+	CountDays(ctx context.Context) (int64, error)
+	CountDaysFilteredByProgram(ctx context.Context, programID sql.NullString) (int64, error)
 	CountLiftMaxesByUser(ctx context.Context, userID string) (int64, error)
 	CountLiftMaxesByUserFilterLift(ctx context.Context, arg CountLiftMaxesByUserFilterLiftParams) (int64, error)
 	CountLiftMaxesByUserFilterLiftAndType(ctx context.Context, arg CountLiftMaxesByUserFilterLiftAndTypeParams) (int64, error)
@@ -18,23 +21,48 @@ type Querier interface {
 	CountLiftsFilteredByCompetition(ctx context.Context, isCompetitionLift int64) (int64, error)
 	CountPrescriptions(ctx context.Context) (int64, error)
 	CountPrescriptionsFilterLift(ctx context.Context, liftID string) (int64, error)
+	CreateDay(ctx context.Context, arg CreateDayParams) error
+	CreateDayPrescription(ctx context.Context, arg CreateDayPrescriptionParams) error
 	CreateLift(ctx context.Context, arg CreateLiftParams) error
 	CreateLiftMax(ctx context.Context, arg CreateLiftMaxParams) error
 	CreatePrescription(ctx context.Context, arg CreatePrescriptionParams) error
 	CreateUser(ctx context.Context, arg CreateUserParams) error
+	DayIsUsedInWeeks(ctx context.Context, dayID string) (int64, error)
+	DaySlugExists(ctx context.Context, arg DaySlugExistsParams) (int64, error)
+	DaySlugExistsForNew(ctx context.Context, arg DaySlugExistsForNewParams) (int64, error)
+	DaySlugExistsNullProgram(ctx context.Context, arg DaySlugExistsNullProgramParams) (int64, error)
+	DaySlugExistsNullProgramForNew(ctx context.Context, slug string) (int64, error)
+	DeleteDay(ctx context.Context, id string) error
+	DeleteDayPrescription(ctx context.Context, id string) error
+	DeleteDayPrescriptionByDayAndPrescription(ctx context.Context, arg DeleteDayPrescriptionByDayAndPrescriptionParams) error
 	DeleteLift(ctx context.Context, id string) error
 	DeleteLiftMax(ctx context.Context, id string) error
 	DeletePrescription(ctx context.Context, id string) error
 	GetCurrentMax(ctx context.Context, arg GetCurrentMaxParams) (LiftMax, error)
 	GetCurrentOneRM(ctx context.Context, arg GetCurrentOneRMParams) (LiftMax, error)
+	GetDay(ctx context.Context, id string) (Day, error)
+	GetDayBySlug(ctx context.Context, arg GetDayBySlugParams) (Day, error)
+	// Day Prescriptions queries
+	GetDayPrescription(ctx context.Context, id string) (DayPrescription, error)
+	GetDayPrescriptionByDayAndPrescription(ctx context.Context, arg GetDayPrescriptionByDayAndPrescriptionParams) (DayPrescription, error)
 	GetLift(ctx context.Context, id string) (Lift, error)
 	GetLiftBySlug(ctx context.Context, slug string) (Lift, error)
 	GetLiftMax(ctx context.Context, id string) (LiftMax, error)
+	GetMaxDayPrescriptionOrder(ctx context.Context, dayID string) (interface{}, error)
 	GetPrescription(ctx context.Context, id string) (Prescription, error)
 	GetUser(ctx context.Context, id string) (User, error)
 	LiftHasChildReferences(ctx context.Context, parentLiftID sql.NullString) (int64, error)
 	LiftHasMaxReferences(ctx context.Context, liftID string) (int64, error)
 	LiftHasPrescriptionReferences(ctx context.Context, liftID string) (int64, error)
+	ListDayPrescriptions(ctx context.Context, dayID string) ([]DayPrescription, error)
+	ListDaysByCreatedAtAsc(ctx context.Context, arg ListDaysByCreatedAtAscParams) ([]Day, error)
+	ListDaysByCreatedAtDesc(ctx context.Context, arg ListDaysByCreatedAtDescParams) ([]Day, error)
+	ListDaysByNameAsc(ctx context.Context, arg ListDaysByNameAscParams) ([]Day, error)
+	ListDaysByNameDesc(ctx context.Context, arg ListDaysByNameDescParams) ([]Day, error)
+	ListDaysFilteredByProgramByCreatedAtAsc(ctx context.Context, arg ListDaysFilteredByProgramByCreatedAtAscParams) ([]Day, error)
+	ListDaysFilteredByProgramByCreatedAtDesc(ctx context.Context, arg ListDaysFilteredByProgramByCreatedAtDescParams) ([]Day, error)
+	ListDaysFilteredByProgramByNameAsc(ctx context.Context, arg ListDaysFilteredByProgramByNameAscParams) ([]Day, error)
+	ListDaysFilteredByProgramByNameDesc(ctx context.Context, arg ListDaysFilteredByProgramByNameDescParams) ([]Day, error)
 	ListLiftMaxesByUserByEffectiveDateAsc(ctx context.Context, arg ListLiftMaxesByUserByEffectiveDateAscParams) ([]LiftMax, error)
 	ListLiftMaxesByUserByEffectiveDateDesc(ctx context.Context, arg ListLiftMaxesByUserByEffectiveDateDescParams) ([]LiftMax, error)
 	ListLiftMaxesByUserFilterLiftAndTypeByEffectiveDateAsc(ctx context.Context, arg ListLiftMaxesByUserFilterLiftAndTypeByEffectiveDateAscParams) ([]LiftMax, error)
@@ -63,6 +91,8 @@ type Querier interface {
 	SlugExistsForNew(ctx context.Context, slug string) (int64, error)
 	UniqueConstraintExists(ctx context.Context, arg UniqueConstraintExistsParams) (int64, error)
 	UniqueConstraintExistsExcluding(ctx context.Context, arg UniqueConstraintExistsExcludingParams) (int64, error)
+	UpdateDay(ctx context.Context, arg UpdateDayParams) error
+	UpdateDayPrescriptionOrder(ctx context.Context, arg UpdateDayPrescriptionOrderParams) error
 	UpdateLift(ctx context.Context, arg UpdateLiftParams) error
 	UpdateLiftMax(ctx context.Context, arg UpdateLiftMaxParams) error
 	UpdatePrescription(ctx context.Context, arg UpdatePrescriptionParams) error

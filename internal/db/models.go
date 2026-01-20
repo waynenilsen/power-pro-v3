@@ -8,6 +8,41 @@ import (
 	"database/sql"
 )
 
+type Cycle struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	LengthWeeks int64  `json:"length_weeks"`
+	CreatedAt   string `json:"created_at"`
+	UpdatedAt   string `json:"updated_at"`
+}
+
+type DailyLookup struct {
+	ID        string         `json:"id"`
+	Name      string         `json:"name"`
+	Entries   string         `json:"entries"`
+	ProgramID sql.NullString `json:"program_id"`
+	CreatedAt string         `json:"created_at"`
+	UpdatedAt string         `json:"updated_at"`
+}
+
+type Day struct {
+	ID        string         `json:"id"`
+	Name      string         `json:"name"`
+	Slug      string         `json:"slug"`
+	Metadata  sql.NullString `json:"metadata"`
+	ProgramID sql.NullString `json:"program_id"`
+	CreatedAt string         `json:"created_at"`
+	UpdatedAt string         `json:"updated_at"`
+}
+
+type DayPrescription struct {
+	ID             string `json:"id"`
+	DayID          string `json:"day_id"`
+	PrescriptionID string `json:"prescription_id"`
+	Order          int64  `json:"order"`
+	CreatedAt      string `json:"created_at"`
+}
+
 type Lift struct {
 	ID                string         `json:"id"`
 	Name              string         `json:"name"`
@@ -41,8 +76,58 @@ type Prescription struct {
 	UpdatedAt    string         `json:"updated_at"`
 }
 
+type Program struct {
+	ID              string          `json:"id"`
+	Name            string          `json:"name"`
+	Slug            string          `json:"slug"`
+	Description     sql.NullString  `json:"description"`
+	CycleID         string          `json:"cycle_id"`
+	WeeklyLookupID  sql.NullString  `json:"weekly_lookup_id"`
+	DailyLookupID   sql.NullString  `json:"daily_lookup_id"`
+	DefaultRounding sql.NullFloat64 `json:"default_rounding"`
+	CreatedAt       string          `json:"created_at"`
+	UpdatedAt       string          `json:"updated_at"`
+}
+
 type User struct {
 	ID        string `json:"id"`
 	CreatedAt string `json:"created_at"`
 	UpdatedAt string `json:"updated_at"`
+}
+
+type UserProgramState struct {
+	ID                    string        `json:"id"`
+	UserID                string        `json:"user_id"`
+	ProgramID             string        `json:"program_id"`
+	CurrentWeek           int64         `json:"current_week"`
+	CurrentCycleIteration int64         `json:"current_cycle_iteration"`
+	CurrentDayIndex       sql.NullInt64 `json:"current_day_index"`
+	EnrolledAt            string        `json:"enrolled_at"`
+	UpdatedAt             string        `json:"updated_at"`
+}
+
+type Week struct {
+	ID         string         `json:"id"`
+	WeekNumber int64          `json:"week_number"`
+	Variant    sql.NullString `json:"variant"`
+	CycleID    string         `json:"cycle_id"`
+	CreatedAt  string         `json:"created_at"`
+	UpdatedAt  string         `json:"updated_at"`
+}
+
+type WeekDay struct {
+	ID        string `json:"id"`
+	WeekID    string `json:"week_id"`
+	DayID     string `json:"day_id"`
+	DayOfWeek string `json:"day_of_week"`
+	CreatedAt string `json:"created_at"`
+}
+
+type WeeklyLookup struct {
+	ID        string         `json:"id"`
+	Name      string         `json:"name"`
+	Entries   string         `json:"entries"`
+	ProgramID sql.NullString `json:"program_id"`
+	CreatedAt string         `json:"created_at"`
+	UpdatedAt string         `json:"updated_at"`
 }
