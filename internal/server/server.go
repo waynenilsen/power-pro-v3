@@ -76,7 +76,7 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	// Create handlers
 	liftHandler := api.NewLiftHandler(s.liftRepo)
 	liftMaxHandler := api.NewLiftMaxHandler(s.liftMaxRepo, s.liftRepo)
-	prescriptionHandler := api.NewPrescriptionHandler(s.prescriptionRepo, s.liftRepo, s.strategyFactory, s.schemeFactory)
+	prescriptionHandler := api.NewPrescriptionHandler(s.prescriptionRepo, s.liftRepo, s.liftMaxRepo, s.strategyFactory, s.schemeFactory)
 
 	// Auth middleware configuration
 	authCfg := middleware.AuthConfig{
@@ -143,11 +143,14 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	// Prescription routes:
 	// - All authenticated users can read prescription data
 	// - Only admins can create/update/delete prescriptions
+	// - Authenticated users can resolve prescriptions (needs their userId for max lookup)
 	mux.Handle("GET /prescriptions", withAuth(prescriptionHandler.List))
 	mux.Handle("GET /prescriptions/{id}", withAuth(prescriptionHandler.Get))
 	mux.Handle("POST /prescriptions", withAdmin(prescriptionHandler.Create))
 	mux.Handle("PUT /prescriptions/{id}", withAdmin(prescriptionHandler.Update))
 	mux.Handle("DELETE /prescriptions/{id}", withAdmin(prescriptionHandler.Delete))
+	mux.Handle("POST /prescriptions/{id}/resolve", withAuth(prescriptionHandler.Resolve))
+	mux.Handle("POST /prescriptions/resolve-batch", withAuth(prescriptionHandler.ResolveBatch))
 }
 
 // Start starts the HTTP server.

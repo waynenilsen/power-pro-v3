@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -984,6 +985,707 @@ func TestPrescriptionResponseFormat(t *testing.T) {
 		}
 		if int(ss["reps"].(float64)) != 5 {
 			t.Errorf("Expected setScheme.reps = 5, got %v", ss["reps"])
+		}
+	})
+}
+
+// ResolvedPrescriptionTestResponse matches the resolved prescription API response format.
+type ResolvedPrescriptionTestResponse struct {
+	PrescriptionID string `json:"prescriptionId"`
+	Lift           struct {
+		ID   string `json:"id"`
+		Name string `json:"name"`
+		Slug string `json:"slug"`
+	} `json:"lift"`
+	Sets []struct {
+		SetNumber  int     `json:"setNumber"`
+		Weight     float64 `json:"weight"`
+		TargetReps int     `json:"targetReps"`
+		IsWorkSet  bool    `json:"isWorkSet"`
+	} `json:"sets"`
+	Notes       string `json:"notes,omitempty"`
+	RestSeconds *int   `json:"restSeconds,omitempty"`
+}
+
+// BatchResolveTestResponse matches the batch resolution API response format.
+type BatchResolveTestResponse struct {
+	Results []struct {
+		PrescriptionID string                            `json:"prescriptionId"`
+		Status         string                            `json:"status"`
+		Resolved       *ResolvedPrescriptionTestResponse `json:"resolved,omitempty"`
+		Error          string                            `json:"error,omitempty"`
+	} `json:"results"`
+}
+
+// authPost performs an authenticated POST request
+func authPost(url string, body string) (*http.Response, error) {
+	req, err := http.NewRequest(http.MethodPost, url, bytes.NewBufferString(body))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-User-ID", testutil.TestUserID)
+	return http.DefaultClient.Do(req)
+}
+
+func TestResolvePrescription(t *testing.T) {
+	ts, err := testutil.NewTestServer()
+	if err != nil {
+		t.Fatalf("Failed to create test server: %v", err)
+	}
+	defer ts.Close()
+
+	// Create a prescription
+	createBody := fmt.Sprintf(`{
+		"liftId": "%s",
+		"loadStrategy": {"type": "PERCENT_OF", "referenceType": "TRAINING_MAX", "percentage": 85, "roundingIncrement": 5, "roundingDirection": "NEAREST"},
+		"setScheme": {"type": "FIXED", "sets": 5, "reps": 5},
+		"order": 1,
+		"notes": "Focus on depth",
+		"restSeconds": 180
+	}`, seededSquatID)
+	createResp, _ := adminPost(ts.URL("/prescriptions"), createBody)
+	var createdPrescription PrescriptionResponse
+	json.NewDecoder(createResp.Body).Decode(&createdPrescription)
+	createResp.Body.Close()
+
+	// Create a training max for the user
+	maxBody := fmt.Sprintf(`{
+		"liftId": "%s",
+		"type": "TRAINING_MAX",
+		"value": 300,
+		"effectiveDate": "2025-01-15T00:00:00Z"
+	}`, seededSquatID)
+	maxResp, _ := adminPost(ts.URL("/users/"+testutil.TestUserID+"/lift-maxes"), maxBody)
+	maxResp.Body.Close()
+
+	t.Run("resolves prescription successfully", func(t *testing.T) {
+		body := fmt.Sprintf(`{"userId": "%s"}`, testutil.TestUserID)
+		resp, err := authPost(ts.URL("/prescriptions/"+createdPrescription.ID+"/resolve"), body)
+		if err != nil {
+			t.Fatalf("Failed to make request: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			bodyBytes, _ := io.ReadAll(resp.Body)
+			t.Fatalf("Expected status 200, got %d: %s", resp.StatusCode, bodyBytes)
+		}
+
+		var resolved ResolvedPrescriptionTestResponse
+		json.NewDecoder(resp.Body).Decode(&resolved)
+
+		if resolved.PrescriptionID != createdPrescription.ID {
+			t.Errorf("Expected prescriptionId %s, got %s", createdPrescription.ID, resolved.PrescriptionID)
+		}
+
+		if resolved.Lift.ID != seededSquatID {
+			t.Errorf("Expected lift id %s, got %s", seededSquatID, resolved.Lift.ID)
+		}
+
+		if resolved.Lift.Name != "Squat" {
+			t.Errorf("Expected lift name 'Squat', got %s", resolved.Lift.Name)
+		}
+
+		if len(resolved.Sets) != 5 {
+			t.Errorf("Expected 5 sets, got %d", len(resolved.Sets))
+		}
+
+		// Check calculated weight (85% of 300 = 255, rounded to 5lb increment)
+		expectedWeight := 255.0
+		if len(resolved.Sets) > 0 && resolved.Sets[0].Weight != expectedWeight {
+			t.Errorf("Expected weight %f, got %f", expectedWeight, resolved.Sets[0].Weight)
+		}
+
+		if resolved.Notes != "Focus on depth" {
+			t.Errorf("Expected notes 'Focus on depth', got %s", resolved.Notes)
+		}
+
+		if resolved.RestSeconds == nil || *resolved.RestSeconds != 180 {
+			t.Errorf("Expected restSeconds 180, got %v", resolved.RestSeconds)
+		}
+	})
+
+	t.Run("returns 404 for non-existent prescription", func(t *testing.T) {
+		body := fmt.Sprintf(`{"userId": "%s"}`, testutil.TestUserID)
+		resp, _ := authPost(ts.URL("/prescriptions/non-existent-id/resolve"), body)
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusNotFound {
+			t.Errorf("Expected status 404, got %d", resp.StatusCode)
+		}
+	})
+
+	t.Run("returns 400 for missing userId", func(t *testing.T) {
+		resp, _ := authPost(ts.URL("/prescriptions/"+createdPrescription.ID+"/resolve"), `{}`)
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusBadRequest {
+			t.Errorf("Expected status 400, got %d", resp.StatusCode)
+		}
+	})
+
+	t.Run("returns 422 when max not found", func(t *testing.T) {
+		// Create a prescription with a different lift that has no max
+		benchID := "00000000-0000-0000-0000-000000000002"
+		createBody := fmt.Sprintf(`{
+			"liftId": "%s",
+			"loadStrategy": {"type": "PERCENT_OF", "referenceType": "TRAINING_MAX", "percentage": 75},
+			"setScheme": {"type": "FIXED", "sets": 3, "reps": 8}
+		}`, benchID)
+		createResp, _ := adminPost(ts.URL("/prescriptions"), createBody)
+		var benchPrescription PrescriptionResponse
+		json.NewDecoder(createResp.Body).Decode(&benchPrescription)
+		createResp.Body.Close()
+
+		// Try to resolve without a max
+		body := fmt.Sprintf(`{"userId": "%s"}`, testutil.TestUserID)
+		resp, _ := authPost(ts.URL("/prescriptions/"+benchPrescription.ID+"/resolve"), body)
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusUnprocessableEntity {
+			bodyBytes, _ := io.ReadAll(resp.Body)
+			t.Errorf("Expected status 422, got %d: %s", resp.StatusCode, bodyBytes)
+		}
+
+		var errResp ErrorResponse
+		json.NewDecoder(resp.Body).Decode(&errResp)
+
+		if !strings.Contains(errResp.Error, "max not found") && !strings.Contains(errResp.Error, "No TRAINING_MAX found") {
+			t.Errorf("Expected error about max not found, got: %s", errResp.Error)
+		}
+	})
+
+	t.Run("returns 401 for unauthenticated request", func(t *testing.T) {
+		body := fmt.Sprintf(`{"userId": "%s"}`, testutil.TestUserID)
+		req, _ := http.NewRequest(http.MethodPost, ts.URL("/prescriptions/"+createdPrescription.ID+"/resolve"), bytes.NewBufferString(body))
+		req.Header.Set("Content-Type", "application/json")
+		resp, _ := http.DefaultClient.Do(req)
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusUnauthorized {
+			t.Errorf("Expected status 401, got %d", resp.StatusCode)
+		}
+	})
+}
+
+func TestResolvePrescriptionBatch(t *testing.T) {
+	ts, err := testutil.NewTestServer()
+	if err != nil {
+		t.Fatalf("Failed to create test server: %v", err)
+	}
+	defer ts.Close()
+
+	benchID := "00000000-0000-0000-0000-000000000002"
+
+	// Create training max for squat
+	maxBody := fmt.Sprintf(`{
+		"liftId": "%s",
+		"type": "TRAINING_MAX",
+		"value": 300,
+		"effectiveDate": "2025-01-15T00:00:00Z"
+	}`, seededSquatID)
+	maxResp, _ := adminPost(ts.URL("/users/"+testutil.TestUserID+"/lift-maxes"), maxBody)
+	maxResp.Body.Close()
+
+	// Create training max for bench
+	maxBody2 := fmt.Sprintf(`{
+		"liftId": "%s",
+		"type": "TRAINING_MAX",
+		"value": 200,
+		"effectiveDate": "2025-01-15T00:00:00Z"
+	}`, benchID)
+	maxResp2, _ := adminPost(ts.URL("/users/"+testutil.TestUserID+"/lift-maxes"), maxBody2)
+	maxResp2.Body.Close()
+
+	// Create multiple prescriptions
+	var prescriptionIDs []string
+
+	// Squat prescription 1
+	createBody := fmt.Sprintf(`{
+		"liftId": "%s",
+		"loadStrategy": {"type": "PERCENT_OF", "referenceType": "TRAINING_MAX", "percentage": 75},
+		"setScheme": {"type": "FIXED", "sets": 5, "reps": 5},
+		"order": 0,
+		"notes": "Warmup"
+	}`, seededSquatID)
+	createResp, _ := adminPost(ts.URL("/prescriptions"), createBody)
+	var p1 PrescriptionResponse
+	json.NewDecoder(createResp.Body).Decode(&p1)
+	createResp.Body.Close()
+	prescriptionIDs = append(prescriptionIDs, p1.ID)
+
+	// Squat prescription 2 (using same lift/max - should hit cache)
+	createBody2 := fmt.Sprintf(`{
+		"liftId": "%s",
+		"loadStrategy": {"type": "PERCENT_OF", "referenceType": "TRAINING_MAX", "percentage": 85},
+		"setScheme": {"type": "FIXED", "sets": 3, "reps": 3},
+		"order": 1,
+		"notes": "Work sets"
+	}`, seededSquatID)
+	createResp2, _ := adminPost(ts.URL("/prescriptions"), createBody2)
+	var p2 PrescriptionResponse
+	json.NewDecoder(createResp2.Body).Decode(&p2)
+	createResp2.Body.Close()
+	prescriptionIDs = append(prescriptionIDs, p2.ID)
+
+	// Bench prescription
+	createBody3 := fmt.Sprintf(`{
+		"liftId": "%s",
+		"loadStrategy": {"type": "PERCENT_OF", "referenceType": "TRAINING_MAX", "percentage": 80},
+		"setScheme": {"type": "FIXED", "sets": 4, "reps": 8},
+		"order": 2
+	}`, benchID)
+	createResp3, _ := adminPost(ts.URL("/prescriptions"), createBody3)
+	var p3 PrescriptionResponse
+	json.NewDecoder(createResp3.Body).Decode(&p3)
+	createResp3.Body.Close()
+	prescriptionIDs = append(prescriptionIDs, p3.ID)
+
+	t.Run("batch resolves all prescriptions successfully", func(t *testing.T) {
+		body := fmt.Sprintf(`{"prescriptionIds": ["%s", "%s", "%s"], "userId": "%s"}`,
+			prescriptionIDs[0], prescriptionIDs[1], prescriptionIDs[2], testutil.TestUserID)
+		resp, err := authPost(ts.URL("/prescriptions/resolve-batch"), body)
+		if err != nil {
+			t.Fatalf("Failed to make request: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			bodyBytes, _ := io.ReadAll(resp.Body)
+			t.Fatalf("Expected status 200, got %d: %s", resp.StatusCode, bodyBytes)
+		}
+
+		var batchResp BatchResolveTestResponse
+		json.NewDecoder(resp.Body).Decode(&batchResp)
+
+		if len(batchResp.Results) != 3 {
+			t.Fatalf("Expected 3 results, got %d", len(batchResp.Results))
+		}
+
+		// Check all results are successful
+		for i, result := range batchResp.Results {
+			if result.Status != "success" {
+				t.Errorf("Expected result %d to be 'success', got '%s' (error: %s)", i, result.Status, result.Error)
+			}
+			if result.Resolved == nil {
+				t.Errorf("Expected result %d to have resolved data", i)
+				continue
+			}
+		}
+
+		// Check specific weights
+		// First: 75% of 300 = 225
+		if batchResp.Results[0].Resolved != nil && batchResp.Results[0].Resolved.Sets[0].Weight != 225 {
+			t.Errorf("Expected first prescription weight 225, got %f", batchResp.Results[0].Resolved.Sets[0].Weight)
+		}
+
+		// Second: 85% of 300 = 255
+		if batchResp.Results[1].Resolved != nil && batchResp.Results[1].Resolved.Sets[0].Weight != 255 {
+			t.Errorf("Expected second prescription weight 255, got %f", batchResp.Results[1].Resolved.Sets[0].Weight)
+		}
+
+		// Third: 80% of 200 = 160
+		if batchResp.Results[2].Resolved != nil && batchResp.Results[2].Resolved.Sets[0].Weight != 160 {
+			t.Errorf("Expected third prescription weight 160, got %f", batchResp.Results[2].Resolved.Sets[0].Weight)
+		}
+	})
+
+	t.Run("batch handles partial failures", func(t *testing.T) {
+		// Create a prescription without a corresponding max
+		deadliftID := "00000000-0000-0000-0000-000000000003"
+		createBody := fmt.Sprintf(`{
+			"liftId": "%s",
+			"loadStrategy": {"type": "PERCENT_OF", "referenceType": "TRAINING_MAX", "percentage": 80},
+			"setScheme": {"type": "FIXED", "sets": 5, "reps": 5}
+		}`, deadliftID)
+		createResp, _ := adminPost(ts.URL("/prescriptions"), createBody)
+		var noMaxPrescription PrescriptionResponse
+		json.NewDecoder(createResp.Body).Decode(&noMaxPrescription)
+		createResp.Body.Close()
+
+		// Include one valid and one invalid prescription
+		body := fmt.Sprintf(`{"prescriptionIds": ["%s", "%s", "non-existent-id"], "userId": "%s"}`,
+			prescriptionIDs[0], noMaxPrescription.ID, testutil.TestUserID)
+		resp, err := authPost(ts.URL("/prescriptions/resolve-batch"), body)
+		if err != nil {
+			t.Fatalf("Failed to make request: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			bodyBytes, _ := io.ReadAll(resp.Body)
+			t.Fatalf("Expected status 200, got %d: %s", resp.StatusCode, bodyBytes)
+		}
+
+		var batchResp BatchResolveTestResponse
+		json.NewDecoder(resp.Body).Decode(&batchResp)
+
+		if len(batchResp.Results) != 3 {
+			t.Fatalf("Expected 3 results, got %d", len(batchResp.Results))
+		}
+
+		// First should succeed
+		if batchResp.Results[0].Status != "success" {
+			t.Errorf("Expected first result to be 'success', got '%s'", batchResp.Results[0].Status)
+		}
+
+		// Second should fail (no max)
+		if batchResp.Results[1].Status != "error" {
+			t.Errorf("Expected second result to be 'error', got '%s'", batchResp.Results[1].Status)
+		}
+		if !strings.Contains(batchResp.Results[1].Error, "max not found") && !strings.Contains(batchResp.Results[1].Error, "No TRAINING_MAX found") {
+			t.Errorf("Expected error about max not found, got: %s", batchResp.Results[1].Error)
+		}
+
+		// Third should fail (not found)
+		if batchResp.Results[2].Status != "error" {
+			t.Errorf("Expected third result to be 'error', got '%s'", batchResp.Results[2].Status)
+		}
+		if batchResp.Results[2].Error != "Prescription not found" {
+			t.Errorf("Expected 'Prescription not found' error, got: %s", batchResp.Results[2].Error)
+		}
+	})
+
+	t.Run("returns 400 for missing userId", func(t *testing.T) {
+		body := fmt.Sprintf(`{"prescriptionIds": ["%s"]}`, prescriptionIDs[0])
+		resp, _ := authPost(ts.URL("/prescriptions/resolve-batch"), body)
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusBadRequest {
+			t.Errorf("Expected status 400, got %d", resp.StatusCode)
+		}
+	})
+
+	t.Run("returns 400 for empty prescriptionIds", func(t *testing.T) {
+		body := fmt.Sprintf(`{"prescriptionIds": [], "userId": "%s"}`, testutil.TestUserID)
+		resp, _ := authPost(ts.URL("/prescriptions/resolve-batch"), body)
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusBadRequest {
+			t.Errorf("Expected status 400, got %d", resp.StatusCode)
+		}
+	})
+
+	t.Run("returns 401 for unauthenticated request", func(t *testing.T) {
+		body := fmt.Sprintf(`{"prescriptionIds": ["%s"], "userId": "%s"}`, prescriptionIDs[0], testutil.TestUserID)
+		req, _ := http.NewRequest(http.MethodPost, ts.URL("/prescriptions/resolve-batch"), bytes.NewBufferString(body))
+		req.Header.Set("Content-Type", "application/json")
+		resp, _ := http.DefaultClient.Do(req)
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusUnauthorized {
+			t.Errorf("Expected status 401, got %d", resp.StatusCode)
+		}
+	})
+}
+
+func TestResolveWithRampScheme(t *testing.T) {
+	ts, err := testutil.NewTestServer()
+	if err != nil {
+		t.Fatalf("Failed to create test server: %v", err)
+	}
+	defer ts.Close()
+
+	// Create a training max
+	maxBody := fmt.Sprintf(`{
+		"liftId": "%s",
+		"type": "TRAINING_MAX",
+		"value": 400,
+		"effectiveDate": "2025-01-15T00:00:00Z"
+	}`, seededSquatID)
+	maxResp, _ := adminPost(ts.URL("/users/"+testutil.TestUserID+"/lift-maxes"), maxBody)
+	maxResp.Body.Close()
+
+	// Create a prescription with RAMP scheme
+	createBody := fmt.Sprintf(`{
+		"liftId": "%s",
+		"loadStrategy": {"type": "PERCENT_OF", "referenceType": "TRAINING_MAX", "percentage": 100, "roundingIncrement": 5},
+		"setScheme": {"type": "RAMP", "steps": [{"percentage": 50, "reps": 5}, {"percentage": 60, "reps": 5}, {"percentage": 70, "reps": 3}, {"percentage": 80, "reps": 1}], "workSetThreshold": 70},
+		"order": 0
+	}`, seededSquatID)
+	createResp, _ := adminPost(ts.URL("/prescriptions"), createBody)
+	var prescription PrescriptionResponse
+	json.NewDecoder(createResp.Body).Decode(&prescription)
+	createResp.Body.Close()
+
+	t.Run("resolves RAMP scheme correctly", func(t *testing.T) {
+		body := fmt.Sprintf(`{"userId": "%s"}`, testutil.TestUserID)
+		resp, err := authPost(ts.URL("/prescriptions/"+prescription.ID+"/resolve"), body)
+		if err != nil {
+			t.Fatalf("Failed to make request: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			bodyBytes, _ := io.ReadAll(resp.Body)
+			t.Fatalf("Expected status 200, got %d: %s", resp.StatusCode, bodyBytes)
+		}
+
+		var resolved ResolvedPrescriptionTestResponse
+		json.NewDecoder(resp.Body).Decode(&resolved)
+
+		if len(resolved.Sets) != 4 {
+			t.Fatalf("Expected 4 sets, got %d", len(resolved.Sets))
+		}
+
+		// Check progressive weights (100% of TM = 400)
+		// Step 1: 50% = 200
+		// Step 2: 60% = 240
+		// Step 3: 70% = 280
+		// Step 4: 80% = 320
+		expectedWeights := []float64{200, 240, 280, 320}
+		for i, set := range resolved.Sets {
+			if set.Weight != expectedWeights[i] {
+				t.Errorf("Set %d: expected weight %f, got %f", i+1, expectedWeights[i], set.Weight)
+			}
+			if set.SetNumber != i+1 {
+				t.Errorf("Set %d: expected setNumber %d, got %d", i+1, i+1, set.SetNumber)
+			}
+		}
+
+		// Check work set classification (threshold is 70%, so sets 3 and 4 are work sets)
+		expectedWorkSets := []bool{false, false, true, true}
+		for i, set := range resolved.Sets {
+			if set.IsWorkSet != expectedWorkSets[i] {
+				t.Errorf("Set %d: expected isWorkSet %v, got %v", i+1, expectedWorkSets[i], set.IsWorkSet)
+			}
+		}
+	})
+}
+
+func TestResolveResponseFormat(t *testing.T) {
+	ts, err := testutil.NewTestServer()
+	if err != nil {
+		t.Fatalf("Failed to create test server: %v", err)
+	}
+	defer ts.Close()
+
+	// Create a training max
+	maxBody := fmt.Sprintf(`{
+		"liftId": "%s",
+		"type": "TRAINING_MAX",
+		"value": 315,
+		"effectiveDate": "2025-01-15T00:00:00Z"
+	}`, seededSquatID)
+	maxResp, _ := adminPost(ts.URL("/users/"+testutil.TestUserID+"/lift-maxes"), maxBody)
+	maxResp.Body.Close()
+
+	// Create a prescription
+	restSeconds := 180
+	createBody := fmt.Sprintf(`{
+		"liftId": "%s",
+		"loadStrategy": {"type": "PERCENT_OF", "referenceType": "TRAINING_MAX", "percentage": 85},
+		"setScheme": {"type": "FIXED", "sets": 3, "reps": 5},
+		"order": 1,
+		"notes": "Test notes",
+		"restSeconds": %d
+	}`, seededSquatID, restSeconds)
+	createResp, _ := adminPost(ts.URL("/prescriptions"), createBody)
+	var prescription PrescriptionResponse
+	json.NewDecoder(createResp.Body).Decode(&prescription)
+	createResp.Body.Close()
+
+	t.Run("response has correct JSON field names", func(t *testing.T) {
+		body := fmt.Sprintf(`{"userId": "%s"}`, testutil.TestUserID)
+		resp, _ := authPost(ts.URL("/prescriptions/"+prescription.ID+"/resolve"), body)
+		defer resp.Body.Close()
+
+		bodyBytes, _ := io.ReadAll(resp.Body)
+
+		// Check camelCase field names per ticket spec
+		expectedFields := []string{
+			`"prescriptionId"`,
+			`"lift"`,
+			`"sets"`,
+			`"setNumber"`,
+			`"weight"`,
+			`"targetReps"`,
+			`"isWorkSet"`,
+			`"notes"`,
+			`"restSeconds"`,
+		}
+
+		for _, field := range expectedFields {
+			if !bytes.Contains(bodyBytes, []byte(field)) {
+				t.Errorf("Expected field %s in response, body: %s", field, string(bodyBytes))
+			}
+		}
+	})
+
+	t.Run("lift object has correct structure", func(t *testing.T) {
+		body := fmt.Sprintf(`{"userId": "%s"}`, testutil.TestUserID)
+		resp, _ := authPost(ts.URL("/prescriptions/"+prescription.ID+"/resolve"), body)
+		defer resp.Body.Close()
+
+		var resolved ResolvedPrescriptionTestResponse
+		json.NewDecoder(resp.Body).Decode(&resolved)
+
+		if resolved.Lift.ID != seededSquatID {
+			t.Errorf("Expected lift.id = %s, got %s", seededSquatID, resolved.Lift.ID)
+		}
+		if resolved.Lift.Name != "Squat" {
+			t.Errorf("Expected lift.name = 'Squat', got %s", resolved.Lift.Name)
+		}
+		if resolved.Lift.Slug != "squat" {
+			t.Errorf("Expected lift.slug = 'squat', got %s", resolved.Lift.Slug)
+		}
+	})
+}
+
+func TestResolveAdditionalCases(t *testing.T) {
+	ts, err := testutil.NewTestServer()
+	if err != nil {
+		t.Fatalf("Failed to create test server: %v", err)
+	}
+	defer ts.Close()
+
+	t.Run("returns 400 for invalid JSON body", func(t *testing.T) {
+		// Create a prescription first
+		createBody := fmt.Sprintf(`{
+			"liftId": "%s",
+			"loadStrategy": {"type": "PERCENT_OF", "referenceType": "TRAINING_MAX", "percentage": 85},
+			"setScheme": {"type": "FIXED", "sets": 5, "reps": 5}
+		}`, seededSquatID)
+		createResp, _ := adminPost(ts.URL("/prescriptions"), createBody)
+		var prescription PrescriptionResponse
+		json.NewDecoder(createResp.Body).Decode(&prescription)
+		createResp.Body.Close()
+
+		resp, _ := authPost(ts.URL("/prescriptions/"+prescription.ID+"/resolve"), "{invalid json}")
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusBadRequest {
+			t.Errorf("Expected status 400, got %d", resp.StatusCode)
+		}
+	})
+
+	t.Run("batch returns 400 for invalid JSON body", func(t *testing.T) {
+		resp, _ := authPost(ts.URL("/prescriptions/resolve-batch"), "{invalid json}")
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusBadRequest {
+			t.Errorf("Expected status 400, got %d", resp.StatusCode)
+		}
+	})
+
+	t.Run("resolve with empty userId string", func(t *testing.T) {
+		// Create a prescription
+		createBody := fmt.Sprintf(`{
+			"liftId": "%s",
+			"loadStrategy": {"type": "PERCENT_OF", "referenceType": "TRAINING_MAX", "percentage": 85},
+			"setScheme": {"type": "FIXED", "sets": 5, "reps": 5}
+		}`, seededSquatID)
+		createResp, _ := adminPost(ts.URL("/prescriptions"), createBody)
+		var prescription PrescriptionResponse
+		json.NewDecoder(createResp.Body).Decode(&prescription)
+		createResp.Body.Close()
+
+		resp, _ := authPost(ts.URL("/prescriptions/"+prescription.ID+"/resolve"), `{"userId": "   "}`)
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusBadRequest {
+			t.Errorf("Expected status 400, got %d", resp.StatusCode)
+		}
+	})
+
+	t.Run("batch resolve with empty userId string", func(t *testing.T) {
+		// Create a prescription
+		createBody := fmt.Sprintf(`{
+			"liftId": "%s",
+			"loadStrategy": {"type": "PERCENT_OF", "referenceType": "TRAINING_MAX", "percentage": 85},
+			"setScheme": {"type": "FIXED", "sets": 5, "reps": 5}
+		}`, seededSquatID)
+		createResp, _ := adminPost(ts.URL("/prescriptions"), createBody)
+		var prescription PrescriptionResponse
+		json.NewDecoder(createResp.Body).Decode(&prescription)
+		createResp.Body.Close()
+
+		body := fmt.Sprintf(`{"prescriptionIds": ["%s"], "userId": "   "}`, prescription.ID)
+		resp, _ := authPost(ts.URL("/prescriptions/resolve-batch"), body)
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusBadRequest {
+			t.Errorf("Expected status 400, got %d", resp.StatusCode)
+		}
+	})
+}
+
+func TestCachingBehavior(t *testing.T) {
+	ts, err := testutil.NewTestServer()
+	if err != nil {
+		t.Fatalf("Failed to create test server: %v", err)
+	}
+	defer ts.Close()
+
+	// Create training max for squat
+	maxBody := fmt.Sprintf(`{
+		"liftId": "%s",
+		"type": "TRAINING_MAX",
+		"value": 300,
+		"effectiveDate": "2025-01-15T00:00:00Z"
+	}`, seededSquatID)
+	maxResp, _ := adminPost(ts.URL("/users/"+testutil.TestUserID+"/lift-maxes"), maxBody)
+	maxResp.Body.Close()
+
+	// Create multiple prescriptions using the same lift (to test cache hits)
+	var prescriptionIDs []string
+	for i := 0; i < 5; i++ {
+		createBody := fmt.Sprintf(`{
+			"liftId": "%s",
+			"loadStrategy": {"type": "PERCENT_OF", "referenceType": "TRAINING_MAX", "percentage": %d},
+			"setScheme": {"type": "FIXED", "sets": 5, "reps": 5},
+			"order": %d
+		}`, seededSquatID, 70+i*5, i)
+		createResp, _ := adminPost(ts.URL("/prescriptions"), createBody)
+		var p PrescriptionResponse
+		json.NewDecoder(createResp.Body).Decode(&p)
+		createResp.Body.Close()
+		prescriptionIDs = append(prescriptionIDs, p.ID)
+	}
+
+	t.Run("batch uses cached max for same lift", func(t *testing.T) {
+		// All 5 prescriptions use the same lift, so the max should only be looked up once
+		body := fmt.Sprintf(`{"prescriptionIds": ["%s", "%s", "%s", "%s", "%s"], "userId": "%s"}`,
+			prescriptionIDs[0], prescriptionIDs[1], prescriptionIDs[2], prescriptionIDs[3], prescriptionIDs[4], testutil.TestUserID)
+		resp, err := authPost(ts.URL("/prescriptions/resolve-batch"), body)
+		if err != nil {
+			t.Fatalf("Failed to make request: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			bodyBytes, _ := io.ReadAll(resp.Body)
+			t.Fatalf("Expected status 200, got %d: %s", resp.StatusCode, bodyBytes)
+		}
+
+		var batchResp BatchResolveTestResponse
+		json.NewDecoder(resp.Body).Decode(&batchResp)
+
+		if len(batchResp.Results) != 5 {
+			t.Fatalf("Expected 5 results, got %d", len(batchResp.Results))
+		}
+
+		// All should succeed
+		for i, result := range batchResp.Results {
+			if result.Status != "success" {
+				t.Errorf("Expected result %d to be 'success', got '%s' (error: %s)", i, result.Status, result.Error)
+			}
+		}
+
+		// Verify weights are calculated correctly (cache should work)
+		// 70% of 300 = 210
+		// 75% of 300 = 225
+		// 80% of 300 = 240
+		// 85% of 300 = 255
+		// 90% of 300 = 270
+		expectedWeights := []float64{210, 225, 240, 255, 270}
+		for i, result := range batchResp.Results {
+			if result.Resolved != nil && len(result.Resolved.Sets) > 0 {
+				if result.Resolved.Sets[0].Weight != expectedWeights[i] {
+					t.Errorf("Result %d: expected weight %f, got %f", i, expectedWeights[i], result.Resolved.Sets[0].Weight)
+				}
+			}
 		}
 	})
 }
