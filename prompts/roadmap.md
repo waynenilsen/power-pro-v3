@@ -141,6 +141,30 @@ Each phase document should contain the roadmap structure outlined below.
 - **Change Process**: When and how roadmap changes are made
 - **Communication Plan**: How roadmap is shared with different audiences
 
+### 9. Technical Debt PRDs
+
+**Rule**: Every 5th PRD (e.g., PRD-005, PRD-010, PRD-015, PRD-020, etc.) must be a **technical debt paydown PRD**.
+
+#### Purpose
+This ensures regular, systematic attention to technical debt at the roadmap level. Technical debt PRDs can be very short and focus on high-level technical improvements rather than feature development.
+
+#### What to Include
+- **Theme**: Technical debt reduction (e.g., "Improve Code Quality", "Modernize Infrastructure", "Reduce Security Debt")
+- **Strategic Objective**: How reducing this debt supports business goals (e.g., faster feature delivery, reduced risk, improved reliability)
+- **Key Initiatives**: High-level technical debt items to address
+- **Success Metrics**: How to measure debt reduction (e.g., reduced bug rate, faster build times, improved test coverage)
+
+#### Examples
+- PRD-005: Reduce code debt and improve maintainability
+- PRD-010: Modernize infrastructure and update dependencies
+- PRD-015: Improve test coverage and reduce flaky tests
+- PRD-020: Enhance security posture and patch vulnerabilities
+
+#### Relationship to ERDs
+- Each technical debt PRD maps to one technical debt ERD
+- The ERD provides detailed requirements for addressing the technical debt
+- See `erd.md` for technical debt ERD guidelines
+
 ## Best Practices
 
 ### ✅ Do
@@ -195,6 +219,7 @@ Phase documents, ERDs, and tickets share the same directory structure pattern:
 - Phase document themes and initiatives inform ERD creation
 - ERDs should align with phase document priorities
 - ERDs break down phase document initiatives into detailed requirements
+- **Every 5th PRD/ERD must be a technical debt paydown PRD/ERD** (see ERD guidelines)
 
 ### From ERD to Tickets
 - ERDs decompose phase document initiatives into requirements

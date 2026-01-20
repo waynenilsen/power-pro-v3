@@ -66,3 +66,41 @@ Each ticket file should contain:
 - Any relevant details, notes, or context
 
 **Important**: Ticket files must NOT contain status information. Status is always implied by the directory location (`todo/`, `in-progress/`, `done/`, or `not-doing/`). Including status in the file body would create redundancy and potential inconsistencies.
+
+## Schema Changes
+
+### Separate Tickets for Schema Changes
+
+**Critical Rule**: When a ticket involves database schema changes, the schema change must be in a **separate ticket and commit** from the code that uses the schema.
+
+### Process
+1. **Schema Change Ticket**: Create a ticket for the schema change itself
+   - Includes the schema modification
+   - Includes the goose migration file
+   - Migration must consider what's currently in production
+   - Migration must include data migration strategies
+   - Performance optimization is not required (yet)
+
+2. **Implementation Ticket**: Create a separate ticket for code that uses the schema
+   - Depends on the schema change ticket
+   - Uses the new schema structure
+   - Implements the feature/functionality
+
+### Example
+- **Ticket 001**: Add users table (schema change + migration)
+  - Creates `users` table with email, password_hash, name columns
+  - Includes goose migration
+  - Handles data migration if needed
+  
+- **Ticket 002**: Implement user registration API (blocked by 001)
+  - Uses the `users` table created in Ticket 001
+  - Implements registration logic
+
+### Why Separate?
+- Schema changes can be reviewed independently
+- Migrations are tested before dependent code
+- Clear separation of concerns
+- Easier rollback if needed
+- Better traceability
+
+See `tech-stack.md` for more details on migration requirements.

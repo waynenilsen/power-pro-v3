@@ -35,6 +35,8 @@ An ERD defines **what** needs to be built at a high level. Tickets break this do
    - **User flows** (authentication flow, checkout flow)
    - **Data models** (database schema, data access layer)
 
+**Important**: Database schema changes must be in **separate tickets** from the code that uses them. See "Schema Changes" section below.
+
 **Example**:
 ```
 ERD REQ-001: "System shall allow users to authenticate via email and password"
@@ -79,6 +81,44 @@ Ticket 012: Add performance monitoring and alerting
    - **Infrastructure setup** (deployment, CI/CD)
    - **Tooling** (monitoring, logging)
    - **Validation** (proof of concept, spike)
+
+### Schema Changes → Separate Migration Tickets
+**Critical Rule**: Database schema changes must be in **separate tickets** from the code that uses them.
+
+**Process**:
+1. Identify schema changes needed for ERD requirements
+2. Create a dedicated ticket for each schema change:
+   - Schema modification (table creation, column additions, etc.)
+   - Goose migration file
+   - Migration must consider current production state
+   - Data migration strategies for updating existing data
+   - Performance optimization not required (yet)
+3. Create separate tickets for code that uses the schema:
+   - These tickets depend on the schema change ticket
+   - Implement features using the new schema
+
+**Example**:
+```
+ERD REQ-001: "System shall store user accounts"
+↓
+Ticket 001: Create users table schema and migration
+  - Schema: users table with email, password_hash, name
+  - Migration: goose migration file
+  - Data migration: handles any existing data if needed
+  
+Ticket 002: Implement user registration API
+  - Blocked by: 001
+  - Uses: users table from Ticket 001
+```
+
+**Why Separate?**
+- Schema changes can be reviewed independently
+- Migrations tested before dependent code
+- Clear separation of concerns
+- Easier rollback if needed
+- Better traceability
+
+See `tech-stack.md` and `ticket-system.md` for more details.
 
 ## Ticket Creation Process
 
@@ -159,6 +199,7 @@ Related to: REQ-002
 - **Respect priorities**: Honor ERD prioritization (Must/Should/Could/Won't)
 - **Break down large requirements**: Don't create tickets that are too large
 - **Consider user value**: Each ticket should deliver some value, even if small
+- **Follow TDD approach**: Create endpoint structure first, hardcode simple responses, write tests that fail for legitimate reasons, then implement (see `tech-stack.md`)
 
 ### ❌ Don't
 - **Don't skip requirements**: Every ERD requirement should map to at least one ticket

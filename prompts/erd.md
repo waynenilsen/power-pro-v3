@@ -222,3 +222,37 @@ When creating tickets from ERD requirements:
 - Link ticket to requirement ID (e.g., "Implements REQ-001")
 - Ensure ticket acceptance criteria match ERD acceptance criteria
 - Maintain traceability between ERD and implementation tickets
+
+## Technical Debt ERDs
+
+### Every 5th ERD Must Be Technical Debt
+
+**Rule**: Every 5th ERD (e.g., ERD-005, ERD-010, ERD-015, ERD-020, etc.) must be a **technical debt paydown ERD**.
+
+### Purpose
+This ensures regular, systematic attention to technical debt and prevents it from accumulating unchecked. Technical debt ERDs focus on improving code quality, architecture, infrastructure, or processes rather than adding new features.
+
+### Scope & Format
+- **Technical debt ERDs can be very short** - they don't need the full structure of feature ERDs
+- Focus on the specific technical debt items being addressed
+- Reference the technical debt tracking system (see `tech-debt.md`)
+- Include clear acceptance criteria for debt resolution
+- Prioritize high-impact, high-risk technical debt
+
+### What to Include
+- **Debt Type**: Code, Architecture, Test, Documentation, Security, Process, Defect, Data, Design, or Knowledge debt
+- **Impact**: How the debt affects development/productivity/security/reliability
+- **Classification**: Deliberate/Inadvertent × Prudent/Reckless (see `tech-debt.md`)
+- **Remediation Requirements**: What needs to be done to resolve the debt
+- **Success Criteria**: How to verify the debt is resolved
+
+### Examples
+- ERD-005: Refactor large files for AI compatibility
+- ERD-010: Improve test infrastructure and reduce flakiness
+- ERD-015: Update security dependencies and patch vulnerabilities
+- ERD-020: Break down monolithic components into smaller modules
+
+### Counting
+- Count ERDs sequentially by their number (005, 010, 015, 020, etc.)
+- If an ERD is moved to `not-doing/`, it still counts toward the sequence
+- Technical debt ERDs themselves count toward the sequence
