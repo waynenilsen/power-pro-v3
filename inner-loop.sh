@@ -221,29 +221,18 @@ main() {
   fi
   
   # ========================================================================
-  # Step 5: Close sprints that are ready (all tickets done)
+  # Step 5: Close ONE sprint that is ready (all tickets done)
+  # Only close one sprint per iteration to ensure orderly progression
   # ========================================================================
   log "Checking for sprints ready to close..."
-  local closed_sprints=()
-  while true; do
-    if NEXT_SPRINT=$("./sdlc.sh" get-next sprint in-progress 2>&1); then
-      # Try to move to done - sdlc.sh will validate that all tickets are done
-      if "./sdlc.sh" move sprint "$(basename "$NEXT_SPRINT")" done 2>&1; then
-        log_success "Closed sprint: $(basename "$NEXT_SPRINT")"
-        closed_sprints+=("$(basename "$NEXT_SPRINT")")
-        # Continue checking for more sprints to close
-      else
-        # Sprint has active tickets, skip it
-        break
-      fi
-    else
-      break
+  if NEXT_SPRINT=$("./sdlc.sh" get-next sprint in-progress 2>&1); then
+    # Try to move to done - sdlc.sh will validate that all tickets are done
+    if "./sdlc.sh" move sprint "$(basename "$NEXT_SPRINT")" done 2>&1; then
+      log_success "Closed sprint: $(basename "$NEXT_SPRINT")"
+      commit_changes "chore" "sprint" "close sprint $(basename "$NEXT_SPRINT")"
+      exit 0
     fi
-  done
-  
-  # Commit all closed sprints together
-  if [ ${#closed_sprints[@]} -gt 0 ]; then
-    commit_changes "chore" "sprint" "close sprints: ${closed_sprints[*]}" "All tickets completed for these sprints"
+    # Sprint has active tickets or can't be closed, continue to next steps
   fi
   
   # ========================================================================

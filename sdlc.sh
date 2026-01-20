@@ -230,9 +230,22 @@ can_close_sprint() {
   local sprint_dir="$1"
   local tickets_dir="$sprint_dir/tickets"
   
-  # Check if tickets directory exists
+  # Check if tickets directory exists with at least one done ticket
   if [ ! -d "$tickets_dir" ]; then
-    return 0  # No tickets, can close
+    echo "Error: Cannot close sprint: no tickets directory (ERD not broken down yet)" >&2
+    return 1
+  fi
+
+  # Require at least one ticket in done state
+  local done_dir="$tickets_dir/done"
+  if [ ! -d "$done_dir" ]; then
+    echo "Error: Cannot close sprint: no done tickets" >&2
+    return 1
+  fi
+  local done_count=$(find "$done_dir" -maxdepth 1 -type f -name "*.md" | wc -l | tr -d ' ')
+  if [ "$done_count" -eq 0 ]; then
+    echo "Error: Cannot close sprint: no done tickets" >&2
+    return 1
   fi
   
   # Check for todo or in-progress tickets
