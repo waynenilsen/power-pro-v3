@@ -10,7 +10,6 @@
 #       erd.md
 #       tickets/{state}/NNN-ticket-name.md
 
-set -euo pipefail
 
 # Enable alias expansion and source environment
 shopt -s expand_aliases

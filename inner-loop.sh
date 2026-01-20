@@ -10,7 +10,6 @@
 # - Creates sprints from phases
 # - Creates phases from README
 
-set -euo pipefail
 
 # Enable alias expansion
 shopt -s expand_aliases
