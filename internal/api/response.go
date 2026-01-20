@@ -21,6 +21,13 @@ type PaginatedResponse struct {
 	TotalPages int64       `json:"totalPages"`
 }
 
+// ResponseWithWarnings wraps a response with optional warnings.
+// Used when an operation succeeds but has informational warnings.
+type ResponseWithWarnings struct {
+	Data     interface{} `json:"data"`
+	Warnings []string    `json:"warnings,omitempty"`
+}
+
 // writeJSON writes a JSON response.
 func writeJSON(w http.ResponseWriter, status int, data interface{}) {
 	w.Header().Set("Content-Type", "application/json")

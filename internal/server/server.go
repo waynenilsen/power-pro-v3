@@ -21,18 +21,21 @@ type Config struct {
 
 // Server represents the HTTP server.
 type Server struct {
-	config     Config
-	httpServer *http.Server
-	liftRepo   *repository.LiftRepository
+	config      Config
+	httpServer  *http.Server
+	liftRepo    *repository.LiftRepository
+	liftMaxRepo *repository.LiftMaxRepository
 }
 
 // New creates a new Server instance.
 func New(cfg Config) *Server {
 	liftRepo := repository.NewLiftRepository(cfg.DB)
+	liftMaxRepo := repository.NewLiftMaxRepository(cfg.DB)
 
 	s := &Server{
-		config:   cfg,
-		liftRepo: liftRepo,
+		config:      cfg,
+		liftRepo:    liftRepo,
+		liftMaxRepo: liftMaxRepo,
 	}
 
 	mux := http.NewServeMux()
@@ -51,8 +54,9 @@ func New(cfg Config) *Server {
 
 // registerRoutes sets up all API routes.
 func (s *Server) registerRoutes(mux *http.ServeMux) {
-	// Create lift handler
+	// Create handlers
 	liftHandler := api.NewLiftHandler(s.liftRepo)
+	liftMaxHandler := api.NewLiftMaxHandler(s.liftMaxRepo, s.liftRepo)
 
 	// Health check
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
@@ -67,6 +71,13 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /lifts", liftHandler.Create)
 	mux.HandleFunc("PUT /lifts/{id}", liftHandler.Update)
 	mux.HandleFunc("DELETE /lifts/{id}", liftHandler.Delete)
+
+	// LiftMax routes
+	mux.HandleFunc("GET /users/{userId}/lift-maxes", liftMaxHandler.List)
+	mux.HandleFunc("GET /lift-maxes/{id}", liftMaxHandler.Get)
+	mux.HandleFunc("POST /users/{userId}/lift-maxes", liftMaxHandler.Create)
+	mux.HandleFunc("PUT /lift-maxes/{id}", liftMaxHandler.Update)
+	mux.HandleFunc("DELETE /lift-maxes/{id}", liftMaxHandler.Delete)
 }
 
 // Start starts the HTTP server.
