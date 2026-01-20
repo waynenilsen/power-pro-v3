@@ -20,7 +20,11 @@ fi
 
 PROMPT="$1"
 
-claude -p "$PROMPT if you have created any files, you must commit and push them using conventional commits, update gitignore if needed, this is a unit of work for you." \
+PREAMBLE="REMEMBER: You are on your own. No human is coming to help. If you need a tool, install it (no sudo). Put env vars in ~/.no-guard-bashrc.sh. If you encounter issues or ambiguity in the prompts/scripts, YOU MUST UPDATE THEM to improve the system for future runs."
+
+POSTAMBLE="If you have created or modified any files, commit and push using conventional commits. Update .gitignore if needed. This is a unit of work for you."
+
+claude -p "$PREAMBLE $PROMPT $POSTAMBLE" \
   --dangerously-skip-permissions \
   --output-format stream-json \
   --verbose | cclean

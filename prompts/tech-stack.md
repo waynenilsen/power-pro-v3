@@ -2,12 +2,19 @@
 
 This document defines the technology stack and development practices used in this project. All agents working on this codebase must be aware of and follow these technology choices.
 
+## HARD CONSTRAINTS (NEVER VIOLATE)
+
+- **Go and SQLite. That's it.** Do not mention, suggest, or consider any other languages, databases, or external services.
+- **No alternatives exist.** There is no Redis, Postgres, MySQL, MongoDB, Auth0, Stripe, AWS, or any other technology. Only Go and SQLite.
+- **No frontend.** This is a headless API. Never mention frontend concerns.
+- **You are autonomous.** Install tools you need (no sudo). Put environment variables in `~/.no-guard-bashrc.sh`.
+
 ## Core Technologies
 
-### Backend Language & Runtime
-- **Go (Golang)**: The primary backend language
+### Language & Runtime
+- **Go (Golang)**: The only language
 - **Vanilla Go**: Use standard library Go. Avoid heavy frameworks or ORMs
-- **RPC-based System**: The system uses RPC (Remote Procedure Call) architecture for communication between frontend and backend
+- **RPC-based System**: The system uses RPC (Remote Procedure Call) architecture for API communication
 
 ### Database & Data Access
 - **SQLite**: The database system
@@ -116,18 +123,18 @@ This separation ensures:
 - Easier rollback if needed
 
 ### RPC Communication
-- The system uses RPC for frontend/backend communication
+- The system uses RPC for API communication
 - This affects authentication and session management (see `auth.md`)
 - Bearer tokens are used for authentication (session ID sent as bearer token)
 
 ## External Services & Dependencies
 
 ### External Services Policy
-- **External services are explicitly denied until otherwise noted**
-- The entire system must run on a laptop after checkout
-- No external API dependencies (payment processors, email services, etc.) unless explicitly approved
-- No cloud services required for local development
+- **External services are FORBIDDEN. Period.**
+- No payment processors, no email services, no Auth0, no AWS, no cloud services, no Redis, no external databases
+- The entire system must run on a laptop after checkout with just Go and SQLite
 - All functionality must be self-contained
+- **Do not even mention external services as possibilities**
 
 ### Local Development Requirements
 - **Everything must run on a laptop on checkout**
@@ -182,9 +189,9 @@ This separation ensures:
 - Cleanup must be thorough (delete temp DB files)
 
 ### RPC Architecture
-- Frontend and backend are separate
+- This is a headless API (no frontend)
 - Communication happens via RPC calls
-- This affects how authentication tokens are passed (bearer tokens, not cookies)
+- Authentication tokens are passed as bearer tokens
 
 ## Integration with Other Systems
 
