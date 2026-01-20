@@ -11,6 +11,7 @@ import (
 
 type Querier interface {
 	CountCycles(ctx context.Context) (int64, error)
+	CountDailyLookups(ctx context.Context) (int64, error)
 	CountDayPrescriptions(ctx context.Context, dayID string) (int64, error)
 	CountDays(ctx context.Context) (int64, error)
 	CountDaysFilteredByProgram(ctx context.Context, programID sql.NullString) (int64, error)
@@ -23,10 +24,12 @@ type Querier interface {
 	CountPrescriptions(ctx context.Context) (int64, error)
 	CountPrescriptionsFilterLift(ctx context.Context, liftID string) (int64, error)
 	CountWeekDays(ctx context.Context, weekID string) (int64, error)
+	CountWeeklyLookups(ctx context.Context) (int64, error)
 	CountWeeks(ctx context.Context) (int64, error)
 	CountWeeksByCycleID(ctx context.Context, cycleID string) (int64, error)
 	CountWeeksFilteredByCycle(ctx context.Context, cycleID string) (int64, error)
 	CreateCycle(ctx context.Context, arg CreateCycleParams) error
+	CreateDailyLookup(ctx context.Context, arg CreateDailyLookupParams) error
 	CreateDay(ctx context.Context, arg CreateDayParams) error
 	CreateDayPrescription(ctx context.Context, arg CreateDayPrescriptionParams) error
 	CreateLift(ctx context.Context, arg CreateLiftParams) error
@@ -35,13 +38,16 @@ type Querier interface {
 	CreateUser(ctx context.Context, arg CreateUserParams) error
 	CreateWeek(ctx context.Context, arg CreateWeekParams) error
 	CreateWeekDay(ctx context.Context, arg CreateWeekDayParams) error
+	CreateWeeklyLookup(ctx context.Context, arg CreateWeeklyLookupParams) error
 	CycleIsUsedByPrograms(ctx context.Context, cycleID string) (int64, error)
+	DailyLookupIsUsedByPrograms(ctx context.Context, dailyLookupID sql.NullString) (int64, error)
 	DayIsUsedInWeeks(ctx context.Context, dayID string) (int64, error)
 	DaySlugExists(ctx context.Context, arg DaySlugExistsParams) (int64, error)
 	DaySlugExistsForNew(ctx context.Context, arg DaySlugExistsForNewParams) (int64, error)
 	DaySlugExistsNullProgram(ctx context.Context, arg DaySlugExistsNullProgramParams) (int64, error)
 	DaySlugExistsNullProgramForNew(ctx context.Context, slug string) (int64, error)
 	DeleteCycle(ctx context.Context, id string) error
+	DeleteDailyLookup(ctx context.Context, id string) error
 	DeleteDay(ctx context.Context, id string) error
 	DeleteDayPrescription(ctx context.Context, id string) error
 	DeleteDayPrescriptionByDayAndPrescription(ctx context.Context, arg DeleteDayPrescriptionByDayAndPrescriptionParams) error
@@ -51,10 +57,12 @@ type Querier interface {
 	DeleteWeek(ctx context.Context, id string) error
 	DeleteWeekDay(ctx context.Context, id string) error
 	DeleteWeekDayByWeekAndDay(ctx context.Context, arg DeleteWeekDayByWeekAndDayParams) error
+	DeleteWeeklyLookup(ctx context.Context, id string) error
 	GetCurrentMax(ctx context.Context, arg GetCurrentMaxParams) (LiftMax, error)
 	GetCurrentOneRM(ctx context.Context, arg GetCurrentOneRMParams) (LiftMax, error)
 	GetCycle(ctx context.Context, id string) (Cycle, error)
 	GetCycleByID(ctx context.Context, id string) (Cycle, error)
+	GetDailyLookup(ctx context.Context, id string) (DailyLookup, error)
 	GetDay(ctx context.Context, id string) (Day, error)
 	GetDayBySlug(ctx context.Context, arg GetDayBySlugParams) (Day, error)
 	// Day Prescriptions queries
@@ -70,6 +78,7 @@ type Querier interface {
 	// Week Days queries
 	GetWeekDay(ctx context.Context, id string) (WeekDay, error)
 	GetWeekDayByWeekAndDayAndDayOfWeek(ctx context.Context, arg GetWeekDayByWeekAndDayAndDayOfWeekParams) (WeekDay, error)
+	GetWeeklyLookup(ctx context.Context, id string) (WeeklyLookup, error)
 	LiftHasChildReferences(ctx context.Context, parentLiftID sql.NullString) (int64, error)
 	LiftHasMaxReferences(ctx context.Context, liftID string) (int64, error)
 	LiftHasPrescriptionReferences(ctx context.Context, liftID string) (int64, error)
@@ -79,6 +88,10 @@ type Querier interface {
 	ListCyclesByLengthWeeksDesc(ctx context.Context, arg ListCyclesByLengthWeeksDescParams) ([]Cycle, error)
 	ListCyclesByNameAsc(ctx context.Context, arg ListCyclesByNameAscParams) ([]Cycle, error)
 	ListCyclesByNameDesc(ctx context.Context, arg ListCyclesByNameDescParams) ([]Cycle, error)
+	ListDailyLookupsByCreatedAtAsc(ctx context.Context, arg ListDailyLookupsByCreatedAtAscParams) ([]DailyLookup, error)
+	ListDailyLookupsByCreatedAtDesc(ctx context.Context, arg ListDailyLookupsByCreatedAtDescParams) ([]DailyLookup, error)
+	ListDailyLookupsByNameAsc(ctx context.Context, arg ListDailyLookupsByNameAscParams) ([]DailyLookup, error)
+	ListDailyLookupsByNameDesc(ctx context.Context, arg ListDailyLookupsByNameDescParams) ([]DailyLookup, error)
 	ListDayPrescriptions(ctx context.Context, dayID string) ([]DayPrescription, error)
 	ListDaysByCreatedAtAsc(ctx context.Context, arg ListDaysByCreatedAtAscParams) ([]Day, error)
 	ListDaysByCreatedAtDesc(ctx context.Context, arg ListDaysByCreatedAtDescParams) ([]Day, error)
@@ -113,6 +126,10 @@ type Querier interface {
 	ListPrescriptionsFilterLiftByOrderAsc(ctx context.Context, arg ListPrescriptionsFilterLiftByOrderAscParams) ([]Prescription, error)
 	ListPrescriptionsFilterLiftByOrderDesc(ctx context.Context, arg ListPrescriptionsFilterLiftByOrderDescParams) ([]Prescription, error)
 	ListWeekDays(ctx context.Context, weekID string) ([]WeekDay, error)
+	ListWeeklyLookupsByCreatedAtAsc(ctx context.Context, arg ListWeeklyLookupsByCreatedAtAscParams) ([]WeeklyLookup, error)
+	ListWeeklyLookupsByCreatedAtDesc(ctx context.Context, arg ListWeeklyLookupsByCreatedAtDescParams) ([]WeeklyLookup, error)
+	ListWeeklyLookupsByNameAsc(ctx context.Context, arg ListWeeklyLookupsByNameAscParams) ([]WeeklyLookup, error)
+	ListWeeklyLookupsByNameDesc(ctx context.Context, arg ListWeeklyLookupsByNameDescParams) ([]WeeklyLookup, error)
 	ListWeeksByCreatedAtAsc(ctx context.Context, arg ListWeeksByCreatedAtAscParams) ([]Week, error)
 	ListWeeksByCreatedAtDesc(ctx context.Context, arg ListWeeksByCreatedAtDescParams) ([]Week, error)
 	ListWeeksByCycleID(ctx context.Context, cycleID string) ([]Week, error)
@@ -127,15 +144,18 @@ type Querier interface {
 	UniqueConstraintExists(ctx context.Context, arg UniqueConstraintExistsParams) (int64, error)
 	UniqueConstraintExistsExcluding(ctx context.Context, arg UniqueConstraintExistsExcludingParams) (int64, error)
 	UpdateCycle(ctx context.Context, arg UpdateCycleParams) error
+	UpdateDailyLookup(ctx context.Context, arg UpdateDailyLookupParams) error
 	UpdateDay(ctx context.Context, arg UpdateDayParams) error
 	UpdateDayPrescriptionOrder(ctx context.Context, arg UpdateDayPrescriptionOrderParams) error
 	UpdateLift(ctx context.Context, arg UpdateLiftParams) error
 	UpdateLiftMax(ctx context.Context, arg UpdateLiftMaxParams) error
 	UpdatePrescription(ctx context.Context, arg UpdatePrescriptionParams) error
 	UpdateWeek(ctx context.Context, arg UpdateWeekParams) error
+	UpdateWeeklyLookup(ctx context.Context, arg UpdateWeeklyLookupParams) error
 	WeekIsUsedInActiveCycle(ctx context.Context, id string) (int64, error)
 	WeekNumberExistsInCycle(ctx context.Context, arg WeekNumberExistsInCycleParams) (int64, error)
 	WeekNumberExistsInCycleForNew(ctx context.Context, arg WeekNumberExistsInCycleForNewParams) (int64, error)
+	WeeklyLookupIsUsedByPrograms(ctx context.Context, weeklyLookupID sql.NullString) (int64, error)
 }
 
 var _ Querier = (*Queries)(nil)

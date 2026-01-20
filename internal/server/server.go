@@ -24,16 +24,18 @@ type Config struct {
 
 // Server represents the HTTP server.
 type Server struct {
-	config           Config
-	httpServer       *http.Server
-	liftRepo         *repository.LiftRepository
-	liftMaxRepo      *repository.LiftMaxRepository
-	prescriptionRepo *repository.PrescriptionRepository
-	dayRepo          *repository.DayRepository
-	weekRepo         *repository.WeekRepository
-	cycleRepo        *repository.CycleRepository
-	strategyFactory  *loadstrategy.StrategyFactory
-	schemeFactory    *setscheme.SchemeFactory
+	config             Config
+	httpServer         *http.Server
+	liftRepo           *repository.LiftRepository
+	liftMaxRepo        *repository.LiftMaxRepository
+	prescriptionRepo   *repository.PrescriptionRepository
+	dayRepo            *repository.DayRepository
+	weekRepo           *repository.WeekRepository
+	cycleRepo          *repository.CycleRepository
+	weeklyLookupRepo   *repository.WeeklyLookupRepository
+	dailyLookupRepo    *repository.DailyLookupRepository
+	strategyFactory    *loadstrategy.StrategyFactory
+	schemeFactory      *setscheme.SchemeFactory
 }
 
 // New creates a new Server instance.
@@ -53,17 +55,21 @@ func New(cfg Config) *Server {
 	dayRepo := repository.NewDayRepository(cfg.DB)
 	weekRepo := repository.NewWeekRepository(cfg.DB)
 	cycleRepo := repository.NewCycleRepository(cfg.DB)
+	weeklyLookupRepo := repository.NewWeeklyLookupRepository(cfg.DB)
+	dailyLookupRepo := repository.NewDailyLookupRepository(cfg.DB)
 
 	s := &Server{
-		config:           cfg,
-		liftRepo:         liftRepo,
-		liftMaxRepo:      liftMaxRepo,
-		prescriptionRepo: prescriptionRepo,
-		dayRepo:          dayRepo,
-		weekRepo:         weekRepo,
-		cycleRepo:        cycleRepo,
-		strategyFactory:  strategyFactory,
-		schemeFactory:    schemeFactory,
+		config:             cfg,
+		liftRepo:           liftRepo,
+		liftMaxRepo:        liftMaxRepo,
+		prescriptionRepo:   prescriptionRepo,
+		dayRepo:            dayRepo,
+		weekRepo:           weekRepo,
+		cycleRepo:          cycleRepo,
+		weeklyLookupRepo:   weeklyLookupRepo,
+		dailyLookupRepo:    dailyLookupRepo,
+		strategyFactory:    strategyFactory,
+		schemeFactory:      schemeFactory,
 	}
 
 	mux := http.NewServeMux()
@@ -89,6 +95,8 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	dayHandler := api.NewDayHandler(s.dayRepo, s.prescriptionRepo)
 	weekHandler := api.NewWeekHandler(s.weekRepo)
 	cycleHandler := api.NewCycleHandler(s.cycleRepo)
+	weeklyLookupHandler := api.NewWeeklyLookupHandler(s.weeklyLookupRepo)
+	dailyLookupHandler := api.NewDailyLookupHandler(s.dailyLookupRepo)
 
 	// Auth middleware configuration
 	authCfg := middleware.AuthConfig{
@@ -196,6 +204,24 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	mux.Handle("POST /cycles", withAdmin(cycleHandler.Create))
 	mux.Handle("PUT /cycles/{id}", withAdmin(cycleHandler.Update))
 	mux.Handle("DELETE /cycles/{id}", withAdmin(cycleHandler.Delete))
+
+	// WeeklyLookup routes:
+	// - All authenticated users can read weekly lookup data
+	// - Only admins can create/update/delete weekly lookups
+	mux.Handle("GET /weekly-lookups", withAuth(weeklyLookupHandler.List))
+	mux.Handle("GET /weekly-lookups/{id}", withAuth(weeklyLookupHandler.Get))
+	mux.Handle("POST /weekly-lookups", withAdmin(weeklyLookupHandler.Create))
+	mux.Handle("PUT /weekly-lookups/{id}", withAdmin(weeklyLookupHandler.Update))
+	mux.Handle("DELETE /weekly-lookups/{id}", withAdmin(weeklyLookupHandler.Delete))
+
+	// DailyLookup routes:
+	// - All authenticated users can read daily lookup data
+	// - Only admins can create/update/delete daily lookups
+	mux.Handle("GET /daily-lookups", withAuth(dailyLookupHandler.List))
+	mux.Handle("GET /daily-lookups/{id}", withAuth(dailyLookupHandler.Get))
+	mux.Handle("POST /daily-lookups", withAdmin(dailyLookupHandler.Create))
+	mux.Handle("PUT /daily-lookups/{id}", withAdmin(dailyLookupHandler.Update))
+	mux.Handle("DELETE /daily-lookups/{id}", withAdmin(dailyLookupHandler.Delete))
 }
 
 // Start starts the HTTP server.
