@@ -14,6 +14,73 @@ phases/
 └── not-doing/     # Phase documents that are cancelled or will not be done
 ```
 
+## Roadmap Document: README.md
+
+### Requirement: `README.md` is the Roadmap Document
+
+The root-level `README.md` file serves as the roadmap document for the entire project.
+
+### Purpose
+- Provides a high-level overview of all phase documents
+- Links to individual phase documents
+- Shares the overarching product vision that guides all phases
+- Serves as the entry point for understanding the project roadmap
+
+### Content Requirements
+
+The README.md should include:
+
+1. **Product Vision**
+   - The long-term vision for the product
+   - The "why" behind the product
+   - Strategic direction that guides all phases
+
+2. **Phase Document Overview**
+   - Brief description of what phase documents are
+   - How they relate to the overall roadmap
+   - Link to this roadmap guidelines document (`prompts/roadmap.md`)
+
+3. **Phase Document Links**
+   - Links to all phase documents organized by status (todo, in-progress, done)
+   - Brief one-sentence description of each phase document
+   - Phase documents should be listed in numerical order
+
+4. **Roadmap Structure**
+   - Explanation of how phases relate to ERDs and tickets
+   - Reference to the traceability chain (Phase → ERD → Tickets)
+
+### Format Example
+
+```markdown
+# [Product Name]
+
+## Product Vision
+
+[Overarching vision statement that guides all phases]
+
+## Roadmap
+
+### In Progress
+- [Phase 001: Foundation](./phases/in-progress/001-foundation.md) - Establishing core infrastructure and authentication
+- [Phase 002: Core Features](./phases/in-progress/002-core-features.md) - Building essential user-facing functionality
+
+### Planned
+- [Phase 003: Platform Scaling](./phases/todo/003-platform-scaling.md) - Scaling infrastructure for growth
+
+### Completed
+- [Phase 000: Initial Setup](./phases/done/000-initial-setup.md) - Project initialization and tooling
+
+## Roadmap Structure
+
+Phase documents break down into ERDs, which in turn break down into tickets. See [roadmap guidelines](./prompts/roadmap.md) for details.
+```
+
+### Maintenance
+- Update README.md whenever phase documents are created, moved, or completed
+- Keep phase descriptions brief (one sentence)
+- Ensure all phase documents are linked
+- Vision statement should be stable but can evolve as the product matures
+
 ## Directory Descriptions
 
 ### `phases/`
@@ -329,3 +396,14 @@ Before finalizing a phase document:
 - [ ] Phase document can be traced to ERDs and tickets
 - [ ] Phase document follows naming convention (zero-padded number)
 - [ ] Phase document does not include status (status is implied by directory location)
+
+### README.md Roadmap Checklist
+
+Before considering the roadmap system complete:
+
+- [ ] `README.md` exists and serves as the roadmap document
+- [ ] Product vision is clearly stated in README.md
+- [ ] All phase documents are linked in README.md
+- [ ] Phase documents are organized by status (todo, in-progress, done)
+- [ ] Each phase document has a brief one-sentence description
+- [ ] README.md explains the roadmap structure and traceability chain

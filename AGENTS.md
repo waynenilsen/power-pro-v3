@@ -1,5 +1,7 @@
 # Agents
 
+Read the README to learn more about what we are doing. This project is PowerPro. It is a headless api there is no frontend and there should not be a frontend. The core challenge of powerpro is keeping the code DRY. All of these powerlifters are doing things slightly differently but at the end of the day they're really doing very similar things. It is our job as programmers to manage this complexity in a re-usable way. The difficulty will come from managing the complexity related to that. When designing the entities and their relationship to eachother and the classes even in early phases it will be critical to design it such that we don't end up with spaghetti and you must keep your eye on the horizon. Don't preemptively add fields but you may preemptively add needed layers of abstraction that may well start as trivial / passthrough for initial implementations.
+
 ## Ticket System
 [Ticket System](./prompts/ticket-system.md)
 
@@ -20,6 +22,9 @@
 
 ## Authentication System
 [Authentication](./prompts/auth.md)
+
+## Powerlifting Programs In Depth
+[Programs](./programs/*.md)
 
 ## Document Hierarchy & Relationships
 
