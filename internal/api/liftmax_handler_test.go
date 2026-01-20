@@ -620,6 +620,296 @@ func TestLiftMaxResponseFormat(t *testing.T) {
 	})
 }
 
+// ConversionResponse matches the API response format for conversions.
+type ConversionResponse struct {
+	OriginalValue  float64 `json:"originalValue"`
+	OriginalType   string  `json:"originalType"`
+	ConvertedValue float64 `json:"convertedValue"`
+	ConvertedType  string  `json:"convertedType"`
+	Percentage     float64 `json:"percentage"`
+}
+
+func TestConvertLiftMax(t *testing.T) {
+	ts, err := testutil.NewTestServer()
+	if err != nil {
+		t.Fatalf("Failed to create test server: %v", err)
+	}
+	defer ts.Close()
+
+	// Create test data
+	oneRMUserID := "convert-test-user"
+	oneRM := createMax(t, ts, oneRMUserID, testSquatID, "ONE_RM", 400.0, nil)
+
+	tmUserID := "convert-tm-user"
+	tm := createMax(t, ts, tmUserID, testSquatID, "TRAINING_MAX", 360.0, nil)
+
+	t.Run("converts 1RM to Training Max with default percentage", func(t *testing.T) {
+		req, _ := http.NewRequest(http.MethodGet, ts.URL("/lift-maxes/"+oneRM.ID+"/convert?to_type=TRAINING_MAX"), nil)
+		req.Header.Set("X-User-ID", oneRMUserID)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("Failed to make request: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			t.Fatalf("Expected status 200, got %d: %s", resp.StatusCode, body)
+		}
+
+		var result ConversionResponse
+		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+			t.Fatalf("Failed to decode response: %v", err)
+		}
+
+		if result.OriginalValue != 400.0 {
+			t.Errorf("Expected originalValue 400.0, got %f", result.OriginalValue)
+		}
+		if result.OriginalType != "ONE_RM" {
+			t.Errorf("Expected originalType ONE_RM, got %s", result.OriginalType)
+		}
+		// 400 * 0.90 = 360
+		if result.ConvertedValue != 360.0 {
+			t.Errorf("Expected convertedValue 360.0, got %f", result.ConvertedValue)
+		}
+		if result.ConvertedType != "TRAINING_MAX" {
+			t.Errorf("Expected convertedType TRAINING_MAX, got %s", result.ConvertedType)
+		}
+		if result.Percentage != 90.0 {
+			t.Errorf("Expected percentage 90.0, got %f", result.Percentage)
+		}
+	})
+
+	t.Run("converts Training Max to 1RM with default percentage", func(t *testing.T) {
+		req, _ := http.NewRequest(http.MethodGet, ts.URL("/lift-maxes/"+tm.ID+"/convert?to_type=ONE_RM"), nil)
+		req.Header.Set("X-User-ID", tmUserID)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("Failed to make request: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			t.Fatalf("Expected status 200, got %d: %s", resp.StatusCode, body)
+		}
+
+		var result ConversionResponse
+		json.NewDecoder(resp.Body).Decode(&result)
+
+		// 360 / 0.90 = 400
+		if result.ConvertedValue != 400.0 {
+			t.Errorf("Expected convertedValue 400.0, got %f", result.ConvertedValue)
+		}
+		if result.ConvertedType != "ONE_RM" {
+			t.Errorf("Expected convertedType ONE_RM, got %s", result.ConvertedType)
+		}
+	})
+
+	t.Run("converts with custom percentage", func(t *testing.T) {
+		req, _ := http.NewRequest(http.MethodGet, ts.URL("/lift-maxes/"+oneRM.ID+"/convert?to_type=TRAINING_MAX&percentage=85"), nil)
+		req.Header.Set("X-User-ID", oneRMUserID)
+		resp, _ := http.DefaultClient.Do(req)
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			t.Fatalf("Expected status 200, got %d: %s", resp.StatusCode, body)
+		}
+
+		var result ConversionResponse
+		json.NewDecoder(resp.Body).Decode(&result)
+
+		// 400 * 0.85 = 340
+		if result.ConvertedValue != 340.0 {
+			t.Errorf("Expected convertedValue 340.0, got %f", result.ConvertedValue)
+		}
+		if result.Percentage != 85.0 {
+			t.Errorf("Expected percentage 85.0, got %f", result.Percentage)
+		}
+	})
+
+	t.Run("rounds converted value to nearest 0.25", func(t *testing.T) {
+		// Create a max that will produce a non-quarter result
+		oddMax := createMax(t, ts, "round-test-user", testSquatID, "ONE_RM", 315.0, nil)
+
+		req, _ := http.NewRequest(http.MethodGet, ts.URL("/lift-maxes/"+oddMax.ID+"/convert?to_type=TRAINING_MAX&percentage=87"), nil)
+		req.Header.Set("X-User-ID", "round-test-user")
+		resp, _ := http.DefaultClient.Do(req)
+		defer resp.Body.Close()
+
+		var result ConversionResponse
+		json.NewDecoder(resp.Body).Decode(&result)
+
+		// 315 * 0.87 = 274.05 -> rounds to 274.0
+		// Verify it's a multiple of 0.25
+		scaled := result.ConvertedValue * 4
+		if scaled != float64(int(scaled)) {
+			t.Errorf("Expected converted value to be multiple of 0.25, got %f", result.ConvertedValue)
+		}
+	})
+
+	t.Run("returns 400 for missing to_type parameter", func(t *testing.T) {
+		req, _ := http.NewRequest(http.MethodGet, ts.URL("/lift-maxes/"+oneRM.ID+"/convert"), nil)
+		req.Header.Set("X-User-ID", oneRMUserID)
+		resp, _ := http.DefaultClient.Do(req)
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusBadRequest {
+			t.Errorf("Expected status 400, got %d", resp.StatusCode)
+		}
+
+		var errResp ErrorResponse
+		json.NewDecoder(resp.Body).Decode(&errResp)
+		if errResp.Error != "Missing required query parameter: to_type" {
+			t.Errorf("Expected error about missing to_type, got: %s", errResp.Error)
+		}
+	})
+
+	t.Run("returns 400 for invalid to_type", func(t *testing.T) {
+		req, _ := http.NewRequest(http.MethodGet, ts.URL("/lift-maxes/"+oneRM.ID+"/convert?to_type=INVALID"), nil)
+		req.Header.Set("X-User-ID", oneRMUserID)
+		resp, _ := http.DefaultClient.Do(req)
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusBadRequest {
+			t.Errorf("Expected status 400, got %d", resp.StatusCode)
+		}
+	})
+
+	t.Run("returns 400 when converting to same type", func(t *testing.T) {
+		req, _ := http.NewRequest(http.MethodGet, ts.URL("/lift-maxes/"+oneRM.ID+"/convert?to_type=ONE_RM"), nil)
+		req.Header.Set("X-User-ID", oneRMUserID)
+		resp, _ := http.DefaultClient.Do(req)
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusBadRequest {
+			t.Errorf("Expected status 400, got %d", resp.StatusCode)
+		}
+
+		var errResp ErrorResponse
+		json.NewDecoder(resp.Body).Decode(&errResp)
+		if errResp.Error != "Cannot convert to same type: lift max is already ONE_RM" {
+			t.Errorf("Expected error about same type, got: %s", errResp.Error)
+		}
+	})
+
+	t.Run("returns 400 for percentage below 1", func(t *testing.T) {
+		req, _ := http.NewRequest(http.MethodGet, ts.URL("/lift-maxes/"+oneRM.ID+"/convert?to_type=TRAINING_MAX&percentage=0"), nil)
+		req.Header.Set("X-User-ID", oneRMUserID)
+		resp, _ := http.DefaultClient.Do(req)
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusBadRequest {
+			t.Errorf("Expected status 400, got %d", resp.StatusCode)
+		}
+	})
+
+	t.Run("returns 400 for percentage above 100", func(t *testing.T) {
+		req, _ := http.NewRequest(http.MethodGet, ts.URL("/lift-maxes/"+oneRM.ID+"/convert?to_type=TRAINING_MAX&percentage=101"), nil)
+		req.Header.Set("X-User-ID", oneRMUserID)
+		resp, _ := http.DefaultClient.Do(req)
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusBadRequest {
+			t.Errorf("Expected status 400, got %d", resp.StatusCode)
+		}
+	})
+
+	t.Run("returns 400 for non-numeric percentage", func(t *testing.T) {
+		req, _ := http.NewRequest(http.MethodGet, ts.URL("/lift-maxes/"+oneRM.ID+"/convert?to_type=TRAINING_MAX&percentage=abc"), nil)
+		req.Header.Set("X-User-ID", oneRMUserID)
+		resp, _ := http.DefaultClient.Do(req)
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusBadRequest {
+			t.Errorf("Expected status 400, got %d", resp.StatusCode)
+		}
+	})
+
+	t.Run("returns 404 for non-existent lift max", func(t *testing.T) {
+		req, _ := http.NewRequest(http.MethodGet, ts.URL("/lift-maxes/non-existent-id/convert?to_type=TRAINING_MAX"), nil)
+		req.Header.Set("X-User-ID", "any-user")
+		resp, _ := http.DefaultClient.Do(req)
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusNotFound {
+			t.Errorf("Expected status 404, got %d", resp.StatusCode)
+		}
+	})
+
+	t.Run("returns 403 when requesting user is not owner", func(t *testing.T) {
+		req, _ := http.NewRequest(http.MethodGet, ts.URL("/lift-maxes/"+oneRM.ID+"/convert?to_type=TRAINING_MAX"), nil)
+		req.Header.Set("X-User-ID", "different-user")
+		resp, _ := http.DefaultClient.Do(req)
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusForbidden {
+			t.Errorf("Expected status 403, got %d", resp.StatusCode)
+		}
+	})
+
+	t.Run("returns 403 when no user context provided", func(t *testing.T) {
+		req, _ := http.NewRequest(http.MethodGet, ts.URL("/lift-maxes/"+oneRM.ID+"/convert?to_type=TRAINING_MAX"), nil)
+		// No X-User-ID header set
+		resp, _ := http.DefaultClient.Do(req)
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusForbidden {
+			t.Errorf("Expected status 403, got %d", resp.StatusCode)
+		}
+	})
+
+	t.Run("allows admin to convert any user's lift max", func(t *testing.T) {
+		req, _ := http.NewRequest(http.MethodGet, ts.URL("/lift-maxes/"+oneRM.ID+"/convert?to_type=TRAINING_MAX"), nil)
+		req.Header.Set("X-User-ID", "admin-user")
+		req.Header.Set("X-Admin", "true")
+		resp, _ := http.DefaultClient.Do(req)
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			t.Errorf("Expected status 200, got %d: %s", resp.StatusCode, body)
+		}
+	})
+
+	t.Run("accepts lowercase to_type", func(t *testing.T) {
+		req, _ := http.NewRequest(http.MethodGet, ts.URL("/lift-maxes/"+oneRM.ID+"/convert?to_type=training_max"), nil)
+		req.Header.Set("X-User-ID", oneRMUserID)
+		resp, _ := http.DefaultClient.Do(req)
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			t.Errorf("Expected status 200 for lowercase to_type, got %d: %s", resp.StatusCode, body)
+		}
+	})
+
+	t.Run("response format has correct JSON field names", func(t *testing.T) {
+		req, _ := http.NewRequest(http.MethodGet, ts.URL("/lift-maxes/"+oneRM.ID+"/convert?to_type=TRAINING_MAX"), nil)
+		req.Header.Set("X-User-ID", oneRMUserID)
+		resp, _ := http.DefaultClient.Do(req)
+		defer resp.Body.Close()
+
+		body, _ := io.ReadAll(resp.Body)
+		bodyStr := string(body)
+
+		expectedFields := []string{
+			`"originalValue"`,
+			`"originalType"`,
+			`"convertedValue"`,
+			`"convertedType"`,
+			`"percentage"`,
+		}
+
+		for _, field := range expectedFields {
+			if !bytes.Contains(body, []byte(field)) {
+				t.Errorf("Expected field %s in response, body: %s", field, bodyStr)
+			}
+		}
+	})
+}
+
 // Helper function to create a lift max for testing
 func createMax(t *testing.T, ts *testutil.TestServer, userID, liftID, maxType string, value float64, effectiveDate *time.Time) LiftMaxResponse {
 	t.Helper()

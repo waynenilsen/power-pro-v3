@@ -74,6 +74,7 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 
 	// LiftMax routes
 	mux.HandleFunc("GET /users/{userId}/lift-maxes", liftMaxHandler.List)
+	mux.HandleFunc("GET /lift-maxes/{id}/convert", liftMaxHandler.Convert)
 	mux.HandleFunc("GET /lift-maxes/{id}", liftMaxHandler.Get)
 	mux.HandleFunc("POST /users/{userId}/lift-maxes", liftMaxHandler.Create)
 	mux.HandleFunc("PUT /lift-maxes/{id}", liftMaxHandler.Update)

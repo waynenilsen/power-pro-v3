@@ -9,6 +9,164 @@ import (
 	"context"
 )
 
+const countLiftMaxesByUser = `-- name: CountLiftMaxesByUser :one
+SELECT COUNT(*) FROM lift_maxes WHERE user_id = ?
+`
+
+func (q *Queries) CountLiftMaxesByUser(ctx context.Context, userID string) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countLiftMaxesByUser, userID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countLiftMaxesByUserFilterLift = `-- name: CountLiftMaxesByUserFilterLift :one
+SELECT COUNT(*) FROM lift_maxes WHERE user_id = ? AND lift_id = ?
+`
+
+type CountLiftMaxesByUserFilterLiftParams struct {
+	UserID string `json:"user_id"`
+	LiftID string `json:"lift_id"`
+}
+
+func (q *Queries) CountLiftMaxesByUserFilterLift(ctx context.Context, arg CountLiftMaxesByUserFilterLiftParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countLiftMaxesByUserFilterLift, arg.UserID, arg.LiftID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countLiftMaxesByUserFilterLiftAndType = `-- name: CountLiftMaxesByUserFilterLiftAndType :one
+SELECT COUNT(*) FROM lift_maxes WHERE user_id = ? AND lift_id = ? AND type = ?
+`
+
+type CountLiftMaxesByUserFilterLiftAndTypeParams struct {
+	UserID string `json:"user_id"`
+	LiftID string `json:"lift_id"`
+	Type   string `json:"type"`
+}
+
+func (q *Queries) CountLiftMaxesByUserFilterLiftAndType(ctx context.Context, arg CountLiftMaxesByUserFilterLiftAndTypeParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countLiftMaxesByUserFilterLiftAndType, arg.UserID, arg.LiftID, arg.Type)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countLiftMaxesByUserFilterType = `-- name: CountLiftMaxesByUserFilterType :one
+SELECT COUNT(*) FROM lift_maxes WHERE user_id = ? AND type = ?
+`
+
+type CountLiftMaxesByUserFilterTypeParams struct {
+	UserID string `json:"user_id"`
+	Type   string `json:"type"`
+}
+
+func (q *Queries) CountLiftMaxesByUserFilterType(ctx context.Context, arg CountLiftMaxesByUserFilterTypeParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countLiftMaxesByUserFilterType, arg.UserID, arg.Type)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const createLiftMax = `-- name: CreateLiftMax :exec
+INSERT INTO lift_maxes (id, user_id, lift_id, type, value, effective_date, created_at, updated_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+`
+
+type CreateLiftMaxParams struct {
+	ID            string  `json:"id"`
+	UserID        string  `json:"user_id"`
+	LiftID        string  `json:"lift_id"`
+	Type          string  `json:"type"`
+	Value         float64 `json:"value"`
+	EffectiveDate string  `json:"effective_date"`
+	CreatedAt     string  `json:"created_at"`
+	UpdatedAt     string  `json:"updated_at"`
+}
+
+func (q *Queries) CreateLiftMax(ctx context.Context, arg CreateLiftMaxParams) error {
+	_, err := q.db.ExecContext(ctx, createLiftMax,
+		arg.ID,
+		arg.UserID,
+		arg.LiftID,
+		arg.Type,
+		arg.Value,
+		arg.EffectiveDate,
+		arg.CreatedAt,
+		arg.UpdatedAt,
+	)
+	return err
+}
+
+const deleteLiftMax = `-- name: DeleteLiftMax :exec
+DELETE FROM lift_maxes WHERE id = ?
+`
+
+func (q *Queries) DeleteLiftMax(ctx context.Context, id string) error {
+	_, err := q.db.ExecContext(ctx, deleteLiftMax, id)
+	return err
+}
+
+const getCurrentMax = `-- name: GetCurrentMax :one
+SELECT id, user_id, lift_id, type, value, effective_date, created_at, updated_at
+FROM lift_maxes
+WHERE user_id = ? AND lift_id = ? AND type = ?
+ORDER BY effective_date DESC
+LIMIT 1
+`
+
+type GetCurrentMaxParams struct {
+	UserID string `json:"user_id"`
+	LiftID string `json:"lift_id"`
+	Type   string `json:"type"`
+}
+
+func (q *Queries) GetCurrentMax(ctx context.Context, arg GetCurrentMaxParams) (LiftMax, error) {
+	row := q.db.QueryRowContext(ctx, getCurrentMax, arg.UserID, arg.LiftID, arg.Type)
+	var i LiftMax
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.LiftID,
+		&i.Type,
+		&i.Value,
+		&i.EffectiveDate,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getCurrentOneRM = `-- name: GetCurrentOneRM :one
+SELECT id, user_id, lift_id, type, value, effective_date, created_at, updated_at
+FROM lift_maxes
+WHERE user_id = ? AND lift_id = ? AND type = 'ONE_RM'
+ORDER BY effective_date DESC
+LIMIT 1
+`
+
+type GetCurrentOneRMParams struct {
+	UserID string `json:"user_id"`
+	LiftID string `json:"lift_id"`
+}
+
+func (q *Queries) GetCurrentOneRM(ctx context.Context, arg GetCurrentOneRMParams) (LiftMax, error) {
+	row := q.db.QueryRowContext(ctx, getCurrentOneRM, arg.UserID, arg.LiftID)
+	var i LiftMax
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.LiftID,
+		&i.Type,
+		&i.Value,
+		&i.EffectiveDate,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getLiftMax = `-- name: GetLiftMax :one
 SELECT id, user_id, lift_id, type, value, effective_date, created_at, updated_at
 FROM lift_maxes
@@ -31,50 +189,15 @@ func (q *Queries) GetLiftMax(ctx context.Context, id string) (LiftMax, error) {
 	return i, err
 }
 
-const listLiftMaxesByUserByEffectiveDateDesc = `-- name: ListLiftMaxesByUserByEffectiveDateDesc :many
-SELECT id, user_id, lift_id, type, value, effective_date, created_at, updated_at
-FROM lift_maxes
-WHERE user_id = ?
-ORDER BY effective_date DESC
-LIMIT ? OFFSET ?
+const liftHasMaxReferences = `-- name: LiftHasMaxReferences :one
+SELECT EXISTS(SELECT 1 FROM lift_maxes WHERE lift_id = ?) AS has_references
 `
 
-type ListLiftMaxesByUserByEffectiveDateDescParams struct {
-	UserID string `json:"user_id"`
-	Limit  int64  `json:"limit"`
-	Offset int64  `json:"offset"`
-}
-
-func (q *Queries) ListLiftMaxesByUserByEffectiveDateDesc(ctx context.Context, arg ListLiftMaxesByUserByEffectiveDateDescParams) ([]LiftMax, error) {
-	rows, err := q.db.QueryContext(ctx, listLiftMaxesByUserByEffectiveDateDesc, arg.UserID, arg.Limit, arg.Offset)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []LiftMax{}
-	for rows.Next() {
-		var i LiftMax
-		if err := rows.Scan(
-			&i.ID,
-			&i.UserID,
-			&i.LiftID,
-			&i.Type,
-			&i.Value,
-			&i.EffectiveDate,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
+func (q *Queries) LiftHasMaxReferences(ctx context.Context, liftID string) (int64, error) {
+	row := q.db.QueryRowContext(ctx, liftHasMaxReferences, liftID)
+	var has_references int64
+	err := row.Scan(&has_references)
+	return has_references, err
 }
 
 const listLiftMaxesByUserByEffectiveDateAsc = `-- name: ListLiftMaxesByUserByEffectiveDateAsc :many
@@ -123,212 +246,22 @@ func (q *Queries) ListLiftMaxesByUserByEffectiveDateAsc(ctx context.Context, arg
 	return items, nil
 }
 
-const listLiftMaxesByUserFilterLiftByEffectiveDateDesc = `-- name: ListLiftMaxesByUserFilterLiftByEffectiveDateDesc :many
+const listLiftMaxesByUserByEffectiveDateDesc = `-- name: ListLiftMaxesByUserByEffectiveDateDesc :many
 SELECT id, user_id, lift_id, type, value, effective_date, created_at, updated_at
 FROM lift_maxes
-WHERE user_id = ? AND lift_id = ?
+WHERE user_id = ?
 ORDER BY effective_date DESC
 LIMIT ? OFFSET ?
 `
 
-type ListLiftMaxesByUserFilterLiftByEffectiveDateDescParams struct {
+type ListLiftMaxesByUserByEffectiveDateDescParams struct {
 	UserID string `json:"user_id"`
-	LiftID string `json:"lift_id"`
 	Limit  int64  `json:"limit"`
 	Offset int64  `json:"offset"`
 }
 
-func (q *Queries) ListLiftMaxesByUserFilterLiftByEffectiveDateDesc(ctx context.Context, arg ListLiftMaxesByUserFilterLiftByEffectiveDateDescParams) ([]LiftMax, error) {
-	rows, err := q.db.QueryContext(ctx, listLiftMaxesByUserFilterLiftByEffectiveDateDesc, arg.UserID, arg.LiftID, arg.Limit, arg.Offset)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []LiftMax{}
-	for rows.Next() {
-		var i LiftMax
-		if err := rows.Scan(
-			&i.ID,
-			&i.UserID,
-			&i.LiftID,
-			&i.Type,
-			&i.Value,
-			&i.EffectiveDate,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listLiftMaxesByUserFilterLiftByEffectiveDateAsc = `-- name: ListLiftMaxesByUserFilterLiftByEffectiveDateAsc :many
-SELECT id, user_id, lift_id, type, value, effective_date, created_at, updated_at
-FROM lift_maxes
-WHERE user_id = ? AND lift_id = ?
-ORDER BY effective_date ASC
-LIMIT ? OFFSET ?
-`
-
-type ListLiftMaxesByUserFilterLiftByEffectiveDateAscParams struct {
-	UserID string `json:"user_id"`
-	LiftID string `json:"lift_id"`
-	Limit  int64  `json:"limit"`
-	Offset int64  `json:"offset"`
-}
-
-func (q *Queries) ListLiftMaxesByUserFilterLiftByEffectiveDateAsc(ctx context.Context, arg ListLiftMaxesByUserFilterLiftByEffectiveDateAscParams) ([]LiftMax, error) {
-	rows, err := q.db.QueryContext(ctx, listLiftMaxesByUserFilterLiftByEffectiveDateAsc, arg.UserID, arg.LiftID, arg.Limit, arg.Offset)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []LiftMax{}
-	for rows.Next() {
-		var i LiftMax
-		if err := rows.Scan(
-			&i.ID,
-			&i.UserID,
-			&i.LiftID,
-			&i.Type,
-			&i.Value,
-			&i.EffectiveDate,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listLiftMaxesByUserFilterTypeByEffectiveDateDesc = `-- name: ListLiftMaxesByUserFilterTypeByEffectiveDateDesc :many
-SELECT id, user_id, lift_id, type, value, effective_date, created_at, updated_at
-FROM lift_maxes
-WHERE user_id = ? AND type = ?
-ORDER BY effective_date DESC
-LIMIT ? OFFSET ?
-`
-
-type ListLiftMaxesByUserFilterTypeByEffectiveDateDescParams struct {
-	UserID string `json:"user_id"`
-	Type   string `json:"type"`
-	Limit  int64  `json:"limit"`
-	Offset int64  `json:"offset"`
-}
-
-func (q *Queries) ListLiftMaxesByUserFilterTypeByEffectiveDateDesc(ctx context.Context, arg ListLiftMaxesByUserFilterTypeByEffectiveDateDescParams) ([]LiftMax, error) {
-	rows, err := q.db.QueryContext(ctx, listLiftMaxesByUserFilterTypeByEffectiveDateDesc, arg.UserID, arg.Type, arg.Limit, arg.Offset)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []LiftMax{}
-	for rows.Next() {
-		var i LiftMax
-		if err := rows.Scan(
-			&i.ID,
-			&i.UserID,
-			&i.LiftID,
-			&i.Type,
-			&i.Value,
-			&i.EffectiveDate,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listLiftMaxesByUserFilterTypeByEffectiveDateAsc = `-- name: ListLiftMaxesByUserFilterTypeByEffectiveDateAsc :many
-SELECT id, user_id, lift_id, type, value, effective_date, created_at, updated_at
-FROM lift_maxes
-WHERE user_id = ? AND type = ?
-ORDER BY effective_date ASC
-LIMIT ? OFFSET ?
-`
-
-type ListLiftMaxesByUserFilterTypeByEffectiveDateAscParams struct {
-	UserID string `json:"user_id"`
-	Type   string `json:"type"`
-	Limit  int64  `json:"limit"`
-	Offset int64  `json:"offset"`
-}
-
-func (q *Queries) ListLiftMaxesByUserFilterTypeByEffectiveDateAsc(ctx context.Context, arg ListLiftMaxesByUserFilterTypeByEffectiveDateAscParams) ([]LiftMax, error) {
-	rows, err := q.db.QueryContext(ctx, listLiftMaxesByUserFilterTypeByEffectiveDateAsc, arg.UserID, arg.Type, arg.Limit, arg.Offset)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []LiftMax{}
-	for rows.Next() {
-		var i LiftMax
-		if err := rows.Scan(
-			&i.ID,
-			&i.UserID,
-			&i.LiftID,
-			&i.Type,
-			&i.Value,
-			&i.EffectiveDate,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listLiftMaxesByUserFilterLiftAndTypeByEffectiveDateDesc = `-- name: ListLiftMaxesByUserFilterLiftAndTypeByEffectiveDateDesc :many
-SELECT id, user_id, lift_id, type, value, effective_date, created_at, updated_at
-FROM lift_maxes
-WHERE user_id = ? AND lift_id = ? AND type = ?
-ORDER BY effective_date DESC
-LIMIT ? OFFSET ?
-`
-
-type ListLiftMaxesByUserFilterLiftAndTypeByEffectiveDateDescParams struct {
-	UserID string `json:"user_id"`
-	LiftID string `json:"lift_id"`
-	Type   string `json:"type"`
-	Limit  int64  `json:"limit"`
-	Offset int64  `json:"offset"`
-}
-
-func (q *Queries) ListLiftMaxesByUserFilterLiftAndTypeByEffectiveDateDesc(ctx context.Context, arg ListLiftMaxesByUserFilterLiftAndTypeByEffectiveDateDescParams) ([]LiftMax, error) {
-	rows, err := q.db.QueryContext(ctx, listLiftMaxesByUserFilterLiftAndTypeByEffectiveDateDesc, arg.UserID, arg.LiftID, arg.Type, arg.Limit, arg.Offset)
+func (q *Queries) ListLiftMaxesByUserByEffectiveDateDesc(ctx context.Context, arg ListLiftMaxesByUserByEffectiveDateDescParams) ([]LiftMax, error) {
+	rows, err := q.db.QueryContext(ctx, listLiftMaxesByUserByEffectiveDateDesc, arg.UserID, arg.Limit, arg.Offset)
 	if err != nil {
 		return nil, err
 	}
@@ -376,7 +309,13 @@ type ListLiftMaxesByUserFilterLiftAndTypeByEffectiveDateAscParams struct {
 }
 
 func (q *Queries) ListLiftMaxesByUserFilterLiftAndTypeByEffectiveDateAsc(ctx context.Context, arg ListLiftMaxesByUserFilterLiftAndTypeByEffectiveDateAscParams) ([]LiftMax, error) {
-	rows, err := q.db.QueryContext(ctx, listLiftMaxesByUserFilterLiftAndTypeByEffectiveDateAsc, arg.UserID, arg.LiftID, arg.Type, arg.Limit, arg.Offset)
+	rows, err := q.db.QueryContext(ctx, listLiftMaxesByUserFilterLiftAndTypeByEffectiveDateAsc,
+		arg.UserID,
+		arg.LiftID,
+		arg.Type,
+		arg.Limit,
+		arg.Offset,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -407,94 +346,320 @@ func (q *Queries) ListLiftMaxesByUserFilterLiftAndTypeByEffectiveDateAsc(ctx con
 	return items, nil
 }
 
-const countLiftMaxesByUser = `-- name: CountLiftMaxesByUser :one
-SELECT COUNT(*) FROM lift_maxes WHERE user_id = ?
+const listLiftMaxesByUserFilterLiftAndTypeByEffectiveDateDesc = `-- name: ListLiftMaxesByUserFilterLiftAndTypeByEffectiveDateDesc :many
+SELECT id, user_id, lift_id, type, value, effective_date, created_at, updated_at
+FROM lift_maxes
+WHERE user_id = ? AND lift_id = ? AND type = ?
+ORDER BY effective_date DESC
+LIMIT ? OFFSET ?
 `
 
-func (q *Queries) CountLiftMaxesByUser(ctx context.Context, userID string) (int64, error) {
-	row := q.db.QueryRowContext(ctx, countLiftMaxesByUser, userID)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
-}
-
-const countLiftMaxesByUserFilterLift = `-- name: CountLiftMaxesByUserFilterLift :one
-SELECT COUNT(*) FROM lift_maxes WHERE user_id = ? AND lift_id = ?
-`
-
-type CountLiftMaxesByUserFilterLiftParams struct {
-	UserID string `json:"user_id"`
-	LiftID string `json:"lift_id"`
-}
-
-func (q *Queries) CountLiftMaxesByUserFilterLift(ctx context.Context, arg CountLiftMaxesByUserFilterLiftParams) (int64, error) {
-	row := q.db.QueryRowContext(ctx, countLiftMaxesByUserFilterLift, arg.UserID, arg.LiftID)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
-}
-
-const countLiftMaxesByUserFilterType = `-- name: CountLiftMaxesByUserFilterType :one
-SELECT COUNT(*) FROM lift_maxes WHERE user_id = ? AND type = ?
-`
-
-type CountLiftMaxesByUserFilterTypeParams struct {
-	UserID string `json:"user_id"`
-	Type   string `json:"type"`
-}
-
-func (q *Queries) CountLiftMaxesByUserFilterType(ctx context.Context, arg CountLiftMaxesByUserFilterTypeParams) (int64, error) {
-	row := q.db.QueryRowContext(ctx, countLiftMaxesByUserFilterType, arg.UserID, arg.Type)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
-}
-
-const countLiftMaxesByUserFilterLiftAndType = `-- name: CountLiftMaxesByUserFilterLiftAndType :one
-SELECT COUNT(*) FROM lift_maxes WHERE user_id = ? AND lift_id = ? AND type = ?
-`
-
-type CountLiftMaxesByUserFilterLiftAndTypeParams struct {
+type ListLiftMaxesByUserFilterLiftAndTypeByEffectiveDateDescParams struct {
 	UserID string `json:"user_id"`
 	LiftID string `json:"lift_id"`
 	Type   string `json:"type"`
+	Limit  int64  `json:"limit"`
+	Offset int64  `json:"offset"`
 }
 
-func (q *Queries) CountLiftMaxesByUserFilterLiftAndType(ctx context.Context, arg CountLiftMaxesByUserFilterLiftAndTypeParams) (int64, error) {
-	row := q.db.QueryRowContext(ctx, countLiftMaxesByUserFilterLiftAndType, arg.UserID, arg.LiftID, arg.Type)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
-}
-
-const createLiftMax = `-- name: CreateLiftMax :exec
-INSERT INTO lift_maxes (id, user_id, lift_id, type, value, effective_date, created_at, updated_at)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-`
-
-type CreateLiftMaxParams struct {
-	ID            string  `json:"id"`
-	UserID        string  `json:"user_id"`
-	LiftID        string  `json:"lift_id"`
-	Type          string  `json:"type"`
-	Value         float64 `json:"value"`
-	EffectiveDate string  `json:"effective_date"`
-	CreatedAt     string  `json:"created_at"`
-	UpdatedAt     string  `json:"updated_at"`
-}
-
-func (q *Queries) CreateLiftMax(ctx context.Context, arg CreateLiftMaxParams) error {
-	_, err := q.db.ExecContext(ctx, createLiftMax,
-		arg.ID,
+func (q *Queries) ListLiftMaxesByUserFilterLiftAndTypeByEffectiveDateDesc(ctx context.Context, arg ListLiftMaxesByUserFilterLiftAndTypeByEffectiveDateDescParams) ([]LiftMax, error) {
+	rows, err := q.db.QueryContext(ctx, listLiftMaxesByUserFilterLiftAndTypeByEffectiveDateDesc,
 		arg.UserID,
 		arg.LiftID,
 		arg.Type,
-		arg.Value,
-		arg.EffectiveDate,
-		arg.CreatedAt,
-		arg.UpdatedAt,
+		arg.Limit,
+		arg.Offset,
 	)
-	return err
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []LiftMax{}
+	for rows.Next() {
+		var i LiftMax
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.LiftID,
+			&i.Type,
+			&i.Value,
+			&i.EffectiveDate,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listLiftMaxesByUserFilterLiftByEffectiveDateAsc = `-- name: ListLiftMaxesByUserFilterLiftByEffectiveDateAsc :many
+SELECT id, user_id, lift_id, type, value, effective_date, created_at, updated_at
+FROM lift_maxes
+WHERE user_id = ? AND lift_id = ?
+ORDER BY effective_date ASC
+LIMIT ? OFFSET ?
+`
+
+type ListLiftMaxesByUserFilterLiftByEffectiveDateAscParams struct {
+	UserID string `json:"user_id"`
+	LiftID string `json:"lift_id"`
+	Limit  int64  `json:"limit"`
+	Offset int64  `json:"offset"`
+}
+
+func (q *Queries) ListLiftMaxesByUserFilterLiftByEffectiveDateAsc(ctx context.Context, arg ListLiftMaxesByUserFilterLiftByEffectiveDateAscParams) ([]LiftMax, error) {
+	rows, err := q.db.QueryContext(ctx, listLiftMaxesByUserFilterLiftByEffectiveDateAsc,
+		arg.UserID,
+		arg.LiftID,
+		arg.Limit,
+		arg.Offset,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []LiftMax{}
+	for rows.Next() {
+		var i LiftMax
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.LiftID,
+			&i.Type,
+			&i.Value,
+			&i.EffectiveDate,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listLiftMaxesByUserFilterLiftByEffectiveDateDesc = `-- name: ListLiftMaxesByUserFilterLiftByEffectiveDateDesc :many
+SELECT id, user_id, lift_id, type, value, effective_date, created_at, updated_at
+FROM lift_maxes
+WHERE user_id = ? AND lift_id = ?
+ORDER BY effective_date DESC
+LIMIT ? OFFSET ?
+`
+
+type ListLiftMaxesByUserFilterLiftByEffectiveDateDescParams struct {
+	UserID string `json:"user_id"`
+	LiftID string `json:"lift_id"`
+	Limit  int64  `json:"limit"`
+	Offset int64  `json:"offset"`
+}
+
+func (q *Queries) ListLiftMaxesByUserFilterLiftByEffectiveDateDesc(ctx context.Context, arg ListLiftMaxesByUserFilterLiftByEffectiveDateDescParams) ([]LiftMax, error) {
+	rows, err := q.db.QueryContext(ctx, listLiftMaxesByUserFilterLiftByEffectiveDateDesc,
+		arg.UserID,
+		arg.LiftID,
+		arg.Limit,
+		arg.Offset,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []LiftMax{}
+	for rows.Next() {
+		var i LiftMax
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.LiftID,
+			&i.Type,
+			&i.Value,
+			&i.EffectiveDate,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listLiftMaxesByUserFilterTypeByEffectiveDateAsc = `-- name: ListLiftMaxesByUserFilterTypeByEffectiveDateAsc :many
+SELECT id, user_id, lift_id, type, value, effective_date, created_at, updated_at
+FROM lift_maxes
+WHERE user_id = ? AND type = ?
+ORDER BY effective_date ASC
+LIMIT ? OFFSET ?
+`
+
+type ListLiftMaxesByUserFilterTypeByEffectiveDateAscParams struct {
+	UserID string `json:"user_id"`
+	Type   string `json:"type"`
+	Limit  int64  `json:"limit"`
+	Offset int64  `json:"offset"`
+}
+
+func (q *Queries) ListLiftMaxesByUserFilterTypeByEffectiveDateAsc(ctx context.Context, arg ListLiftMaxesByUserFilterTypeByEffectiveDateAscParams) ([]LiftMax, error) {
+	rows, err := q.db.QueryContext(ctx, listLiftMaxesByUserFilterTypeByEffectiveDateAsc,
+		arg.UserID,
+		arg.Type,
+		arg.Limit,
+		arg.Offset,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []LiftMax{}
+	for rows.Next() {
+		var i LiftMax
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.LiftID,
+			&i.Type,
+			&i.Value,
+			&i.EffectiveDate,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listLiftMaxesByUserFilterTypeByEffectiveDateDesc = `-- name: ListLiftMaxesByUserFilterTypeByEffectiveDateDesc :many
+SELECT id, user_id, lift_id, type, value, effective_date, created_at, updated_at
+FROM lift_maxes
+WHERE user_id = ? AND type = ?
+ORDER BY effective_date DESC
+LIMIT ? OFFSET ?
+`
+
+type ListLiftMaxesByUserFilterTypeByEffectiveDateDescParams struct {
+	UserID string `json:"user_id"`
+	Type   string `json:"type"`
+	Limit  int64  `json:"limit"`
+	Offset int64  `json:"offset"`
+}
+
+func (q *Queries) ListLiftMaxesByUserFilterTypeByEffectiveDateDesc(ctx context.Context, arg ListLiftMaxesByUserFilterTypeByEffectiveDateDescParams) ([]LiftMax, error) {
+	rows, err := q.db.QueryContext(ctx, listLiftMaxesByUserFilterTypeByEffectiveDateDesc,
+		arg.UserID,
+		arg.Type,
+		arg.Limit,
+		arg.Offset,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []LiftMax{}
+	for rows.Next() {
+		var i LiftMax
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.LiftID,
+			&i.Type,
+			&i.Value,
+			&i.EffectiveDate,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const uniqueConstraintExists = `-- name: UniqueConstraintExists :one
+SELECT EXISTS(
+    SELECT 1 FROM lift_maxes
+    WHERE user_id = ? AND lift_id = ? AND type = ? AND effective_date = ?
+) AS constraint_exists
+`
+
+type UniqueConstraintExistsParams struct {
+	UserID        string `json:"user_id"`
+	LiftID        string `json:"lift_id"`
+	Type          string `json:"type"`
+	EffectiveDate string `json:"effective_date"`
+}
+
+func (q *Queries) UniqueConstraintExists(ctx context.Context, arg UniqueConstraintExistsParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, uniqueConstraintExists,
+		arg.UserID,
+		arg.LiftID,
+		arg.Type,
+		arg.EffectiveDate,
+	)
+	var constraint_exists int64
+	err := row.Scan(&constraint_exists)
+	return constraint_exists, err
+}
+
+const uniqueConstraintExistsExcluding = `-- name: UniqueConstraintExistsExcluding :one
+SELECT EXISTS(
+    SELECT 1 FROM lift_maxes
+    WHERE user_id = ? AND lift_id = ? AND type = ? AND effective_date = ? AND id != ?
+) AS constraint_exists
+`
+
+type UniqueConstraintExistsExcludingParams struct {
+	UserID        string `json:"user_id"`
+	LiftID        string `json:"lift_id"`
+	Type          string `json:"type"`
+	EffectiveDate string `json:"effective_date"`
+	ID            string `json:"id"`
+}
+
+func (q *Queries) UniqueConstraintExistsExcluding(ctx context.Context, arg UniqueConstraintExistsExcludingParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, uniqueConstraintExistsExcluding,
+		arg.UserID,
+		arg.LiftID,
+		arg.Type,
+		arg.EffectiveDate,
+		arg.ID,
+	)
+	var constraint_exists int64
+	err := row.Scan(&constraint_exists)
+	return constraint_exists, err
 }
 
 const updateLiftMax = `-- name: UpdateLiftMax :exec
@@ -518,126 +683,4 @@ func (q *Queries) UpdateLiftMax(ctx context.Context, arg UpdateLiftMaxParams) er
 		arg.ID,
 	)
 	return err
-}
-
-const deleteLiftMax = `-- name: DeleteLiftMax :exec
-DELETE FROM lift_maxes WHERE id = ?
-`
-
-func (q *Queries) DeleteLiftMax(ctx context.Context, id string) error {
-	_, err := q.db.ExecContext(ctx, deleteLiftMax, id)
-	return err
-}
-
-const getCurrentOneRM = `-- name: GetCurrentOneRM :one
-SELECT id, user_id, lift_id, type, value, effective_date, created_at, updated_at
-FROM lift_maxes
-WHERE user_id = ? AND lift_id = ? AND type = 'ONE_RM'
-ORDER BY effective_date DESC
-LIMIT 1
-`
-
-type GetCurrentOneRMParams struct {
-	UserID string `json:"user_id"`
-	LiftID string `json:"lift_id"`
-}
-
-func (q *Queries) GetCurrentOneRM(ctx context.Context, arg GetCurrentOneRMParams) (LiftMax, error) {
-	row := q.db.QueryRowContext(ctx, getCurrentOneRM, arg.UserID, arg.LiftID)
-	var i LiftMax
-	err := row.Scan(
-		&i.ID,
-		&i.UserID,
-		&i.LiftID,
-		&i.Type,
-		&i.Value,
-		&i.EffectiveDate,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
-}
-
-const getCurrentMax = `-- name: GetCurrentMax :one
-SELECT id, user_id, lift_id, type, value, effective_date, created_at, updated_at
-FROM lift_maxes
-WHERE user_id = ? AND lift_id = ? AND type = ?
-ORDER BY effective_date DESC
-LIMIT 1
-`
-
-type GetCurrentMaxParams struct {
-	UserID string `json:"user_id"`
-	LiftID string `json:"lift_id"`
-	Type   string `json:"type"`
-}
-
-func (q *Queries) GetCurrentMax(ctx context.Context, arg GetCurrentMaxParams) (LiftMax, error) {
-	row := q.db.QueryRowContext(ctx, getCurrentMax, arg.UserID, arg.LiftID, arg.Type)
-	var i LiftMax
-	err := row.Scan(
-		&i.ID,
-		&i.UserID,
-		&i.LiftID,
-		&i.Type,
-		&i.Value,
-		&i.EffectiveDate,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
-}
-
-const uniqueConstraintExists = `-- name: UniqueConstraintExists :one
-SELECT EXISTS(
-    SELECT 1 FROM lift_maxes
-    WHERE user_id = ? AND lift_id = ? AND type = ? AND effective_date = ?
-) AS constraint_exists
-`
-
-type UniqueConstraintExistsParams struct {
-	UserID        string `json:"user_id"`
-	LiftID        string `json:"lift_id"`
-	Type          string `json:"type"`
-	EffectiveDate string `json:"effective_date"`
-}
-
-func (q *Queries) UniqueConstraintExists(ctx context.Context, arg UniqueConstraintExistsParams) (int64, error) {
-	row := q.db.QueryRowContext(ctx, uniqueConstraintExists, arg.UserID, arg.LiftID, arg.Type, arg.EffectiveDate)
-	var constraint_exists int64
-	err := row.Scan(&constraint_exists)
-	return constraint_exists, err
-}
-
-const uniqueConstraintExistsExcluding = `-- name: UniqueConstraintExistsExcluding :one
-SELECT EXISTS(
-    SELECT 1 FROM lift_maxes
-    WHERE user_id = ? AND lift_id = ? AND type = ? AND effective_date = ? AND id != ?
-) AS constraint_exists
-`
-
-type UniqueConstraintExistsExcludingParams struct {
-	UserID        string `json:"user_id"`
-	LiftID        string `json:"lift_id"`
-	Type          string `json:"type"`
-	EffectiveDate string `json:"effective_date"`
-	ID            string `json:"id"`
-}
-
-func (q *Queries) UniqueConstraintExistsExcluding(ctx context.Context, arg UniqueConstraintExistsExcludingParams) (int64, error) {
-	row := q.db.QueryRowContext(ctx, uniqueConstraintExistsExcluding, arg.UserID, arg.LiftID, arg.Type, arg.EffectiveDate, arg.ID)
-	var constraint_exists int64
-	err := row.Scan(&constraint_exists)
-	return constraint_exists, err
-}
-
-const liftHasMaxReferences = `-- name: LiftHasMaxReferences :one
-SELECT EXISTS(SELECT 1 FROM lift_maxes WHERE lift_id = ?) AS has_references
-`
-
-func (q *Queries) LiftHasMaxReferences(ctx context.Context, liftID string) (int64, error) {
-	row := q.db.QueryRowContext(ctx, liftHasMaxReferences, liftID)
-	var has_references int64
-	err := row.Scan(&has_references)
-	return has_references, err
 }

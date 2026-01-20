@@ -10,13 +10,33 @@ import (
 )
 
 type Querier interface {
+	CountLiftMaxesByUser(ctx context.Context, userID string) (int64, error)
+	CountLiftMaxesByUserFilterLift(ctx context.Context, arg CountLiftMaxesByUserFilterLiftParams) (int64, error)
+	CountLiftMaxesByUserFilterLiftAndType(ctx context.Context, arg CountLiftMaxesByUserFilterLiftAndTypeParams) (int64, error)
+	CountLiftMaxesByUserFilterType(ctx context.Context, arg CountLiftMaxesByUserFilterTypeParams) (int64, error)
 	CountLifts(ctx context.Context) (int64, error)
 	CountLiftsFilteredByCompetition(ctx context.Context, isCompetitionLift int64) (int64, error)
 	CreateLift(ctx context.Context, arg CreateLiftParams) error
+	CreateLiftMax(ctx context.Context, arg CreateLiftMaxParams) error
+	CreateUser(ctx context.Context, arg CreateUserParams) error
 	DeleteLift(ctx context.Context, id string) error
+	DeleteLiftMax(ctx context.Context, id string) error
+	GetCurrentMax(ctx context.Context, arg GetCurrentMaxParams) (LiftMax, error)
+	GetCurrentOneRM(ctx context.Context, arg GetCurrentOneRMParams) (LiftMax, error)
 	GetLift(ctx context.Context, id string) (Lift, error)
 	GetLiftBySlug(ctx context.Context, slug string) (Lift, error)
+	GetLiftMax(ctx context.Context, id string) (LiftMax, error)
+	GetUser(ctx context.Context, id string) (User, error)
 	LiftHasChildReferences(ctx context.Context, parentLiftID sql.NullString) (int64, error)
+	LiftHasMaxReferences(ctx context.Context, liftID string) (int64, error)
+	ListLiftMaxesByUserByEffectiveDateAsc(ctx context.Context, arg ListLiftMaxesByUserByEffectiveDateAscParams) ([]LiftMax, error)
+	ListLiftMaxesByUserByEffectiveDateDesc(ctx context.Context, arg ListLiftMaxesByUserByEffectiveDateDescParams) ([]LiftMax, error)
+	ListLiftMaxesByUserFilterLiftAndTypeByEffectiveDateAsc(ctx context.Context, arg ListLiftMaxesByUserFilterLiftAndTypeByEffectiveDateAscParams) ([]LiftMax, error)
+	ListLiftMaxesByUserFilterLiftAndTypeByEffectiveDateDesc(ctx context.Context, arg ListLiftMaxesByUserFilterLiftAndTypeByEffectiveDateDescParams) ([]LiftMax, error)
+	ListLiftMaxesByUserFilterLiftByEffectiveDateAsc(ctx context.Context, arg ListLiftMaxesByUserFilterLiftByEffectiveDateAscParams) ([]LiftMax, error)
+	ListLiftMaxesByUserFilterLiftByEffectiveDateDesc(ctx context.Context, arg ListLiftMaxesByUserFilterLiftByEffectiveDateDescParams) ([]LiftMax, error)
+	ListLiftMaxesByUserFilterTypeByEffectiveDateAsc(ctx context.Context, arg ListLiftMaxesByUserFilterTypeByEffectiveDateAscParams) ([]LiftMax, error)
+	ListLiftMaxesByUserFilterTypeByEffectiveDateDesc(ctx context.Context, arg ListLiftMaxesByUserFilterTypeByEffectiveDateDescParams) ([]LiftMax, error)
 	ListLiftsByCreatedAtAsc(ctx context.Context, arg ListLiftsByCreatedAtAscParams) ([]Lift, error)
 	ListLiftsByCreatedAtDesc(ctx context.Context, arg ListLiftsByCreatedAtDescParams) ([]Lift, error)
 	ListLiftsByNameAsc(ctx context.Context, arg ListLiftsByNameAscParams) ([]Lift, error)
@@ -27,7 +47,10 @@ type Querier interface {
 	ListLiftsFilteredByCompetitionByNameDesc(ctx context.Context, arg ListLiftsFilteredByCompetitionByNameDescParams) ([]Lift, error)
 	SlugExists(ctx context.Context, arg SlugExistsParams) (int64, error)
 	SlugExistsForNew(ctx context.Context, slug string) (int64, error)
+	UniqueConstraintExists(ctx context.Context, arg UniqueConstraintExistsParams) (int64, error)
+	UniqueConstraintExistsExcluding(ctx context.Context, arg UniqueConstraintExistsExcludingParams) (int64, error)
 	UpdateLift(ctx context.Context, arg UpdateLiftParams) error
+	UpdateLiftMax(ctx context.Context, arg UpdateLiftMaxParams) error
 }
 
 var _ Querier = (*Queries)(nil)
