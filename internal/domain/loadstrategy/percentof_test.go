@@ -6,6 +6,9 @@ import (
 	"errors"
 	"math"
 	"testing"
+
+	"github.com/waynenilsen/power-pro-v3/internal/domain/dailylookup"
+	"github.com/waynenilsen/power-pro-v3/internal/domain/weeklylookup"
 )
 
 // mockMaxLookup implements MaxLookup for testing.
@@ -898,5 +901,217 @@ func BenchmarkUnmarshalPercentOf(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		UnmarshalPercentOf(data)
+	}
+}
+
+// Tests for lookup integration with CalculateLoad
+
+func TestPercentOfLoadStrategy_CalculateLoad_WithLookupContext(t *testing.T) {
+	lookup := newMockMaxLookup()
+	lookup.SetMax("user-123", "squat-456", "TRAINING_MAX", 315.0, "2024-01-15")
+
+	strategy := &PercentOfLoadStrategy{
+		ReferenceType:     ReferenceTrainingMax,
+		Percentage:        85.0, // Base percentage, will be overridden by lookup
+		RoundingIncrement: 5.0,
+		RoundingDirection: RoundNearest,
+	}
+	strategy.SetMaxLookup(lookup)
+
+	tests := []struct {
+		name          string
+		lookupContext *LookupContext
+		expected      float64
+	}{
+		{
+			name:          "nil lookup context uses base percentage",
+			lookupContext: nil,
+			expected:      270.0, // 315 * 0.85 = 267.75 -> 270
+		},
+		{
+			name: "weekly set-specific percentage overrides base",
+			lookupContext: &LookupContext{
+				WeeklyLookup: createWeeklyLookup531(),
+				WeekNumber:   1,
+				SetNumber:    1, // 65%
+			},
+			expected: 205.0, // 315 * 0.65 = 204.75 -> 205
+		},
+		{
+			name: "weekly set 2 (75%)",
+			lookupContext: &LookupContext{
+				WeeklyLookup: createWeeklyLookup531(),
+				WeekNumber:   1,
+				SetNumber:    2, // 75%
+			},
+			expected: 235.0, // 315 * 0.75 = 236.25 -> 235
+		},
+		{
+			name: "weekly set 3 (85%)",
+			lookupContext: &LookupContext{
+				WeeklyLookup: createWeeklyLookup531(),
+				WeekNumber:   1,
+				SetNumber:    3, // 85%
+			},
+			expected: 270.0, // 315 * 0.85 = 267.75 -> 270
+		},
+		{
+			name: "week 2 set 3 (90%)",
+			lookupContext: &LookupContext{
+				WeeklyLookup: createWeeklyLookup531(),
+				WeekNumber:   2,
+				SetNumber:    3, // 90%
+			},
+			expected: 285.0, // 315 * 0.90 = 283.5 -> 285
+		},
+		{
+			name: "week 3 set 3 (95% - top set)",
+			lookupContext: &LookupContext{
+				WeeklyLookup: createWeeklyLookup531(),
+				WeekNumber:   3,
+				SetNumber:    3, // 95%
+			},
+			expected: 300.0, // 315 * 0.95 = 299.25 -> 300
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			params := LoadCalculationParams{
+				UserID:        "user-123",
+				LiftID:        "squat-456",
+				LookupContext: tt.lookupContext,
+			}
+
+			result, err := strategy.CalculateLoad(context.Background(), params)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			if math.Abs(result-tt.expected) > 0.0001 {
+				t.Errorf("expected %f, got %f", tt.expected, result)
+			}
+		})
+	}
+}
+
+func TestPercentOfLoadStrategy_CalculateLoad_WithDailyLookup(t *testing.T) {
+	lookup := newMockMaxLookup()
+	lookup.SetMax("user-123", "squat-456", "TRAINING_MAX", 315.0, "2024-01-15")
+
+	strategy := &PercentOfLoadStrategy{
+		ReferenceType:     ReferenceTrainingMax,
+		Percentage:        100.0, // Base percentage
+		RoundingIncrement: 5.0,
+		RoundingDirection: RoundNearest,
+	}
+	strategy.SetMaxLookup(lookup)
+
+	tests := []struct {
+		name     string
+		daySlug  string
+		expected float64
+	}{
+		{
+			name:     "heavy day (100%)",
+			daySlug:  "heavy",
+			expected: 315.0, // 315 * 1.00 = 315
+		},
+		{
+			name:     "light day (70%)",
+			daySlug:  "light",
+			expected: 220.0, // 315 * 0.70 = 220.5 -> 220
+		},
+		{
+			name:     "medium day (80%)",
+			daySlug:  "medium",
+			expected: 250.0, // 315 * 0.80 = 252 -> 250
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			params := LoadCalculationParams{
+				UserID: "user-123",
+				LiftID: "squat-456",
+				LookupContext: &LookupContext{
+					DailyLookup: createDailyLookupHLM(),
+					DaySlug:     tt.daySlug,
+				},
+			}
+
+			result, err := strategy.CalculateLoad(context.Background(), params)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			if math.Abs(result-tt.expected) > 0.0001 {
+				t.Errorf("expected %f, got %f", tt.expected, result)
+			}
+		})
+	}
+}
+
+func TestPercentOfLoadStrategy_CalculateLoad_CombinedLookups(t *testing.T) {
+	lookup := newMockMaxLookup()
+	lookup.SetMax("user-123", "squat-456", "TRAINING_MAX", 315.0, "2024-01-15")
+
+	strategy := &PercentOfLoadStrategy{
+		ReferenceType:     ReferenceTrainingMax,
+		Percentage:        100.0, // Will be overridden by lookups
+		RoundingIncrement: 5.0,
+		RoundingDirection: RoundNearest,
+	}
+	strategy.SetMaxLookup(lookup)
+
+	// Week 1 set 1 (65%) + light day (70%) = 65 * 0.70 = 45.5%
+	params := LoadCalculationParams{
+		UserID: "user-123",
+		LiftID: "squat-456",
+		LookupContext: &LookupContext{
+			WeeklyLookup: createWeeklyLookup531(),
+			WeekNumber:   1,
+			SetNumber:    1, // 65%
+			DailyLookup:  createDailyLookupHLM(),
+			DaySlug:      "light", // 70%
+		},
+	}
+
+	result, err := strategy.CalculateLoad(context.Background(), params)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// 315 * 0.455 = 143.325 -> 145
+	expected := 145.0
+	if math.Abs(result-expected) > 0.0001 {
+		t.Errorf("expected %f, got %f", expected, result)
+	}
+}
+
+// Helper functions to create test lookup tables
+
+func createWeeklyLookup531() *weeklylookup.WeeklyLookup {
+	return &weeklylookup.WeeklyLookup{
+		ID:   "weekly-531",
+		Name: "5/3/1 Percentages",
+		Entries: []weeklylookup.WeeklyLookupEntry{
+			{WeekNumber: 1, Percentages: []float64{65, 75, 85}, Reps: []int{5, 5, 5}},
+			{WeekNumber: 2, Percentages: []float64{70, 80, 90}, Reps: []int{3, 3, 3}},
+			{WeekNumber: 3, Percentages: []float64{75, 85, 95}, Reps: []int{5, 3, 1}},
+			{WeekNumber: 4, Percentages: []float64{40, 50, 60}, Reps: []int{5, 5, 5}},
+		},
+	}
+}
+
+func createDailyLookupHLM() *dailylookup.DailyLookup {
+	return &dailylookup.DailyLookup{
+		ID:   "daily-hlm",
+		Name: "Heavy/Light/Medium",
+		Entries: []dailylookup.DailyLookupEntry{
+			{DayIdentifier: "heavy", PercentageModifier: 100},
+			{DayIdentifier: "light", PercentageModifier: 70},
+			{DayIdentifier: "medium", PercentageModifier: 80},
+		},
 	}
 }

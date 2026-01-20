@@ -91,7 +91,11 @@ func (s *PercentOfLoadStrategy) Type() LoadStrategyType {
 
 // CalculateLoad calculates the target weight based on a percentage of the user's max.
 // It fetches the current max for the specified user/lift/reference type,
-// applies the percentage, and rounds to the configured increment.
+// applies the percentage (with optional lookup modifiers), and rounds to the configured increment.
+//
+// If params.LookupContext is provided, lookup modifiers are applied to the base percentage:
+//   - Weekly lookup: set-specific percentages or percentage modifier
+//   - Daily lookup: percentage modifier
 func (s *PercentOfLoadStrategy) CalculateLoad(ctx context.Context, params LoadCalculationParams) (float64, error) {
 	// Validate params
 	if err := params.Validate(); err != nil {
@@ -122,8 +126,16 @@ func (s *PercentOfLoadStrategy) CalculateLoad(ctx context.Context, params LoadCa
 			ErrMaxNotFound, s.ReferenceType, params.UserID, params.LiftID)
 	}
 
-	// Calculate the raw weight
-	rawWeight := maxValue.Value * (s.Percentage / 100)
+	// Start with the base percentage from the strategy
+	effectivePercentage := s.Percentage
+
+	// Apply lookup modifiers if lookup context is provided
+	if params.LookupContext != nil {
+		effectivePercentage = params.LookupContext.ApplyModifiers(s.Percentage)
+	}
+
+	// Calculate the raw weight using the effective percentage
+	rawWeight := maxValue.Value * (effectivePercentage / 100)
 
 	// Normalize rounding parameters
 	increment := NormalizeRoundingIncrement(s.RoundingIncrement)

@@ -50,6 +50,9 @@ type LoadCalculationParams struct {
 	// Context contains additional strategy-specific parameters.
 	// This allows strategies to access any context-specific data they need.
 	Context map[string]interface{}
+	// LookupContext provides week/day context for lookup-based load modifications.
+	// Optional: if nil, no lookup modifications are applied.
+	LookupContext *LookupContext
 }
 
 // Validate validates the LoadCalculationParams.

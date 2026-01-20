@@ -351,6 +351,9 @@ type ResolvedPrescription struct {
 type ResolutionContext struct {
 	LiftLookup     LiftLookup
 	SetGenContext  setscheme.SetGenerationContext
+	// LookupContext provides week/day context for lookup-based load modifications.
+	// Optional: if nil, no lookup modifications are applied.
+	LookupContext  *loadstrategy.LookupContext
 }
 
 // DefaultResolutionContext returns a ResolutionContext with default values.
@@ -390,8 +393,9 @@ func (p *Prescription) Resolve(ctx context.Context, userID string, resCtx Resolu
 
 	// Calculate base weight using load strategy
 	loadParams := loadstrategy.LoadCalculationParams{
-		UserID: userID,
-		LiftID: p.LiftID,
+		UserID:        userID,
+		LiftID:        p.LiftID,
+		LookupContext: resCtx.LookupContext,
 	}
 	baseWeight, err := p.LoadStrategy.CalculateLoad(ctx, loadParams)
 	if err != nil {

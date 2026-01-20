@@ -1358,3 +1358,156 @@ func TestErrorMessages(t *testing.T) {
 		})
 	}
 }
+
+// ==================== Resolve with LookupContext Tests ====================
+
+// mockLoadStrategyWithLookup captures the LookupContext for verification
+type mockLoadStrategyWithLookup struct {
+	strategyType    loadstrategy.LoadStrategyType
+	calculateResult float64
+	calculateErr    error
+	validateErr     error
+	capturedParams  *loadstrategy.LoadCalculationParams
+}
+
+func (m *mockLoadStrategyWithLookup) Type() loadstrategy.LoadStrategyType {
+	return m.strategyType
+}
+
+func (m *mockLoadStrategyWithLookup) CalculateLoad(ctx context.Context, params loadstrategy.LoadCalculationParams) (float64, error) {
+	m.capturedParams = &params
+	if m.calculateErr != nil {
+		return 0, m.calculateErr
+	}
+	return m.calculateResult, nil
+}
+
+func (m *mockLoadStrategyWithLookup) Validate() error {
+	return m.validateErr
+}
+
+func TestPrescription_Resolve_PassesLookupContext(t *testing.T) {
+	strategy := &mockLoadStrategyWithLookup{
+		strategyType:    loadstrategy.TypePercentOf,
+		calculateResult: 200.0,
+	}
+
+	prescription := &Prescription{
+		ID:           anotherValidUUID(),
+		LiftID:       validUUID(),
+		LoadStrategy: strategy,
+		SetScheme:    validSetScheme(),
+	}
+
+	liftLookup := newMockLiftLookup()
+	liftLookup.SetLift(prescription.LiftID, &LiftInfo{
+		ID:   prescription.LiftID,
+		Name: "Squat",
+		Slug: "squat",
+	})
+
+	lookupCtx := &loadstrategy.LookupContext{
+		WeekNumber: 2,
+		DaySlug:    "heavy",
+		SetNumber:  1,
+	}
+
+	ctx := context.Background()
+	resCtx := ResolutionContext{
+		LiftLookup:    liftLookup,
+		SetGenContext: setscheme.DefaultSetGenerationContext(),
+		LookupContext: lookupCtx,
+	}
+
+	_, err := prescription.Resolve(ctx, "user-123", resCtx)
+
+	if err != nil {
+		t.Errorf("Resolve returned error: %v", err)
+	}
+
+	// Verify that the LookupContext was passed through
+	if strategy.capturedParams == nil {
+		t.Fatal("LoadStrategy.CalculateLoad was not called")
+	}
+	if strategy.capturedParams.LookupContext != lookupCtx {
+		t.Error("LookupContext was not passed to LoadStrategy.CalculateLoad")
+	}
+	if strategy.capturedParams.LookupContext.WeekNumber != 2 {
+		t.Errorf("WeekNumber = %d, want 2", strategy.capturedParams.LookupContext.WeekNumber)
+	}
+	if strategy.capturedParams.LookupContext.DaySlug != "heavy" {
+		t.Errorf("DaySlug = %q, want 'heavy'", strategy.capturedParams.LookupContext.DaySlug)
+	}
+	if strategy.capturedParams.LookupContext.SetNumber != 1 {
+		t.Errorf("SetNumber = %d, want 1", strategy.capturedParams.LookupContext.SetNumber)
+	}
+}
+
+func TestPrescription_Resolve_NilLookupContext(t *testing.T) {
+	strategy := &mockLoadStrategyWithLookup{
+		strategyType:    loadstrategy.TypePercentOf,
+		calculateResult: 200.0,
+	}
+
+	prescription := &Prescription{
+		ID:           anotherValidUUID(),
+		LiftID:       validUUID(),
+		LoadStrategy: strategy,
+		SetScheme:    validSetScheme(),
+	}
+
+	liftLookup := newMockLiftLookup()
+	liftLookup.SetLift(prescription.LiftID, &LiftInfo{
+		ID:   prescription.LiftID,
+		Name: "Squat",
+		Slug: "squat",
+	})
+
+	ctx := context.Background()
+	resCtx := ResolutionContext{
+		LiftLookup:    liftLookup,
+		SetGenContext: setscheme.DefaultSetGenerationContext(),
+		LookupContext: nil, // Explicitly nil
+	}
+
+	resolved, err := prescription.Resolve(ctx, "user-123", resCtx)
+
+	if err != nil {
+		t.Errorf("Resolve returned error: %v", err)
+	}
+	if resolved == nil {
+		t.Fatal("Resolve returned nil ResolvedPrescription")
+	}
+
+	// Verify that nil LookupContext was passed through
+	if strategy.capturedParams == nil {
+		t.Fatal("LoadStrategy.CalculateLoad was not called")
+	}
+	if strategy.capturedParams.LookupContext != nil {
+		t.Error("LookupContext should be nil when not provided")
+	}
+}
+
+func TestResolutionContext_LookupContextField(t *testing.T) {
+	// Test that ResolutionContext has the LookupContext field
+	resCtx := ResolutionContext{
+		LookupContext: &loadstrategy.LookupContext{
+			WeekNumber: 1,
+			DaySlug:    "day-a",
+			SetNumber:  3,
+		},
+	}
+
+	if resCtx.LookupContext == nil {
+		t.Error("LookupContext should not be nil")
+	}
+	if resCtx.LookupContext.WeekNumber != 1 {
+		t.Errorf("WeekNumber = %d, want 1", resCtx.LookupContext.WeekNumber)
+	}
+	if resCtx.LookupContext.DaySlug != "day-a" {
+		t.Errorf("DaySlug = %q, want 'day-a'", resCtx.LookupContext.DaySlug)
+	}
+	if resCtx.LookupContext.SetNumber != 3 {
+		t.Errorf("SetNumber = %d, want 3", resCtx.LookupContext.SetNumber)
+	}
+}
