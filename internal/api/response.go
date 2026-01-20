@@ -44,6 +44,11 @@ func writeError(w http.ResponseWriter, status int, message string, details ...st
 	writeJSON(w, status, resp)
 }
 
+// WriteError is the exported version of writeError for use by middleware.
+func WriteError(w http.ResponseWriter, status int, message string) {
+	writeError(w, status, message)
+}
+
 // readJSON reads JSON from the request body.
 func readJSON(r *http.Request, v interface{}) error {
 	return json.NewDecoder(r.Body).Decode(v)

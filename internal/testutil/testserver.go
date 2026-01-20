@@ -106,6 +106,23 @@ func (ts *TestServer) URL(path string) string {
 	return ts.BaseURL + path
 }
 
+// AuthHeaders returns HTTP headers for an authenticated user.
+func AuthHeaders(userID string, isAdmin bool) map[string]string {
+	headers := map[string]string{
+		"X-User-ID": userID,
+	}
+	if isAdmin {
+		headers["X-Admin"] = "true"
+	}
+	return headers
+}
+
+// TestUserID is the standard test user ID used in tests.
+const TestUserID = "test-user-001"
+
+// TestAdminID is the standard test admin ID used in tests.
+const TestAdminID = "test-admin-001"
+
 // waitForServer waits for the server to be ready by polling the health endpoint.
 func waitForServer(baseURL string, timeout time.Duration) error {
 	deadline := time.Now().Add(timeout)

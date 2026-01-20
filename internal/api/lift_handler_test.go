@@ -37,6 +37,62 @@ type ErrorResponse struct {
 	Details []string `json:"details,omitempty"`
 }
 
+// authGet performs an authenticated GET request
+func authGet(url string) (*http.Response, error) {
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("X-User-ID", testutil.TestUserID)
+	return http.DefaultClient.Do(req)
+}
+
+// adminGet performs an admin-authenticated GET request
+func adminGet(url string) (*http.Response, error) {
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("X-User-ID", testutil.TestAdminID)
+	req.Header.Set("X-Admin", "true")
+	return http.DefaultClient.Do(req)
+}
+
+// adminPost performs an admin-authenticated POST request
+func adminPost(url string, body string) (*http.Response, error) {
+	req, err := http.NewRequest(http.MethodPost, url, bytes.NewBufferString(body))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-User-ID", testutil.TestAdminID)
+	req.Header.Set("X-Admin", "true")
+	return http.DefaultClient.Do(req)
+}
+
+// adminPut performs an admin-authenticated PUT request
+func adminPut(url string, body string) (*http.Response, error) {
+	req, err := http.NewRequest(http.MethodPut, url, bytes.NewBufferString(body))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-User-ID", testutil.TestAdminID)
+	req.Header.Set("X-Admin", "true")
+	return http.DefaultClient.Do(req)
+}
+
+// adminDelete performs an admin-authenticated DELETE request
+func adminDelete(url string) (*http.Response, error) {
+	req, err := http.NewRequest(http.MethodDelete, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("X-User-ID", testutil.TestAdminID)
+	req.Header.Set("X-Admin", "true")
+	return http.DefaultClient.Do(req)
+}
+
 func TestListLifts(t *testing.T) {
 	ts, err := testutil.NewTestServer()
 	if err != nil {
@@ -45,7 +101,7 @@ func TestListLifts(t *testing.T) {
 	defer ts.Close()
 
 	t.Run("returns seeded lifts", func(t *testing.T) {
-		resp, err := http.Get(ts.URL("/lifts"))
+		resp, err := authGet(ts.URL("/lifts"))
 		if err != nil {
 			t.Fatalf("Failed to make request: %v", err)
 		}
@@ -71,7 +127,7 @@ func TestListLifts(t *testing.T) {
 	})
 
 	t.Run("supports pagination", func(t *testing.T) {
-		resp, err := http.Get(ts.URL("/lifts?page=1&pageSize=2"))
+		resp, err := authGet(ts.URL("/lifts?page=1&pageSize=2"))
 		if err != nil {
 			t.Fatalf("Failed to make request: %v", err)
 		}
@@ -91,7 +147,7 @@ func TestListLifts(t *testing.T) {
 		}
 
 		// Get page 2
-		resp2, _ := http.Get(ts.URL("/lifts?page=2&pageSize=2"))
+		resp2, _ := authGet(ts.URL("/lifts?page=2&pageSize=2"))
 		defer resp2.Body.Close()
 
 		var result2 PaginatedLiftsResponse
@@ -103,7 +159,7 @@ func TestListLifts(t *testing.T) {
 	})
 
 	t.Run("filters by is_competition_lift", func(t *testing.T) {
-		resp, err := http.Get(ts.URL("/lifts?is_competition_lift=true"))
+		resp, err := authGet(ts.URL("/lifts?is_competition_lift=true"))
 		if err != nil {
 			t.Fatalf("Failed to make request: %v", err)
 		}
@@ -124,7 +180,7 @@ func TestListLifts(t *testing.T) {
 		}
 
 		// Filter for non-competition lifts
-		resp2, _ := http.Get(ts.URL("/lifts?is_competition_lift=false"))
+		resp2, _ := authGet(ts.URL("/lifts?is_competition_lift=false"))
 		defer resp2.Body.Close()
 
 		var result2 PaginatedLiftsResponse
@@ -137,7 +193,7 @@ func TestListLifts(t *testing.T) {
 
 	t.Run("supports sorting by name", func(t *testing.T) {
 		// Ascending (default)
-		resp, _ := http.Get(ts.URL("/lifts?sortBy=name&sortOrder=asc"))
+		resp, _ := authGet(ts.URL("/lifts?sortBy=name&sortOrder=asc"))
 		defer resp.Body.Close()
 
 		var result PaginatedLiftsResponse
@@ -153,7 +209,7 @@ func TestListLifts(t *testing.T) {
 		}
 
 		// Descending
-		resp2, _ := http.Get(ts.URL("/lifts?sortBy=name&sortOrder=desc"))
+		resp2, _ := authGet(ts.URL("/lifts?sortBy=name&sortOrder=desc"))
 		defer resp2.Body.Close()
 
 		var result2 PaginatedLiftsResponse
@@ -177,7 +233,7 @@ func TestGetLift(t *testing.T) {
 		// Use seeded squat ID
 		squatID := "00000000-0000-0000-0000-000000000001"
 
-		resp, err := http.Get(ts.URL("/lifts/" + squatID))
+		resp, err := authGet(ts.URL("/lifts/" + squatID))
 		if err != nil {
 			t.Fatalf("Failed to make request: %v", err)
 		}
@@ -205,7 +261,7 @@ func TestGetLift(t *testing.T) {
 	})
 
 	t.Run("returns 404 for non-existent ID", func(t *testing.T) {
-		resp, _ := http.Get(ts.URL("/lifts/non-existent-id"))
+		resp, _ := authGet(ts.URL("/lifts/non-existent-id"))
 		defer resp.Body.Close()
 
 		if resp.StatusCode != http.StatusNotFound {
@@ -229,7 +285,7 @@ func TestGetLiftBySlug(t *testing.T) {
 	defer ts.Close()
 
 	t.Run("returns lift by slug", func(t *testing.T) {
-		resp, err := http.Get(ts.URL("/lifts/by-slug/bench-press"))
+		resp, err := authGet(ts.URL("/lifts/by-slug/bench-press"))
 		if err != nil {
 			t.Fatalf("Failed to make request: %v", err)
 		}
@@ -251,7 +307,7 @@ func TestGetLiftBySlug(t *testing.T) {
 	})
 
 	t.Run("returns 404 for non-existent slug", func(t *testing.T) {
-		resp, _ := http.Get(ts.URL("/lifts/by-slug/non-existent"))
+		resp, _ := authGet(ts.URL("/lifts/by-slug/non-existent"))
 		defer resp.Body.Close()
 
 		if resp.StatusCode != http.StatusNotFound {
@@ -269,7 +325,7 @@ func TestCreateLift(t *testing.T) {
 
 	t.Run("creates lift with all fields", func(t *testing.T) {
 		body := `{"name": "Pause Squat", "slug": "pause-squat", "isCompetitionLift": false}`
-		resp, err := http.Post(ts.URL("/lifts"), "application/json", bytes.NewBufferString(body))
+		resp, err := adminPost(ts.URL("/lifts"), body)
 		if err != nil {
 			t.Fatalf("Failed to make request: %v", err)
 		}
@@ -299,7 +355,7 @@ func TestCreateLift(t *testing.T) {
 
 	t.Run("auto-generates slug from name", func(t *testing.T) {
 		body := `{"name": "Front Squat"}`
-		resp, _ := http.Post(ts.URL("/lifts"), "application/json", bytes.NewBufferString(body))
+		resp, _ := adminPost(ts.URL("/lifts"), body)
 		defer resp.Body.Close()
 
 		if resp.StatusCode != http.StatusCreated {
@@ -318,7 +374,7 @@ func TestCreateLift(t *testing.T) {
 	t.Run("creates lift with parent", func(t *testing.T) {
 		squatID := "00000000-0000-0000-0000-000000000001"
 		body := fmt.Sprintf(`{"name": "Box Squat", "parentLiftId": "%s"}`, squatID)
-		resp, _ := http.Post(ts.URL("/lifts"), "application/json", bytes.NewBufferString(body))
+		resp, _ := adminPost(ts.URL("/lifts"), body)
 		defer resp.Body.Close()
 
 		if resp.StatusCode != http.StatusCreated {
@@ -336,7 +392,7 @@ func TestCreateLift(t *testing.T) {
 
 	t.Run("returns 400 for missing name", func(t *testing.T) {
 		body := `{"slug": "no-name"}`
-		resp, _ := http.Post(ts.URL("/lifts"), "application/json", bytes.NewBufferString(body))
+		resp, _ := adminPost(ts.URL("/lifts"), body)
 		defer resp.Body.Close()
 
 		if resp.StatusCode != http.StatusBadRequest {
@@ -346,7 +402,7 @@ func TestCreateLift(t *testing.T) {
 
 	t.Run("returns 400 for invalid slug format", func(t *testing.T) {
 		body := `{"name": "Invalid Slug", "slug": "INVALID_SLUG!"}`
-		resp, _ := http.Post(ts.URL("/lifts"), "application/json", bytes.NewBufferString(body))
+		resp, _ := adminPost(ts.URL("/lifts"), body)
 		defer resp.Body.Close()
 
 		if resp.StatusCode != http.StatusBadRequest {
@@ -356,7 +412,7 @@ func TestCreateLift(t *testing.T) {
 
 	t.Run("returns 409 for duplicate slug", func(t *testing.T) {
 		body := `{"name": "Another Squat", "slug": "squat"}`
-		resp, _ := http.Post(ts.URL("/lifts"), "application/json", bytes.NewBufferString(body))
+		resp, _ := adminPost(ts.URL("/lifts"), body)
 		defer resp.Body.Close()
 
 		if resp.StatusCode != http.StatusConflict {
@@ -366,7 +422,7 @@ func TestCreateLift(t *testing.T) {
 
 	t.Run("returns 400 for non-existent parent lift", func(t *testing.T) {
 		body := `{"name": "Orphan Lift", "parentLiftId": "non-existent-id"}`
-		resp, _ := http.Post(ts.URL("/lifts"), "application/json", bytes.NewBufferString(body))
+		resp, _ := adminPost(ts.URL("/lifts"), body)
 		defer resp.Body.Close()
 
 		if resp.StatusCode != http.StatusBadRequest {
@@ -384,16 +440,14 @@ func TestUpdateLift(t *testing.T) {
 
 	// Create a lift to update
 	createBody := `{"name": "Test Lift", "slug": "test-lift"}`
-	createResp, _ := http.Post(ts.URL("/lifts"), "application/json", bytes.NewBufferString(createBody))
+	createResp, _ := adminPost(ts.URL("/lifts"), createBody)
 	var createdLift LiftResponse
 	json.NewDecoder(createResp.Body).Decode(&createdLift)
 	createResp.Body.Close()
 
 	t.Run("updates lift name", func(t *testing.T) {
 		body := `{"name": "Updated Lift"}`
-		req, _ := http.NewRequest(http.MethodPut, ts.URL("/lifts/"+createdLift.ID), bytes.NewBufferString(body))
-		req.Header.Set("Content-Type", "application/json")
-		resp, err := http.DefaultClient.Do(req)
+		resp, err := adminPut(ts.URL("/lifts/"+createdLift.ID), body)
 		if err != nil {
 			t.Fatalf("Failed to make request: %v", err)
 		}
@@ -418,9 +472,7 @@ func TestUpdateLift(t *testing.T) {
 
 	t.Run("updates lift slug", func(t *testing.T) {
 		body := `{"slug": "updated-slug"}`
-		req, _ := http.NewRequest(http.MethodPut, ts.URL("/lifts/"+createdLift.ID), bytes.NewBufferString(body))
-		req.Header.Set("Content-Type", "application/json")
-		resp, _ := http.DefaultClient.Do(req)
+		resp, _ := adminPut(ts.URL("/lifts/"+createdLift.ID), body)
 		defer resp.Body.Close()
 
 		if resp.StatusCode != http.StatusOK {
@@ -437,9 +489,7 @@ func TestUpdateLift(t *testing.T) {
 
 	t.Run("returns 404 for non-existent lift", func(t *testing.T) {
 		body := `{"name": "Updated"}`
-		req, _ := http.NewRequest(http.MethodPut, ts.URL("/lifts/non-existent-id"), bytes.NewBufferString(body))
-		req.Header.Set("Content-Type", "application/json")
-		resp, _ := http.DefaultClient.Do(req)
+		resp, _ := adminPut(ts.URL("/lifts/non-existent-id"), body)
 		defer resp.Body.Close()
 
 		if resp.StatusCode != http.StatusNotFound {
@@ -449,9 +499,7 @@ func TestUpdateLift(t *testing.T) {
 
 	t.Run("returns 409 for duplicate slug", func(t *testing.T) {
 		body := `{"slug": "squat"}`
-		req, _ := http.NewRequest(http.MethodPut, ts.URL("/lifts/"+createdLift.ID), bytes.NewBufferString(body))
-		req.Header.Set("Content-Type", "application/json")
-		resp, _ := http.DefaultClient.Do(req)
+		resp, _ := adminPut(ts.URL("/lifts/"+createdLift.ID), body)
 		defer resp.Body.Close()
 
 		if resp.StatusCode != http.StatusConflict {
@@ -461,9 +509,7 @@ func TestUpdateLift(t *testing.T) {
 
 	t.Run("returns 400 for validation errors", func(t *testing.T) {
 		body := `{"name": ""}`
-		req, _ := http.NewRequest(http.MethodPut, ts.URL("/lifts/"+createdLift.ID), bytes.NewBufferString(body))
-		req.Header.Set("Content-Type", "application/json")
-		resp, _ := http.DefaultClient.Do(req)
+		resp, _ := adminPut(ts.URL("/lifts/"+createdLift.ID), body)
 		defer resp.Body.Close()
 
 		if resp.StatusCode != http.StatusBadRequest {
@@ -482,14 +528,13 @@ func TestDeleteLift(t *testing.T) {
 	t.Run("deletes lift successfully", func(t *testing.T) {
 		// Create a lift to delete
 		createBody := `{"name": "To Delete", "slug": "to-delete"}`
-		createResp, _ := http.Post(ts.URL("/lifts"), "application/json", bytes.NewBufferString(createBody))
+		createResp, _ := adminPost(ts.URL("/lifts"), createBody)
 		var createdLift LiftResponse
 		json.NewDecoder(createResp.Body).Decode(&createdLift)
 		createResp.Body.Close()
 
 		// Delete it
-		req, _ := http.NewRequest(http.MethodDelete, ts.URL("/lifts/"+createdLift.ID), nil)
-		resp, err := http.DefaultClient.Do(req)
+		resp, err := adminDelete(ts.URL("/lifts/" + createdLift.ID))
 		if err != nil {
 			t.Fatalf("Failed to make request: %v", err)
 		}
@@ -501,7 +546,7 @@ func TestDeleteLift(t *testing.T) {
 		}
 
 		// Verify it's deleted
-		getResp, _ := http.Get(ts.URL("/lifts/" + createdLift.ID))
+		getResp, _ := authGet(ts.URL("/lifts/" + createdLift.ID))
 		defer getResp.Body.Close()
 
 		if getResp.StatusCode != http.StatusNotFound {
@@ -510,8 +555,7 @@ func TestDeleteLift(t *testing.T) {
 	})
 
 	t.Run("returns 404 for non-existent lift", func(t *testing.T) {
-		req, _ := http.NewRequest(http.MethodDelete, ts.URL("/lifts/non-existent-id"), nil)
-		resp, _ := http.DefaultClient.Do(req)
+		resp, _ := adminDelete(ts.URL("/lifts/non-existent-id"))
 		defer resp.Body.Close()
 
 		if resp.StatusCode != http.StatusNotFound {
@@ -522,19 +566,18 @@ func TestDeleteLift(t *testing.T) {
 	t.Run("returns 409 when lift has child references", func(t *testing.T) {
 		// Create a parent lift
 		createParent := `{"name": "Parent Lift", "slug": "parent-lift"}`
-		parentResp, _ := http.Post(ts.URL("/lifts"), "application/json", bytes.NewBufferString(createParent))
+		parentResp, _ := adminPost(ts.URL("/lifts"), createParent)
 		var parentLift LiftResponse
 		json.NewDecoder(parentResp.Body).Decode(&parentLift)
 		parentResp.Body.Close()
 
 		// Create a child lift referencing the parent
 		createChild := fmt.Sprintf(`{"name": "Child Lift", "slug": "child-lift", "parentLiftId": "%s"}`, parentLift.ID)
-		childResp, _ := http.Post(ts.URL("/lifts"), "application/json", bytes.NewBufferString(createChild))
+		childResp, _ := adminPost(ts.URL("/lifts"), createChild)
 		childResp.Body.Close()
 
 		// Try to delete the parent
-		req, _ := http.NewRequest(http.MethodDelete, ts.URL("/lifts/"+parentLift.ID), nil)
-		resp, _ := http.DefaultClient.Do(req)
+		resp, _ := adminDelete(ts.URL("/lifts/" + parentLift.ID))
 		defer resp.Body.Close()
 
 		if resp.StatusCode != http.StatusConflict {
@@ -552,16 +595,14 @@ func TestSelfReferenceRejection(t *testing.T) {
 
 	// Create a lift
 	createBody := `{"name": "Self Ref Test", "slug": "self-ref-test"}`
-	createResp, _ := http.Post(ts.URL("/lifts"), "application/json", bytes.NewBufferString(createBody))
+	createResp, _ := adminPost(ts.URL("/lifts"), createBody)
 	var createdLift LiftResponse
 	json.NewDecoder(createResp.Body).Decode(&createdLift)
 	createResp.Body.Close()
 
 	t.Run("rejects self-reference on update", func(t *testing.T) {
 		body := fmt.Sprintf(`{"parentLiftId": "%s"}`, createdLift.ID)
-		req, _ := http.NewRequest(http.MethodPut, ts.URL("/lifts/"+createdLift.ID), bytes.NewBufferString(body))
-		req.Header.Set("Content-Type", "application/json")
-		resp, _ := http.DefaultClient.Do(req)
+		resp, _ := adminPut(ts.URL("/lifts/"+createdLift.ID), body)
 		defer resp.Body.Close()
 
 		if resp.StatusCode != http.StatusBadRequest {
@@ -579,21 +620,21 @@ func TestCircularReferenceDetection(t *testing.T) {
 
 	// Create lift A
 	createA := `{"name": "Lift A", "slug": "lift-a"}`
-	respA, _ := http.Post(ts.URL("/lifts"), "application/json", bytes.NewBufferString(createA))
+	respA, _ := adminPost(ts.URL("/lifts"), createA)
 	var liftA LiftResponse
 	json.NewDecoder(respA.Body).Decode(&liftA)
 	respA.Body.Close()
 
 	// Create lift B with parent A
 	createB := fmt.Sprintf(`{"name": "Lift B", "slug": "lift-b", "parentLiftId": "%s"}`, liftA.ID)
-	respB, _ := http.Post(ts.URL("/lifts"), "application/json", bytes.NewBufferString(createB))
+	respB, _ := adminPost(ts.URL("/lifts"), createB)
 	var liftB LiftResponse
 	json.NewDecoder(respB.Body).Decode(&liftB)
 	respB.Body.Close()
 
 	// Create lift C with parent B
 	createC := fmt.Sprintf(`{"name": "Lift C", "slug": "lift-c", "parentLiftId": "%s"}`, liftB.ID)
-	respC, _ := http.Post(ts.URL("/lifts"), "application/json", bytes.NewBufferString(createC))
+	respC, _ := adminPost(ts.URL("/lifts"), createC)
 	var liftC LiftResponse
 	json.NewDecoder(respC.Body).Decode(&liftC)
 	respC.Body.Close()
@@ -601,9 +642,7 @@ func TestCircularReferenceDetection(t *testing.T) {
 	t.Run("rejects circular reference A->C", func(t *testing.T) {
 		// Try to set A's parent to C (would create A->C->B->A cycle)
 		body := fmt.Sprintf(`{"parentLiftId": "%s"}`, liftC.ID)
-		req, _ := http.NewRequest(http.MethodPut, ts.URL("/lifts/"+liftA.ID), bytes.NewBufferString(body))
-		req.Header.Set("Content-Type", "application/json")
-		resp, _ := http.DefaultClient.Do(req)
+		resp, _ := adminPut(ts.URL("/lifts/"+liftA.ID), body)
 		defer resp.Body.Close()
 
 		if resp.StatusCode != http.StatusBadRequest {
@@ -634,7 +673,7 @@ func TestResponseFormat(t *testing.T) {
 	defer ts.Close()
 
 	t.Run("response has correct JSON field names", func(t *testing.T) {
-		resp, _ := http.Get(ts.URL("/lifts/00000000-0000-0000-0000-000000000001"))
+		resp, _ := authGet(ts.URL("/lifts/00000000-0000-0000-0000-000000000001"))
 		defer resp.Body.Close()
 
 		body, _ := io.ReadAll(resp.Body)

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/waynenilsen/power-pro-v3/internal/api"
+	"github.com/waynenilsen/power-pro-v3/internal/middleware"
 	"github.com/waynenilsen/power-pro-v3/internal/repository"
 )
 
@@ -58,28 +59,67 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	liftHandler := api.NewLiftHandler(s.liftRepo)
 	liftMaxHandler := api.NewLiftMaxHandler(s.liftMaxRepo, s.liftRepo)
 
-	// Health check
+	// Auth middleware configuration
+	authCfg := middleware.AuthConfig{
+		WriteError: api.WriteError,
+	}
+
+	// Create middleware
+	requireAuth := middleware.RequireAuth(authCfg)
+	requireAdmin := middleware.RequireAdmin(authCfg)
+
+	// Helper to wrap handler with middleware
+	withAuth := func(h http.HandlerFunc) http.Handler {
+		return requireAuth(http.HandlerFunc(h))
+	}
+	withAdmin := func(h http.HandlerFunc) http.Handler {
+		return middleware.ChainMiddleware(requireAuth, requireAdmin)(http.HandlerFunc(h))
+	}
+
+	// LiftMax ownership check middleware
+	liftMaxOwnerCheck := func(h http.HandlerFunc) http.Handler {
+		ownerFunc := func(r *http.Request) (string, error) {
+			// For routes with {userId} in path, that is the owner
+			if userID := r.PathValue("userId"); userID != "" {
+				return userID, nil
+			}
+			// For routes with {id}, we need to look up the resource
+			// The handler will do the ownership check after fetching the resource
+			// Return empty to skip middleware ownership check
+			return "", nil
+		}
+		return middleware.ChainMiddleware(
+			requireAuth,
+			middleware.RequireOwnerOrAdmin(authCfg, ownerFunc),
+		)(http.HandlerFunc(h))
+	}
+
+	// Health check (no auth required)
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(`{"status":"ok"}`))
 	})
 
-	// Lift routes
-	mux.HandleFunc("GET /lifts", liftHandler.List)
-	mux.HandleFunc("GET /lifts/{id}", liftHandler.Get)
-	mux.HandleFunc("GET /lifts/by-slug/{slug}", liftHandler.GetBySlug)
-	mux.HandleFunc("POST /lifts", liftHandler.Create)
-	mux.HandleFunc("PUT /lifts/{id}", liftHandler.Update)
-	mux.HandleFunc("DELETE /lifts/{id}", liftHandler.Delete)
+	// Lift routes (NFR-007):
+	// - All authenticated users can read lift data
+	// - Only admins can create/update/delete lifts
+	mux.Handle("GET /lifts", withAuth(liftHandler.List))
+	mux.Handle("GET /lifts/{id}", withAuth(liftHandler.Get))
+	mux.Handle("GET /lifts/by-slug/{slug}", withAuth(liftHandler.GetBySlug))
+	mux.Handle("POST /lifts", withAdmin(liftHandler.Create))
+	mux.Handle("PUT /lifts/{id}", withAdmin(liftHandler.Update))
+	mux.Handle("DELETE /lifts/{id}", withAdmin(liftHandler.Delete))
 
-	// LiftMax routes
-	mux.HandleFunc("GET /users/{userId}/lift-maxes/current", liftMaxHandler.GetCurrent)
-	mux.HandleFunc("GET /users/{userId}/lift-maxes", liftMaxHandler.List)
-	mux.HandleFunc("GET /lift-maxes/{id}/convert", liftMaxHandler.Convert)
-	mux.HandleFunc("GET /lift-maxes/{id}", liftMaxHandler.Get)
-	mux.HandleFunc("POST /users/{userId}/lift-maxes", liftMaxHandler.Create)
-	mux.HandleFunc("PUT /lift-maxes/{id}", liftMaxHandler.Update)
-	mux.HandleFunc("DELETE /lift-maxes/{id}", liftMaxHandler.Delete)
+	// LiftMax routes (NFR-006):
+	// - Users can only access their own LiftMax data
+	// - Admins can access any user's LiftMax data
+	mux.Handle("GET /users/{userId}/lift-maxes/current", liftMaxOwnerCheck(liftMaxHandler.GetCurrent))
+	mux.Handle("GET /users/{userId}/lift-maxes", liftMaxOwnerCheck(liftMaxHandler.List))
+	mux.Handle("GET /lift-maxes/{id}/convert", withAuth(liftMaxHandler.Convert))
+	mux.Handle("GET /lift-maxes/{id}", withAuth(liftMaxHandler.Get))
+	mux.Handle("POST /users/{userId}/lift-maxes", liftMaxOwnerCheck(liftMaxHandler.Create))
+	mux.Handle("PUT /lift-maxes/{id}", withAuth(liftMaxHandler.Update))
+	mux.Handle("DELETE /lift-maxes/{id}", withAuth(liftMaxHandler.Delete))
 }
 
 // Start starts the HTTP server.

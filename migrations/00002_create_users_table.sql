@@ -12,6 +12,7 @@ CREATE TABLE users (
 -- +goose StatementBegin
 INSERT INTO users (id, created_at, updated_at) VALUES
     ('test-user-001', datetime('now'), datetime('now')),
+    ('test-admin-001', datetime('now'), datetime('now')),
     ('create-test-user', datetime('now'), datetime('now')),
     ('date-test-user', datetime('now'), datetime('now')),
     ('missing-lift-user', datetime('now'), datetime('now')),
@@ -31,7 +32,14 @@ INSERT INTO users (id, created_at, updated_at) VALUES
     ('round-test-user', datetime('now'), datetime('now')),
     ('admin-user', datetime('now'), datetime('now')),
     ('current-max-user', datetime('now'), datetime('now')),
-    ('single-max-user', datetime('now'), datetime('now'));
+    ('single-max-user', datetime('now'), datetime('now')),
+    -- Authorization test users
+    ('user-a', datetime('now'), datetime('now')),
+    ('user-b', datetime('now'), datetime('now')),
+    ('current-user-a', datetime('now'), datetime('now')),
+    ('current-user-b', datetime('now'), datetime('now')),
+    ('convert-user-a', datetime('now'), datetime('now')),
+    ('convert-user-b', datetime('now'), datetime('now'));
 -- +goose StatementEnd
 
 -- +goose Down

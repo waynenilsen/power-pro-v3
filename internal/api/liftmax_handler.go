@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/waynenilsen/power-pro-v3/internal/domain/liftmax"
+	"github.com/waynenilsen/power-pro-v3/internal/middleware"
 	"github.com/waynenilsen/power-pro-v3/internal/repository"
 )
 
@@ -170,6 +171,14 @@ func (h *LiftMaxHandler) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Check ownership: user must be owner or admin
+	requestingUserID := middleware.GetUserID(r)
+	isAdmin := middleware.IsAdmin(r)
+	if requestingUserID != m.UserID && !isAdmin {
+		writeError(w, http.StatusForbidden, "Access denied: you do not have permission to access this resource")
+		return
+	}
+
 	writeJSON(w, http.StatusOK, liftMaxToResponse(m))
 }
 
@@ -269,6 +278,14 @@ func (h *LiftMaxHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Check ownership: user must be owner or admin
+	requestingUserID := middleware.GetUserID(r)
+	isAdmin := middleware.IsAdmin(r)
+	if requestingUserID != existing.UserID && !isAdmin {
+		writeError(w, http.StatusForbidden, "Access denied: you do not have permission to modify this resource")
+		return
+	}
+
 	var req UpdateLiftMaxRequest
 	if err := readJSON(r, &req); err != nil {
 		writeError(w, http.StatusBadRequest, "Invalid request body")
@@ -343,6 +360,14 @@ func (h *LiftMaxHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Check ownership: user must be owner or admin
+	requestingUserID := middleware.GetUserID(r)
+	isAdmin := middleware.IsAdmin(r)
+	if requestingUserID != existing.UserID && !isAdmin {
+		writeError(w, http.StatusForbidden, "Access denied: you do not have permission to delete this resource")
+		return
+	}
+
 	// Delete
 	if err := h.repo.Delete(id); err != nil {
 		writeError(w, http.StatusInternalServerError, "Failed to delete lift max")
@@ -370,14 +395,8 @@ func (h *LiftMaxHandler) GetCurrent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check authorization: requesting user must be owner or admin
-	requestingUserID := r.Header.Get("X-User-ID")
-	isAdmin := r.Header.Get("X-Admin") == "true"
-
-	if requestingUserID != userID && !isAdmin {
-		writeError(w, http.StatusForbidden, "Access denied: you do not have permission to access this resource")
-		return
-	}
+	// Authorization is handled by middleware for the userId in path
+	// The middleware already verified the requesting user is owner or admin
 
 	// Parse and validate query parameters
 	query := r.URL.Query()
@@ -442,11 +461,9 @@ func (h *LiftMaxHandler) Convert(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check authorization: requesting user must be owner or admin
-	// Get user ID from X-User-ID header (temporary until auth is implemented)
-	requestingUserID := r.Header.Get("X-User-ID")
-	isAdmin := r.Header.Get("X-Admin") == "true"
-
+	// Check ownership: user must be owner or admin
+	requestingUserID := middleware.GetUserID(r)
+	isAdmin := middleware.IsAdmin(r)
 	if requestingUserID != existing.UserID && !isAdmin {
 		writeError(w, http.StatusForbidden, "Access denied: you do not have permission to access this resource")
 		return
