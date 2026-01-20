@@ -17,3 +17,20 @@ type Lift struct {
 	CreatedAt         string         `json:"created_at"`
 	UpdatedAt         string         `json:"updated_at"`
 }
+
+type LiftMax struct {
+	ID            string  `json:"id"`
+	UserID        string  `json:"user_id"`
+	LiftID        string  `json:"lift_id"`
+	Type          string  `json:"type"`
+	Value         float64 `json:"value"`
+	EffectiveDate string  `json:"effective_date"`
+	CreatedAt     string  `json:"created_at"`
+	UpdatedAt     string  `json:"updated_at"`
+}
+
+type User struct {
+	ID        string `json:"id"`
+	CreatedAt string `json:"created_at"`
+	UpdatedAt string `json:"updated_at"`
+}
