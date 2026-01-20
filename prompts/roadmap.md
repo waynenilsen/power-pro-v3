@@ -1,0 +1,306 @@
+# Software Roadmap
+
+Guidelines for creating effective software roadmaps based on best practices from product leaders, engineering teams, and industry experts.
+
+## Directory Structure
+
+Roadmap phase documents follow the same directory structure as tickets and ERDs:
+
+```
+phases/
+├── todo/          # Phase documents that need to be created or refined
+├── in-progress/   # Phase documents currently being worked on
+├── done/          # Completed phase documents
+└── not-doing/     # Phase documents that are cancelled or will not be done
+```
+
+## Directory Descriptions
+
+### `phases/`
+The primary directory containing all phase document subdirectories.
+
+### `phases/todo/`
+Phase documents that are planned but not yet started. These represent roadmap phases that need to be created or refined.
+
+### `phases/in-progress/`
+Phase documents that are currently being actively worked on. Move phase documents here when work begins.
+
+### `phases/done/`
+Completed phase documents. Move phase documents here when they are finished and approved.
+
+### `phases/not-doing/`
+Phase documents that have been cancelled, deferred indefinitely, or decided against. Use this for phase documents that will not be completed.
+
+## Workflow
+
+1. **Create**: New phase documents start in `phases/todo/`
+2. **Start**: Move phase documents to `phases/in-progress/` when work begins
+3. **Complete**: Move phase documents to `phases/done/` when finished and approved
+4. **Cancel**: Move phase documents to `phases/not-doing/` if they won't be completed
+
+## Phase Document File Format
+
+### File Naming Convention
+
+Phase documents must follow a specific naming format to enable lexicographical sorting by phase number:
+
+**Format**: `NNN-description.md`
+
+Where:
+- `NNN` is a zero-padded phase number (e.g., `001`, `002`, `010`, `100`)
+- `description` is a short, descriptive name using hyphens or underscores
+- File extension is `.md`
+
+**Examples**:
+- `001-q1-foundation.md`
+- `002-q2-user-authentication.md`
+- `010-q3-platform-scaling.md`
+- `100-q4-market-expansion.md`
+
+**Why zero-padding?**
+Zero-padding ensures that when files are sorted lexicographically (alphabetically), they are also sorted numerically. Without zero-padding, `10-phase.md` would sort before `2-phase.md`, which is incorrect.
+
+### File Content
+
+Each phase document should contain the roadmap structure outlined below.
+
+**Important**: Phase documents must NOT contain status information. Status is always implied by the directory location (`todo/`, `in-progress/`, `done/`, or `not-doing/`). Including status in the file body would create redundancy and potential inconsistencies.
+
+## Core Principles of Excellent Roadmaps
+
+| Principle | Description | Why It Matters |
+|-----------|-------------|----------------|
+| **Vision-Aligned** | Every roadmap connects to a clear product vision and strategic objectives | Provides north star for decision-making and prioritization |
+| **Outcome-Oriented** | Focus on themes and outcomes (e.g., "improve onboarding success") rather than just features | Ensures work ties back to business/customer impact |
+| **Data-Driven** | Prioritization based on customer feedback, usage data, support tickets, research | Keeps roadmap grounded in reality, not just loudest voices |
+| **Flexible & Living** | Regular reviews and updates (monthly/quarterly) with adaptable time horizons | Responds to changing market conditions, tech constraints, priorities |
+| **Audience-Aware** | Tailored detail levels for executives, engineers, customers | Ensures each stakeholder gets relevant information |
+| **Dependency-Aware** | Explicitly identifies dependencies, resource constraints, risks | Prevents unrealistic commitments and blockers |
+| **Measurable** | Clear success metrics and KPIs for each initiative | Enables validation and demonstrates value |
+
+## Roadmap Structure
+
+### 1. Vision & Strategic Objectives
+- **Product Vision**: Long-term direction and "why" behind the product
+- **Strategic Objectives**: 2-4 measurable goals (e.g., OKRs) tied to business outcomes
+- **Context**: Market position, competitive landscape, key trends
+
+### 2. Themes & Key Initiatives
+- **Outcome-Oriented Themes**: 2-5 high-level themes (not feature lists)
+  - Examples: "Reduce onboarding friction", "Increase user retention", "Improve platform reliability"
+- **Theme Rationale**: Why each theme matters and what strategic objective it supports
+- **Initiatives/Epics**: 2-4 major initiatives per theme
+  - Each initiative should be outcome-focused, not just a feature description
+
+### 3. Timeline & Phasing
+- **Time Horizons**: Use flexible buckets:
+  - **Now** (current quarter/sprint): More detail, specific features
+  - **Next** (next quarter): Moderate detail, epics/initiatives
+  - **Later** (beyond next quarter): High-level themes, exploration/discovery
+- **Avoid**: Rigid dates for far-future items; use loose time windows instead
+- **Format**: Can be quarterly, by release, or "Now/Next/Later" structure
+
+### 4. Prioritization Framework
+- **Use frameworks** like RICE, ICE, or Value vs Effort to evaluate items
+- **Data sources**:
+  - Customer feedback and support tickets
+  - Usage analytics and user behavior data
+  - Market research and competitive analysis
+  - Business metrics (revenue, retention, growth)
+- **Document rationale**: Why each item is prioritized as it is
+
+### 5. Ownership & Dependencies
+- **Owners**: Assign owners to initiatives, themes, or milestones
+- **Dependencies**: 
+  - Cross-team dependencies
+  - Technical dependencies
+  - External dependencies (vendors, partners)
+- **Resource Constraints**: Team bandwidth, budget, skills required
+
+### 6. Success Metrics & KPIs
+- **For each theme/initiative**: Define 1-2 measurable success criteria
+- **Types of metrics**:
+  - Leading indicators (early signals of progress)
+  - Lagging indicators (final outcomes)
+  - Examples: Engagement, performance, revenue, churn, time-to-value
+- **Targets**: Specific, measurable targets where applicable
+
+### 7. Risk Assessment & Mitigation
+- **Known Risks**: Technical challenges, market shifts, resource constraints
+- **Assumptions**: What you're assuming to be true
+- **Unknowns**: Areas requiring discovery or validation
+- **Mitigation Strategies**: Contingency plans or decision points
+- **Risk Flags**: Items that need special attention or early validation
+
+### 8. Review Cadence & Process
+- **Update Frequency**: Monthly or quarterly reviews (define schedule)
+- **Roles & Responsibilities**:
+  - Who owns the roadmap
+  - Who reviews and provides input
+  - Who approves changes
+- **Change Process**: When and how roadmap changes are made
+- **Communication Plan**: How roadmap is shared with different audiences
+
+## Best Practices
+
+### ✅ Do
+- **Focus on outcomes over features**: Themes should describe business impact, not just features
+- **Use flexible time horizons**: Avoid rigid dates for items far in the future
+- **Tailor to audience**: Create different views for executives, engineers, customers
+- **Incorporate data**: Use customer feedback, analytics, and research to inform priorities
+- **Show dependencies**: Make blocking relationships explicit
+- **Define success metrics**: Every initiative should have measurable outcomes
+- **Regular reviews**: Update roadmap monthly or quarterly to keep it current
+- **Be transparent**: Acknowledge uncertainty, assumptions, and risks
+- **Keep it visual**: Use clear visuals (swimlanes, timelines, milestones) with consistent formatting
+- **Maintain clarity**: Avoid clutter; focus on what matters most
+
+### ❌ Don't
+- **Don't be a feature factory**: Avoid roadmaps that are just feature lists without narrative or goals
+- **Don't over-detail**: Don't include user stories, specs, or resource-level details that belong in ERDs or tickets
+- **Don't ignore dependencies**: Account for resource constraints and technical dependencies
+- **Don't let it go stale**: Regular updates prevent mismatches between roadmap and reality
+- **Don't overcommit**: Avoid rigid deadlines that can't adapt to changing conditions
+- **Don't ignore risks**: Surface and address risks proactively
+- **Don't skip prioritization**: Use frameworks, not just intuition or loudest voices
+- **Don't forget the "why"**: Always connect items back to vision and strategic objectives
+
+## Audience-Specific Views
+
+### Executive View
+- **Focus**: Strategic themes, business impact, high-level timing
+- **Include**: Vision, strategic objectives, themes, key metrics, major milestones
+- **Exclude**: Technical details, implementation specifics, resource allocation
+
+### Engineering View
+- **Focus**: Technical initiatives, dependencies, rough durations
+- **Include**: Themes, initiatives, technical dependencies, resource needs, constraints
+- **Exclude**: Business strategy details, customer-facing messaging
+
+### Customer/Sales View
+- **Focus**: Benefits, progress, what's coming
+- **Include**: Themes (customer-benefit focused), high-level timeline, value propositions
+- **Exclude**: Internal dependencies, technical details, resource constraints
+
+## Integration with ERD and Ticket System
+
+Phase documents, ERDs, and tickets share the same directory structure pattern:
+- Phase documents are managed in `phases/` with subdirectories: `todo/`, `in-progress/`, `done/`, `not-doing/`
+- ERDs are managed in `erds/` with the same subdirectories
+- Tickets are managed in `tickets/` with the same subdirectories
+- All use zero-padded numbering for lexicographical sorting
+- All avoid status in file content (status is implied by directory location)
+
+### From Roadmap to ERD
+- Phase document themes and initiatives inform ERD creation
+- ERDs should align with phase document priorities
+- ERDs break down phase document initiatives into detailed requirements
+
+### From ERD to Tickets
+- ERDs decompose phase document initiatives into requirements
+- Tickets implement ERD requirements
+- Maintain traceability: Phase Document → ERD → Tickets
+
+### Traceability Chain
+```
+Phase Document Theme/Initiative (phases/001-phase-name.md)
+  ↓
+ERD Requirements (erds/001-erd-name.md with REQ-001, REQ-002, ...)
+  ↓
+Tickets (tickets/001-implement-feature.md, tickets/002-add-ui.md, ...)
+```
+
+## Phase Document Format
+
+Each phase document follows this structure. Phase documents are stored in the `phases/` directory structure.
+
+### Document Structure
+```markdown
+# Phase [Number]: [Phase Name] — [Date]
+
+## Vision & Strategic Objectives
+[Product vision and 2-4 strategic goals]
+
+## Themes & Initiatives
+
+### Theme 1: [Outcome-Oriented Theme Name]
+- **Strategic Objective**: [Which objective this supports]
+- **Rationale**: [Why this theme matters]
+- **Initiatives**:
+  - Initiative A: [Description, owner, success metrics]
+  - Initiative B: [Description, owner, success metrics]
+- **Dependencies**: [What blocks or enables this]
+- **Risks**: [Known risks and mitigation]
+
+[Repeat for each theme]
+
+## Timeline
+
+| Phase | Timeline | Themes/Initiatives |
+|-------|----------|-------------------|
+| Now | [Current quarter] | [List items] |
+| Next | [Next quarter] | [List items] |
+| Later | [Future] | [List items] |
+
+## Success Metrics
+[KPIs and targets for each theme/initiative]
+
+## Review & Update Process
+- Review cadence: [Monthly/Quarterly]
+- Owner: [Role/Name]
+- Approval: [Who approves changes]
+```
+
+## Prioritization Frameworks
+
+### RICE Framework
+- **Reach**: How many users/events affected (per time period)
+- **Impact**: How much it matters (0.25 = minimal, 0.5 = low, 1 = medium, 2 = high, 3 = massive)
+- **Confidence**: How certain you are (50% = low, 80% = medium, 100% = high)
+- **Effort**: Person-months of work
+- **Score**: (Reach × Impact × Confidence) / Effort
+
+### ICE Framework
+- **Impact**: How much it matters (1-10)
+- **Confidence**: How certain you are (1-10)
+- **Ease**: How easy to implement (1-10)
+- **Score**: (Impact + Confidence + Ease) / 3
+
+### Value vs Effort
+- Plot items on 2x2 matrix: High/Low Value × High/Low Effort
+- Prioritize: High Value / Low Effort first, then High Value / High Effort
+
+## Common Roadmap Types
+
+### Product Roadmap
+- Focus: Customer-facing features and improvements
+- Audience: Executives, customers, sales, marketing
+- Timeframe: Quarterly to annual
+
+### Engineering/Technical Roadmap
+- Focus: Technical initiatives, infrastructure, platform improvements
+- Audience: Engineering teams, technical leadership
+- Timeframe: Quarterly to multi-year
+
+### Release Roadmap
+- Focus: Specific releases and what's included
+- Audience: Product, engineering, customers
+- Timeframe: Sprint to quarterly
+
+## Validation Checklist
+
+Before finalizing a phase document:
+
+- [ ] Vision and strategic objectives are clearly defined
+- [ ] Themes are outcome-oriented, not just feature lists
+- [ ] Time horizons are flexible (especially for far-future items)
+- [ ] Prioritization uses data and frameworks, not just intuition
+- [ ] Dependencies and constraints are identified
+- [ ] Success metrics are defined for each theme/initiative
+- [ ] Risks are acknowledged with mitigation strategies
+- [ ] Review cadence and process are established
+- [ ] Phase document is tailored for different audiences
+- [ ] Phase document aligns with ERD priorities
+- [ ] Phase document can be traced to ERDs and tickets
+- [ ] Phase document follows naming convention (zero-padded number)
+- [ ] Phase document does not include status (status is implied by directory location)
