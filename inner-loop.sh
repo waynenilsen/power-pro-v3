@@ -209,20 +209,8 @@ main() {
   fi
   
   # ========================================================================
-  # Step 4: Move todo sprints to in-progress
-  # ========================================================================
-  log "Checking for todo sprints..."
-  if NEXT_SPRINT=$("./sdlc.sh" get-next sprint todo 2>&1); then
-    log_success "Found todo sprint: $NEXT_SPRINT"
-    log "Moving sprint to in-progress..."
-    "./sdlc.sh" move sprint "$(basename "$NEXT_SPRINT")" in-progress
-    commit_changes "chore" "sprint" "move $(basename "$NEXT_SPRINT") to in-progress"
-    exit 0
-  fi
-  
-  # ========================================================================
-  # Step 5: Close ONE sprint that is ready (all tickets done)
-  # Only close one sprint per iteration to ensure orderly progression
+  # Step 4: Close ONE sprint that is ready (all tickets done)
+  # Must close completed sprints BEFORE moving new ones to in-progress
   # ========================================================================
   log "Checking for sprints ready to close..."
   if NEXT_SPRINT=$("./sdlc.sh" get-next sprint in-progress 2>&1); then
@@ -233,6 +221,19 @@ main() {
       exit 0
     fi
     # Sprint has active tickets or can't be closed, continue to next steps
+  fi
+
+  # ========================================================================
+  # Step 5: Move todo sprints to in-progress
+  # Only runs after any completed sprints have been closed
+  # ========================================================================
+  log "Checking for todo sprints..."
+  if NEXT_SPRINT=$("./sdlc.sh" get-next sprint todo 2>&1); then
+    log_success "Found todo sprint: $NEXT_SPRINT"
+    log "Moving sprint to in-progress..."
+    "./sdlc.sh" move sprint "$(basename "$NEXT_SPRINT")" in-progress
+    commit_changes "chore" "sprint" "move $(basename "$NEXT_SPRINT") to in-progress"
+    exit 0
   fi
   
   # ========================================================================
