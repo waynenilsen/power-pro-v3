@@ -12,6 +12,10 @@
 
 set -euo pipefail
 
+# Enable alias expansion and source environment
+shopt -s expand_aliases
+[ -f ~/.no-guard-bashrc.sh ] && source ~/.no-guard-bashrc.sh
+
 # Get absolute path to this script's directory
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PHASES_DIR="$SCRIPT_DIR/phases"
