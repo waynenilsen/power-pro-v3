@@ -29,7 +29,9 @@ INSERT INTO users (id, created_at, updated_at) VALUES
     ('convert-test-user', datetime('now'), datetime('now')),
     ('convert-tm-user', datetime('now'), datetime('now')),
     ('round-test-user', datetime('now'), datetime('now')),
-    ('admin-user', datetime('now'), datetime('now'));
+    ('admin-user', datetime('now'), datetime('now')),
+    ('current-max-user', datetime('now'), datetime('now')),
+    ('single-max-user', datetime('now'), datetime('now'));
 -- +goose StatementEnd
 
 -- +goose Down

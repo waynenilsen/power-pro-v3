@@ -73,6 +73,7 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("DELETE /lifts/{id}", liftHandler.Delete)
 
 	// LiftMax routes
+	mux.HandleFunc("GET /users/{userId}/lift-maxes/current", liftMaxHandler.GetCurrent)
 	mux.HandleFunc("GET /users/{userId}/lift-maxes", liftMaxHandler.List)
 	mux.HandleFunc("GET /lift-maxes/{id}/convert", liftMaxHandler.Convert)
 	mux.HandleFunc("GET /lift-maxes/{id}", liftMaxHandler.Get)

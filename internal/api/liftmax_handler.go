@@ -361,6 +361,67 @@ type ConversionResponse struct {
 	Percentage     float64 `json:"percentage"`
 }
 
+// GetCurrent handles GET /users/{userId}/lift-maxes/current
+// Returns the most recent lift max for a user, lift, and type combination.
+func (h *LiftMaxHandler) GetCurrent(w http.ResponseWriter, r *http.Request) {
+	userID := r.PathValue("userId")
+	if userID == "" {
+		writeError(w, http.StatusBadRequest, "Missing user ID")
+		return
+	}
+
+	// Check authorization: requesting user must be owner or admin
+	requestingUserID := r.Header.Get("X-User-ID")
+	isAdmin := r.Header.Get("X-Admin") == "true"
+
+	if requestingUserID != userID && !isAdmin {
+		writeError(w, http.StatusForbidden, "Access denied: you do not have permission to access this resource")
+		return
+	}
+
+	// Parse and validate query parameters
+	query := r.URL.Query()
+
+	// lift is required
+	liftID := query.Get("lift")
+	if liftID == "" {
+		writeError(w, http.StatusBadRequest, "Missing required query parameter: lift")
+		return
+	}
+
+	// Validate lift is a valid UUID
+	if _, err := uuid.Parse(liftID); err != nil {
+		writeError(w, http.StatusBadRequest, "Invalid lift parameter: must be a valid UUID")
+		return
+	}
+
+	// type is required
+	maxType := strings.ToUpper(query.Get("type"))
+	if maxType == "" {
+		writeError(w, http.StatusBadRequest, "Missing required query parameter: type")
+		return
+	}
+
+	// Validate type
+	if maxType != string(liftmax.OneRM) && maxType != string(liftmax.TrainingMax) {
+		writeError(w, http.StatusBadRequest, "Invalid type parameter: must be ONE_RM or TRAINING_MAX")
+		return
+	}
+
+	// Query for the current max
+	m, err := h.repo.GetCurrentMax(userID, liftID, maxType)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "Failed to get current lift max")
+		return
+	}
+	if m == nil {
+		writeError(w, http.StatusNotFound, "No lift max found for the specified user, lift, and type")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, liftMaxToResponse(m))
+}
+
 // Convert handles GET /lift-maxes/{id}/convert
 // Converts a lift max between 1RM and Training Max without persisting.
 func (h *LiftMaxHandler) Convert(w http.ResponseWriter, r *http.Request) {

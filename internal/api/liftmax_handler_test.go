@@ -910,6 +910,316 @@ func TestConvertLiftMax(t *testing.T) {
 	})
 }
 
+func TestGetCurrentLiftMax(t *testing.T) {
+	ts, err := testutil.NewTestServer()
+	if err != nil {
+		t.Fatalf("Failed to create test server: %v", err)
+	}
+	defer ts.Close()
+
+	testUser := "current-max-user"
+	now := time.Now()
+	yesterday := now.Add(-24 * time.Hour)
+	lastWeek := now.Add(-7 * 24 * time.Hour)
+
+	// Create multiple maxes with different dates to test "most recent" logic
+	createMax(t, ts, testUser, testSquatID, "ONE_RM", 300.0, &lastWeek)
+	createMax(t, ts, testUser, testSquatID, "ONE_RM", 315.0, &yesterday)
+	mostRecent := createMax(t, ts, testUser, testSquatID, "ONE_RM", 320.0, &now)
+
+	// Also create a training max
+	createMax(t, ts, testUser, testSquatID, "TRAINING_MAX", 285.0, &yesterday)
+	mostRecentTM := createMax(t, ts, testUser, testSquatID, "TRAINING_MAX", 290.0, &now)
+
+	// Create max for a different lift
+	createMax(t, ts, testUser, testBenchID, "ONE_RM", 225.0, &now)
+
+	t.Run("returns most recent max for user/lift/type", func(t *testing.T) {
+		url := fmt.Sprintf("/users/%s/lift-maxes/current?lift=%s&type=ONE_RM", testUser, testSquatID)
+		req, _ := http.NewRequest(http.MethodGet, ts.URL(url), nil)
+		req.Header.Set("X-User-ID", testUser)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("Failed to make request: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			t.Fatalf("Expected status 200, got %d: %s", resp.StatusCode, body)
+		}
+
+		var max LiftMaxResponse
+		if err := json.NewDecoder(resp.Body).Decode(&max); err != nil {
+			t.Fatalf("Failed to decode response: %v", err)
+		}
+
+		if max.ID != mostRecent.ID {
+			t.Errorf("Expected most recent max ID %s, got %s", mostRecent.ID, max.ID)
+		}
+		if max.Value != 320.0 {
+			t.Errorf("Expected value 320.0, got %f", max.Value)
+		}
+		if max.Type != "ONE_RM" {
+			t.Errorf("Expected type ONE_RM, got %s", max.Type)
+		}
+	})
+
+	t.Run("returns most recent training max", func(t *testing.T) {
+		url := fmt.Sprintf("/users/%s/lift-maxes/current?lift=%s&type=TRAINING_MAX", testUser, testSquatID)
+		req, _ := http.NewRequest(http.MethodGet, ts.URL(url), nil)
+		req.Header.Set("X-User-ID", testUser)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("Failed to make request: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("Expected status 200, got %d", resp.StatusCode)
+		}
+
+		var max LiftMaxResponse
+		json.NewDecoder(resp.Body).Decode(&max)
+
+		if max.ID != mostRecentTM.ID {
+			t.Errorf("Expected most recent TM ID %s, got %s", mostRecentTM.ID, max.ID)
+		}
+		if max.Value != 290.0 {
+			t.Errorf("Expected value 290.0, got %f", max.Value)
+		}
+	})
+
+	t.Run("returns correct max for different lift", func(t *testing.T) {
+		url := fmt.Sprintf("/users/%s/lift-maxes/current?lift=%s&type=ONE_RM", testUser, testBenchID)
+		req, _ := http.NewRequest(http.MethodGet, ts.URL(url), nil)
+		req.Header.Set("X-User-ID", testUser)
+		resp, _ := http.DefaultClient.Do(req)
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("Expected status 200, got %d", resp.StatusCode)
+		}
+
+		var max LiftMaxResponse
+		json.NewDecoder(resp.Body).Decode(&max)
+
+		if max.LiftID != testBenchID {
+			t.Errorf("Expected lift %s, got %s", testBenchID, max.LiftID)
+		}
+		if max.Value != 225.0 {
+			t.Errorf("Expected value 225.0, got %f", max.Value)
+		}
+	})
+
+	t.Run("returns 404 when no max exists for combination", func(t *testing.T) {
+		// Query for a lift that doesn't have any maxes
+		nonExistentLift := "11111111-1111-1111-1111-111111111111"
+		url := fmt.Sprintf("/users/%s/lift-maxes/current?lift=%s&type=ONE_RM", testUser, nonExistentLift)
+		req, _ := http.NewRequest(http.MethodGet, ts.URL(url), nil)
+		req.Header.Set("X-User-ID", testUser)
+		resp, _ := http.DefaultClient.Do(req)
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusNotFound {
+			t.Errorf("Expected status 404, got %d", resp.StatusCode)
+		}
+
+		var errResp ErrorResponse
+		json.NewDecoder(resp.Body).Decode(&errResp)
+		if errResp.Error != "No lift max found for the specified user, lift, and type" {
+			t.Errorf("Expected specific error message, got: %s", errResp.Error)
+		}
+	})
+
+	t.Run("returns 404 when user has no maxes for this type", func(t *testing.T) {
+		// User exists but doesn't have a TRAINING_MAX for bench
+		url := fmt.Sprintf("/users/%s/lift-maxes/current?lift=%s&type=TRAINING_MAX", testUser, testBenchID)
+		req, _ := http.NewRequest(http.MethodGet, ts.URL(url), nil)
+		req.Header.Set("X-User-ID", testUser)
+		resp, _ := http.DefaultClient.Do(req)
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusNotFound {
+			t.Errorf("Expected status 404, got %d", resp.StatusCode)
+		}
+	})
+
+	t.Run("returns 400 when lift param is missing", func(t *testing.T) {
+		url := fmt.Sprintf("/users/%s/lift-maxes/current?type=ONE_RM", testUser)
+		req, _ := http.NewRequest(http.MethodGet, ts.URL(url), nil)
+		req.Header.Set("X-User-ID", testUser)
+		resp, _ := http.DefaultClient.Do(req)
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusBadRequest {
+			t.Errorf("Expected status 400, got %d", resp.StatusCode)
+		}
+
+		var errResp ErrorResponse
+		json.NewDecoder(resp.Body).Decode(&errResp)
+		if errResp.Error != "Missing required query parameter: lift" {
+			t.Errorf("Expected error about missing lift, got: %s", errResp.Error)
+		}
+	})
+
+	t.Run("returns 400 when lift param is invalid UUID", func(t *testing.T) {
+		url := fmt.Sprintf("/users/%s/lift-maxes/current?lift=not-a-uuid&type=ONE_RM", testUser)
+		req, _ := http.NewRequest(http.MethodGet, ts.URL(url), nil)
+		req.Header.Set("X-User-ID", testUser)
+		resp, _ := http.DefaultClient.Do(req)
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusBadRequest {
+			t.Errorf("Expected status 400, got %d", resp.StatusCode)
+		}
+
+		var errResp ErrorResponse
+		json.NewDecoder(resp.Body).Decode(&errResp)
+		if errResp.Error != "Invalid lift parameter: must be a valid UUID" {
+			t.Errorf("Expected error about invalid UUID, got: %s", errResp.Error)
+		}
+	})
+
+	t.Run("returns 400 when type param is missing", func(t *testing.T) {
+		url := fmt.Sprintf("/users/%s/lift-maxes/current?lift=%s", testUser, testSquatID)
+		req, _ := http.NewRequest(http.MethodGet, ts.URL(url), nil)
+		req.Header.Set("X-User-ID", testUser)
+		resp, _ := http.DefaultClient.Do(req)
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusBadRequest {
+			t.Errorf("Expected status 400, got %d", resp.StatusCode)
+		}
+
+		var errResp ErrorResponse
+		json.NewDecoder(resp.Body).Decode(&errResp)
+		if errResp.Error != "Missing required query parameter: type" {
+			t.Errorf("Expected error about missing type, got: %s", errResp.Error)
+		}
+	})
+
+	t.Run("returns 400 when type param is invalid", func(t *testing.T) {
+		url := fmt.Sprintf("/users/%s/lift-maxes/current?lift=%s&type=INVALID", testUser, testSquatID)
+		req, _ := http.NewRequest(http.MethodGet, ts.URL(url), nil)
+		req.Header.Set("X-User-ID", testUser)
+		resp, _ := http.DefaultClient.Do(req)
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusBadRequest {
+			t.Errorf("Expected status 400, got %d", resp.StatusCode)
+		}
+
+		var errResp ErrorResponse
+		json.NewDecoder(resp.Body).Decode(&errResp)
+		if errResp.Error != "Invalid type parameter: must be ONE_RM or TRAINING_MAX" {
+			t.Errorf("Expected error about invalid type, got: %s", errResp.Error)
+		}
+	})
+
+	t.Run("accepts lowercase type parameter", func(t *testing.T) {
+		url := fmt.Sprintf("/users/%s/lift-maxes/current?lift=%s&type=one_rm", testUser, testSquatID)
+		req, _ := http.NewRequest(http.MethodGet, ts.URL(url), nil)
+		req.Header.Set("X-User-ID", testUser)
+		resp, _ := http.DefaultClient.Do(req)
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			t.Errorf("Expected status 200 for lowercase type, got %d: %s", resp.StatusCode, body)
+		}
+	})
+
+	t.Run("returns 403 when requesting user is not owner", func(t *testing.T) {
+		url := fmt.Sprintf("/users/%s/lift-maxes/current?lift=%s&type=ONE_RM", testUser, testSquatID)
+		req, _ := http.NewRequest(http.MethodGet, ts.URL(url), nil)
+		req.Header.Set("X-User-ID", "different-user")
+		resp, _ := http.DefaultClient.Do(req)
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusForbidden {
+			t.Errorf("Expected status 403, got %d", resp.StatusCode)
+		}
+	})
+
+	t.Run("returns 403 when no user context provided", func(t *testing.T) {
+		url := fmt.Sprintf("/users/%s/lift-maxes/current?lift=%s&type=ONE_RM", testUser, testSquatID)
+		req, _ := http.NewRequest(http.MethodGet, ts.URL(url), nil)
+		// No X-User-ID header set
+		resp, _ := http.DefaultClient.Do(req)
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusForbidden {
+			t.Errorf("Expected status 403, got %d", resp.StatusCode)
+		}
+	})
+
+	t.Run("allows admin to access any user's current max", func(t *testing.T) {
+		url := fmt.Sprintf("/users/%s/lift-maxes/current?lift=%s&type=ONE_RM", testUser, testSquatID)
+		req, _ := http.NewRequest(http.MethodGet, ts.URL(url), nil)
+		req.Header.Set("X-User-ID", "admin-user")
+		req.Header.Set("X-Admin", "true")
+		resp, _ := http.DefaultClient.Do(req)
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			t.Errorf("Expected status 200 for admin, got %d: %s", resp.StatusCode, body)
+		}
+	})
+
+	t.Run("returns full lift max object with correct fields", func(t *testing.T) {
+		url := fmt.Sprintf("/users/%s/lift-maxes/current?lift=%s&type=ONE_RM", testUser, testSquatID)
+		req, _ := http.NewRequest(http.MethodGet, ts.URL(url), nil)
+		req.Header.Set("X-User-ID", testUser)
+		resp, _ := http.DefaultClient.Do(req)
+		defer resp.Body.Close()
+
+		body, _ := io.ReadAll(resp.Body)
+		bodyStr := string(body)
+
+		// Verify all expected fields are present
+		expectedFields := []string{
+			`"id"`,
+			`"userId"`,
+			`"liftId"`,
+			`"type"`,
+			`"value"`,
+			`"effectiveDate"`,
+			`"createdAt"`,
+			`"updatedAt"`,
+		}
+
+		for _, field := range expectedFields {
+			if !bytes.Contains(body, []byte(field)) {
+				t.Errorf("Expected field %s in response, body: %s", field, bodyStr)
+			}
+		}
+	})
+
+	t.Run("works with single max record", func(t *testing.T) {
+		singleUser := "single-max-user"
+		single := createMax(t, ts, singleUser, testSquatID, "ONE_RM", 405.0, nil)
+
+		url := fmt.Sprintf("/users/%s/lift-maxes/current?lift=%s&type=ONE_RM", singleUser, testSquatID)
+		req, _ := http.NewRequest(http.MethodGet, ts.URL(url), nil)
+		req.Header.Set("X-User-ID", singleUser)
+		resp, _ := http.DefaultClient.Do(req)
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("Expected status 200, got %d", resp.StatusCode)
+		}
+
+		var max LiftMaxResponse
+		json.NewDecoder(resp.Body).Decode(&max)
+
+		if max.ID != single.ID {
+			t.Errorf("Expected max ID %s, got %s", single.ID, max.ID)
+		}
+	})
+}
+
 // Helper function to create a lift max for testing
 func createMax(t *testing.T, ts *testutil.TestServer, userID, liftID, maxType string, value float64, effectiveDate *time.Time) LiftMaxResponse {
 	t.Helper()
