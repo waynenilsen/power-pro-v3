@@ -21,12 +21,17 @@ type Querier interface {
 	CountLiftsFilteredByCompetition(ctx context.Context, isCompetitionLift int64) (int64, error)
 	CountPrescriptions(ctx context.Context) (int64, error)
 	CountPrescriptionsFilterLift(ctx context.Context, liftID string) (int64, error)
+	CountWeekDays(ctx context.Context, weekID string) (int64, error)
+	CountWeeks(ctx context.Context) (int64, error)
+	CountWeeksFilteredByCycle(ctx context.Context, cycleID string) (int64, error)
 	CreateDay(ctx context.Context, arg CreateDayParams) error
 	CreateDayPrescription(ctx context.Context, arg CreateDayPrescriptionParams) error
 	CreateLift(ctx context.Context, arg CreateLiftParams) error
 	CreateLiftMax(ctx context.Context, arg CreateLiftMaxParams) error
 	CreatePrescription(ctx context.Context, arg CreatePrescriptionParams) error
 	CreateUser(ctx context.Context, arg CreateUserParams) error
+	CreateWeek(ctx context.Context, arg CreateWeekParams) error
+	CreateWeekDay(ctx context.Context, arg CreateWeekDayParams) error
 	DayIsUsedInWeeks(ctx context.Context, dayID string) (int64, error)
 	DaySlugExists(ctx context.Context, arg DaySlugExistsParams) (int64, error)
 	DaySlugExistsForNew(ctx context.Context, arg DaySlugExistsForNewParams) (int64, error)
@@ -38,8 +43,12 @@ type Querier interface {
 	DeleteLift(ctx context.Context, id string) error
 	DeleteLiftMax(ctx context.Context, id string) error
 	DeletePrescription(ctx context.Context, id string) error
+	DeleteWeek(ctx context.Context, id string) error
+	DeleteWeekDay(ctx context.Context, id string) error
+	DeleteWeekDayByWeekAndDay(ctx context.Context, arg DeleteWeekDayByWeekAndDayParams) error
 	GetCurrentMax(ctx context.Context, arg GetCurrentMaxParams) (LiftMax, error)
 	GetCurrentOneRM(ctx context.Context, arg GetCurrentOneRMParams) (LiftMax, error)
+	GetCycleByID(ctx context.Context, id string) (Cycle, error)
 	GetDay(ctx context.Context, id string) (Day, error)
 	GetDayBySlug(ctx context.Context, arg GetDayBySlugParams) (Day, error)
 	// Day Prescriptions queries
@@ -51,6 +60,10 @@ type Querier interface {
 	GetMaxDayPrescriptionOrder(ctx context.Context, dayID string) (interface{}, error)
 	GetPrescription(ctx context.Context, id string) (Prescription, error)
 	GetUser(ctx context.Context, id string) (User, error)
+	GetWeek(ctx context.Context, id string) (Week, error)
+	// Week Days queries
+	GetWeekDay(ctx context.Context, id string) (WeekDay, error)
+	GetWeekDayByWeekAndDayAndDayOfWeek(ctx context.Context, arg GetWeekDayByWeekAndDayAndDayOfWeekParams) (WeekDay, error)
 	LiftHasChildReferences(ctx context.Context, parentLiftID sql.NullString) (int64, error)
 	LiftHasMaxReferences(ctx context.Context, liftID string) (int64, error)
 	LiftHasPrescriptionReferences(ctx context.Context, liftID string) (int64, error)
@@ -87,6 +100,15 @@ type Querier interface {
 	ListPrescriptionsFilterLiftByCreatedAtDesc(ctx context.Context, arg ListPrescriptionsFilterLiftByCreatedAtDescParams) ([]Prescription, error)
 	ListPrescriptionsFilterLiftByOrderAsc(ctx context.Context, arg ListPrescriptionsFilterLiftByOrderAscParams) ([]Prescription, error)
 	ListPrescriptionsFilterLiftByOrderDesc(ctx context.Context, arg ListPrescriptionsFilterLiftByOrderDescParams) ([]Prescription, error)
+	ListWeekDays(ctx context.Context, weekID string) ([]WeekDay, error)
+	ListWeeksByCreatedAtAsc(ctx context.Context, arg ListWeeksByCreatedAtAscParams) ([]Week, error)
+	ListWeeksByCreatedAtDesc(ctx context.Context, arg ListWeeksByCreatedAtDescParams) ([]Week, error)
+	ListWeeksByWeekNumberAsc(ctx context.Context, arg ListWeeksByWeekNumberAscParams) ([]Week, error)
+	ListWeeksByWeekNumberDesc(ctx context.Context, arg ListWeeksByWeekNumberDescParams) ([]Week, error)
+	ListWeeksFilteredByCycleByCreatedAtAsc(ctx context.Context, arg ListWeeksFilteredByCycleByCreatedAtAscParams) ([]Week, error)
+	ListWeeksFilteredByCycleByCreatedAtDesc(ctx context.Context, arg ListWeeksFilteredByCycleByCreatedAtDescParams) ([]Week, error)
+	ListWeeksFilteredByCycleByWeekNumberAsc(ctx context.Context, arg ListWeeksFilteredByCycleByWeekNumberAscParams) ([]Week, error)
+	ListWeeksFilteredByCycleByWeekNumberDesc(ctx context.Context, arg ListWeeksFilteredByCycleByWeekNumberDescParams) ([]Week, error)
 	SlugExists(ctx context.Context, arg SlugExistsParams) (int64, error)
 	SlugExistsForNew(ctx context.Context, slug string) (int64, error)
 	UniqueConstraintExists(ctx context.Context, arg UniqueConstraintExistsParams) (int64, error)
@@ -96,6 +118,10 @@ type Querier interface {
 	UpdateLift(ctx context.Context, arg UpdateLiftParams) error
 	UpdateLiftMax(ctx context.Context, arg UpdateLiftMaxParams) error
 	UpdatePrescription(ctx context.Context, arg UpdatePrescriptionParams) error
+	UpdateWeek(ctx context.Context, arg UpdateWeekParams) error
+	WeekIsUsedInActiveCycle(ctx context.Context, id string) (int64, error)
+	WeekNumberExistsInCycle(ctx context.Context, arg WeekNumberExistsInCycleParams) (int64, error)
+	WeekNumberExistsInCycleForNew(ctx context.Context, arg WeekNumberExistsInCycleForNewParams) (int64, error)
 }
 
 var _ Querier = (*Queries)(nil)

@@ -30,6 +30,7 @@ type Server struct {
 	liftMaxRepo      *repository.LiftMaxRepository
 	prescriptionRepo *repository.PrescriptionRepository
 	dayRepo          *repository.DayRepository
+	weekRepo         *repository.WeekRepository
 	strategyFactory  *loadstrategy.StrategyFactory
 	schemeFactory    *setscheme.SchemeFactory
 }
@@ -49,6 +50,7 @@ func New(cfg Config) *Server {
 
 	prescriptionRepo := repository.NewPrescriptionRepository(cfg.DB, strategyFactory, schemeFactory)
 	dayRepo := repository.NewDayRepository(cfg.DB)
+	weekRepo := repository.NewWeekRepository(cfg.DB)
 
 	s := &Server{
 		config:           cfg,
@@ -56,6 +58,7 @@ func New(cfg Config) *Server {
 		liftMaxRepo:      liftMaxRepo,
 		prescriptionRepo: prescriptionRepo,
 		dayRepo:          dayRepo,
+		weekRepo:         weekRepo,
 		strategyFactory:  strategyFactory,
 		schemeFactory:    schemeFactory,
 	}
@@ -81,6 +84,7 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	liftMaxHandler := api.NewLiftMaxHandler(s.liftMaxRepo, s.liftRepo)
 	prescriptionHandler := api.NewPrescriptionHandler(s.prescriptionRepo, s.liftRepo, s.liftMaxRepo, s.strategyFactory, s.schemeFactory)
 	dayHandler := api.NewDayHandler(s.dayRepo, s.prescriptionRepo)
+	weekHandler := api.NewWeekHandler(s.weekRepo)
 
 	// Auth middleware configuration
 	authCfg := middleware.AuthConfig{
@@ -168,6 +172,17 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	mux.Handle("POST /days/{id}/prescriptions", withAdmin(dayHandler.AddPrescription))
 	mux.Handle("DELETE /days/{id}/prescriptions/{prescriptionId}", withAdmin(dayHandler.RemovePrescription))
 	mux.Handle("PUT /days/{id}/prescriptions/reorder", withAdmin(dayHandler.ReorderPrescriptions))
+
+	// Week routes:
+	// - All authenticated users can read week data
+	// - Only admins can create/update/delete weeks and manage day mappings
+	mux.Handle("GET /weeks", withAuth(weekHandler.List))
+	mux.Handle("GET /weeks/{id}", withAuth(weekHandler.Get))
+	mux.Handle("POST /weeks", withAdmin(weekHandler.Create))
+	mux.Handle("PUT /weeks/{id}", withAdmin(weekHandler.Update))
+	mux.Handle("DELETE /weeks/{id}", withAdmin(weekHandler.Delete))
+	mux.Handle("POST /weeks/{id}/days", withAdmin(weekHandler.AddDay))
+	mux.Handle("DELETE /weeks/{id}/days/{dayId}", withAdmin(weekHandler.RemoveDay))
 }
 
 // Start starts the HTTP server.
