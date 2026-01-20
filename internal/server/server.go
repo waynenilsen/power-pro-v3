@@ -31,6 +31,7 @@ type Server struct {
 	prescriptionRepo *repository.PrescriptionRepository
 	dayRepo          *repository.DayRepository
 	weekRepo         *repository.WeekRepository
+	cycleRepo        *repository.CycleRepository
 	strategyFactory  *loadstrategy.StrategyFactory
 	schemeFactory    *setscheme.SchemeFactory
 }
@@ -51,6 +52,7 @@ func New(cfg Config) *Server {
 	prescriptionRepo := repository.NewPrescriptionRepository(cfg.DB, strategyFactory, schemeFactory)
 	dayRepo := repository.NewDayRepository(cfg.DB)
 	weekRepo := repository.NewWeekRepository(cfg.DB)
+	cycleRepo := repository.NewCycleRepository(cfg.DB)
 
 	s := &Server{
 		config:           cfg,
@@ -59,6 +61,7 @@ func New(cfg Config) *Server {
 		prescriptionRepo: prescriptionRepo,
 		dayRepo:          dayRepo,
 		weekRepo:         weekRepo,
+		cycleRepo:        cycleRepo,
 		strategyFactory:  strategyFactory,
 		schemeFactory:    schemeFactory,
 	}
@@ -85,6 +88,7 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	prescriptionHandler := api.NewPrescriptionHandler(s.prescriptionRepo, s.liftRepo, s.liftMaxRepo, s.strategyFactory, s.schemeFactory)
 	dayHandler := api.NewDayHandler(s.dayRepo, s.prescriptionRepo)
 	weekHandler := api.NewWeekHandler(s.weekRepo)
+	cycleHandler := api.NewCycleHandler(s.cycleRepo)
 
 	// Auth middleware configuration
 	authCfg := middleware.AuthConfig{
@@ -183,6 +187,15 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	mux.Handle("DELETE /weeks/{id}", withAdmin(weekHandler.Delete))
 	mux.Handle("POST /weeks/{id}/days", withAdmin(weekHandler.AddDay))
 	mux.Handle("DELETE /weeks/{id}/days/{dayId}", withAdmin(weekHandler.RemoveDay))
+
+	// Cycle routes:
+	// - All authenticated users can read cycle data
+	// - Only admins can create/update/delete cycles
+	mux.Handle("GET /cycles", withAuth(cycleHandler.List))
+	mux.Handle("GET /cycles/{id}", withAuth(cycleHandler.Get))
+	mux.Handle("POST /cycles", withAdmin(cycleHandler.Create))
+	mux.Handle("PUT /cycles/{id}", withAdmin(cycleHandler.Update))
+	mux.Handle("DELETE /cycles/{id}", withAdmin(cycleHandler.Delete))
 }
 
 // Start starts the HTTP server.
