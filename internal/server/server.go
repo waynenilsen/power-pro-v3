@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/waynenilsen/power-pro-v3/internal/api"
+	"github.com/waynenilsen/power-pro-v3/internal/domain/loadstrategy"
+	"github.com/waynenilsen/power-pro-v3/internal/domain/setscheme"
 	"github.com/waynenilsen/power-pro-v3/internal/middleware"
 	"github.com/waynenilsen/power-pro-v3/internal/repository"
 )
@@ -22,10 +24,13 @@ type Config struct {
 
 // Server represents the HTTP server.
 type Server struct {
-	config      Config
-	httpServer  *http.Server
-	liftRepo    *repository.LiftRepository
-	liftMaxRepo *repository.LiftMaxRepository
+	config           Config
+	httpServer       *http.Server
+	liftRepo         *repository.LiftRepository
+	liftMaxRepo      *repository.LiftMaxRepository
+	prescriptionRepo *repository.PrescriptionRepository
+	strategyFactory  *loadstrategy.StrategyFactory
+	schemeFactory    *setscheme.SchemeFactory
 }
 
 // New creates a new Server instance.
@@ -33,10 +38,23 @@ func New(cfg Config) *Server {
 	liftRepo := repository.NewLiftRepository(cfg.DB)
 	liftMaxRepo := repository.NewLiftMaxRepository(cfg.DB)
 
+	// Create strategy and scheme factories with registered types
+	strategyFactory := loadstrategy.NewStrategyFactory()
+	loadstrategy.RegisterPercentOf(strategyFactory)
+
+	schemeFactory := setscheme.NewSchemeFactory()
+	setscheme.RegisterFixedScheme(schemeFactory)
+	setscheme.RegisterRampScheme(schemeFactory)
+
+	prescriptionRepo := repository.NewPrescriptionRepository(cfg.DB, strategyFactory, schemeFactory)
+
 	s := &Server{
-		config:      cfg,
-		liftRepo:    liftRepo,
-		liftMaxRepo: liftMaxRepo,
+		config:           cfg,
+		liftRepo:         liftRepo,
+		liftMaxRepo:      liftMaxRepo,
+		prescriptionRepo: prescriptionRepo,
+		strategyFactory:  strategyFactory,
+		schemeFactory:    schemeFactory,
 	}
 
 	mux := http.NewServeMux()
@@ -58,6 +76,7 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	// Create handlers
 	liftHandler := api.NewLiftHandler(s.liftRepo)
 	liftMaxHandler := api.NewLiftMaxHandler(s.liftMaxRepo, s.liftRepo)
+	prescriptionHandler := api.NewPrescriptionHandler(s.prescriptionRepo, s.liftRepo, s.strategyFactory, s.schemeFactory)
 
 	// Auth middleware configuration
 	authCfg := middleware.AuthConfig{
@@ -120,6 +139,15 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	mux.Handle("POST /users/{userId}/lift-maxes", liftMaxOwnerCheck(liftMaxHandler.Create))
 	mux.Handle("PUT /lift-maxes/{id}", withAuth(liftMaxHandler.Update))
 	mux.Handle("DELETE /lift-maxes/{id}", withAuth(liftMaxHandler.Delete))
+
+	// Prescription routes:
+	// - All authenticated users can read prescription data
+	// - Only admins can create/update/delete prescriptions
+	mux.Handle("GET /prescriptions", withAuth(prescriptionHandler.List))
+	mux.Handle("GET /prescriptions/{id}", withAuth(prescriptionHandler.Get))
+	mux.Handle("POST /prescriptions", withAdmin(prescriptionHandler.Create))
+	mux.Handle("PUT /prescriptions/{id}", withAdmin(prescriptionHandler.Update))
+	mux.Handle("DELETE /prescriptions/{id}", withAdmin(prescriptionHandler.Delete))
 }
 
 // Start starts the HTTP server.

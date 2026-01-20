@@ -29,6 +29,18 @@ type LiftMax struct {
 	UpdatedAt     string  `json:"updated_at"`
 }
 
+type Prescription struct {
+	ID           string         `json:"id"`
+	LiftID       string         `json:"lift_id"`
+	LoadStrategy string         `json:"load_strategy"`
+	SetScheme    string         `json:"set_scheme"`
+	Order        int64          `json:"order"`
+	Notes        sql.NullString `json:"notes"`
+	RestSeconds  sql.NullInt64  `json:"rest_seconds"`
+	CreatedAt    string         `json:"created_at"`
+	UpdatedAt    string         `json:"updated_at"`
+}
+
 type User struct {
 	ID        string `json:"id"`
 	CreatedAt string `json:"created_at"`

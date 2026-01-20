@@ -16,19 +16,25 @@ type Querier interface {
 	CountLiftMaxesByUserFilterType(ctx context.Context, arg CountLiftMaxesByUserFilterTypeParams) (int64, error)
 	CountLifts(ctx context.Context) (int64, error)
 	CountLiftsFilteredByCompetition(ctx context.Context, isCompetitionLift int64) (int64, error)
+	CountPrescriptions(ctx context.Context) (int64, error)
+	CountPrescriptionsFilterLift(ctx context.Context, liftID string) (int64, error)
 	CreateLift(ctx context.Context, arg CreateLiftParams) error
 	CreateLiftMax(ctx context.Context, arg CreateLiftMaxParams) error
+	CreatePrescription(ctx context.Context, arg CreatePrescriptionParams) error
 	CreateUser(ctx context.Context, arg CreateUserParams) error
 	DeleteLift(ctx context.Context, id string) error
 	DeleteLiftMax(ctx context.Context, id string) error
+	DeletePrescription(ctx context.Context, id string) error
 	GetCurrentMax(ctx context.Context, arg GetCurrentMaxParams) (LiftMax, error)
 	GetCurrentOneRM(ctx context.Context, arg GetCurrentOneRMParams) (LiftMax, error)
 	GetLift(ctx context.Context, id string) (Lift, error)
 	GetLiftBySlug(ctx context.Context, slug string) (Lift, error)
 	GetLiftMax(ctx context.Context, id string) (LiftMax, error)
+	GetPrescription(ctx context.Context, id string) (Prescription, error)
 	GetUser(ctx context.Context, id string) (User, error)
 	LiftHasChildReferences(ctx context.Context, parentLiftID sql.NullString) (int64, error)
 	LiftHasMaxReferences(ctx context.Context, liftID string) (int64, error)
+	LiftHasPrescriptionReferences(ctx context.Context, liftID string) (int64, error)
 	ListLiftMaxesByUserByEffectiveDateAsc(ctx context.Context, arg ListLiftMaxesByUserByEffectiveDateAscParams) ([]LiftMax, error)
 	ListLiftMaxesByUserByEffectiveDateDesc(ctx context.Context, arg ListLiftMaxesByUserByEffectiveDateDescParams) ([]LiftMax, error)
 	ListLiftMaxesByUserFilterLiftAndTypeByEffectiveDateAsc(ctx context.Context, arg ListLiftMaxesByUserFilterLiftAndTypeByEffectiveDateAscParams) ([]LiftMax, error)
@@ -45,12 +51,21 @@ type Querier interface {
 	ListLiftsFilteredByCompetitionByCreatedAtDesc(ctx context.Context, arg ListLiftsFilteredByCompetitionByCreatedAtDescParams) ([]Lift, error)
 	ListLiftsFilteredByCompetitionByNameAsc(ctx context.Context, arg ListLiftsFilteredByCompetitionByNameAscParams) ([]Lift, error)
 	ListLiftsFilteredByCompetitionByNameDesc(ctx context.Context, arg ListLiftsFilteredByCompetitionByNameDescParams) ([]Lift, error)
+	ListPrescriptionsByCreatedAtAsc(ctx context.Context, arg ListPrescriptionsByCreatedAtAscParams) ([]Prescription, error)
+	ListPrescriptionsByCreatedAtDesc(ctx context.Context, arg ListPrescriptionsByCreatedAtDescParams) ([]Prescription, error)
+	ListPrescriptionsByOrderAsc(ctx context.Context, arg ListPrescriptionsByOrderAscParams) ([]Prescription, error)
+	ListPrescriptionsByOrderDesc(ctx context.Context, arg ListPrescriptionsByOrderDescParams) ([]Prescription, error)
+	ListPrescriptionsFilterLiftByCreatedAtAsc(ctx context.Context, arg ListPrescriptionsFilterLiftByCreatedAtAscParams) ([]Prescription, error)
+	ListPrescriptionsFilterLiftByCreatedAtDesc(ctx context.Context, arg ListPrescriptionsFilterLiftByCreatedAtDescParams) ([]Prescription, error)
+	ListPrescriptionsFilterLiftByOrderAsc(ctx context.Context, arg ListPrescriptionsFilterLiftByOrderAscParams) ([]Prescription, error)
+	ListPrescriptionsFilterLiftByOrderDesc(ctx context.Context, arg ListPrescriptionsFilterLiftByOrderDescParams) ([]Prescription, error)
 	SlugExists(ctx context.Context, arg SlugExistsParams) (int64, error)
 	SlugExistsForNew(ctx context.Context, slug string) (int64, error)
 	UniqueConstraintExists(ctx context.Context, arg UniqueConstraintExistsParams) (int64, error)
 	UniqueConstraintExistsExcluding(ctx context.Context, arg UniqueConstraintExistsExcludingParams) (int64, error)
 	UpdateLift(ctx context.Context, arg UpdateLiftParams) error
 	UpdateLiftMax(ctx context.Context, arg UpdateLiftMaxParams) error
+	UpdatePrescription(ctx context.Context, arg UpdatePrescriptionParams) error
 }
 
 var _ Querier = (*Queries)(nil)
