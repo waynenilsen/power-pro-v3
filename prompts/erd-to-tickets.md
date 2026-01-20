@@ -120,6 +120,53 @@ Ticket 002: Implement user registration API
 
 See `tech-stack.md` and `ticket-system.md` for more details.
 
+## Using sdlc.sh for Ticket Management
+
+All ticket operations should use the `sdlc.sh` script rather than manually moving files. This ensures consistency and proper tracking.
+
+### Creating Tickets
+- Create ticket files directly in `tickets/todo/` directory with the naming format `NNN-description.md`
+- Use zero-padded numbers (001, 002, etc.) for proper lexicographical sorting
+- The ticket will be automatically discovered by `sdlc.sh`
+
+### Moving Tickets Between States
+Use `sdlc.sh move` command to move tickets:
+
+```bash
+# Move ticket to in-progress
+./sdlc.sh move ticket 001 in-progress
+
+# Move ticket to done
+./sdlc.sh move ticket 001 done
+
+# Move ticket to not-doing (if requirements removed)
+./sdlc.sh move ticket 001 not-doing
+```
+
+### Finding Tickets
+Use `sdlc.sh get-next` to find tickets:
+
+```bash
+# Get next todo ticket
+./sdlc.sh get-next ticket todo
+
+# Get next in-progress ticket
+./sdlc.sh get-next ticket in-progress
+```
+
+### Listing Tickets
+Use `sdlc.sh list` to see all tickets in a state:
+
+```bash
+# List all todo tickets
+./sdlc.sh list ticket todo
+
+# List all in-progress tickets
+./sdlc.sh list ticket in-progress
+```
+
+**Important**: Always use `sdlc.sh` commands rather than manually moving files between directories. This ensures the system maintains proper state tracking.
+
 ## Ticket Creation Process
 
 ### Step 1: Review ERD Requirements
@@ -152,6 +199,36 @@ See `tech-stack.md` and `ticket-system.md` for more details.
 - Respect ERD priorities (Must/Should/Could/Won't)
 - Consider technical dependencies
 - Balance high-value work with foundational work
+
+### Step 7: Commit and Push Changes
+After creating all tickets, commit and push the changes using conventional commits:
+
+```bash
+# Stage all changes (ticket files are file-based, so use git add . to catch everything)
+git add .
+
+# Commit using conventional commit format
+git commit -m "feat(tickets): break down ERD-XXX into implementation tickets
+
+- Created N tickets for [brief description of what was broken down]
+- All tickets reference ERD requirements
+- Dependencies documented between tickets"
+
+# Push to remote repository
+git push
+```
+
+**Conventional Commit Format**:
+- **Type**: `feat` (for new tickets), `docs` (if only documentation), `refactor` (if reorganizing)
+- **Scope**: `tickets` (always use this for ticket creation)
+- **Description**: Brief summary of what was done
+- **Body**: List key details about the tickets created
+
+**Important**: 
+- Always use `git add .` to ensure all ticket files are staged (file-based changes can be easy to miss)
+- Use descriptive commit messages that reference the ERD number
+- Include a count of tickets created in the commit message
+- Push immediately after committing to ensure changes are saved
 
 ## Ticket Content Template
 
@@ -217,7 +294,7 @@ When ERD requirements change:
 2. **Update or create tickets**: 
    - Update existing tickets if requirements refined
    - Create new tickets if requirements added
-   - Move tickets to `not-doing/` if requirements removed
+   - Move tickets to `not-doing/` using `./sdlc.sh move ticket <number> not-doing` if requirements removed
 3. **Review dependencies**: Check if changes affect ticket dependencies
 4. **Update acceptance criteria**: Ensure ticket criteria match updated ERD requirements
 
@@ -277,3 +354,5 @@ Before considering ERD breakdown complete:
 - [ ] Tickets are appropriately sized (not too large, not too small)
 - [ ] Related tickets are grouped logically
 - [ ] Non-functional requirements have corresponding tickets
+- [ ] All ticket files have been committed using conventional commits
+- [ ] Changes have been pushed to the remote repository
