@@ -28,7 +28,7 @@ shopt -s expand_aliases
 
 PROMPT="$1"
 
-claude -p "$PROMPT" \
+claude -p "$PROMPT if you have created any files, you must commit and push them using conventional commits, update gitignore if needed, this is a unit of work for you." \
   --dangerously-skip-permissions \
   --output-format stream-json \
   --verbose | cclean
