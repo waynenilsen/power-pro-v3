@@ -4,6 +4,8 @@ Read the README to learn more about what we are doing. This project is PowerPro.
 
 If you are working on a ticket, ERD, PRD, or roadmap Phase you must use sdlc.sh to manipulate those objects.
 
+If you are told to work on a ticket and it is complete then you must use sdlc.sh to update that status.
+
 ## Ticket System
 [Ticket System](./prompts/ticket-system.md)
 
