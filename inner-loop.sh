@@ -43,6 +43,33 @@ log_warning() {
   echo -e "${YELLOW}[inner-loop]${NC} $*"
 }
 
+# Commit, add, and push changes with conventional commit format
+commit_changes() {
+  local type="$1"      # feat, chore, etc.
+  local scope="$2"     # ticket, sprint, phase
+  local description="$3"
+  local body="${4:-}"
+  
+  # Check if there are any changes to commit
+  if ! git diff --quiet || ! git diff --cached --quiet; then
+    log "Staging, committing, and pushing changes..."
+    git add -A
+    
+    local commit_msg="$type($scope): $description"
+    if [ -n "$body" ]; then
+      commit_msg="$commit_msg
+
+$body"
+    fi
+    
+    git commit -m "$commit_msg"
+    git push
+    log_success "Committed and pushed: $description"
+  else
+    log "No changes to commit"
+  fi
+}
+
 # Find next available sprint number across all phases
 find_next_sprint_number() {
   local max_num=0
@@ -139,41 +166,24 @@ main() {
     log_success "Found todo ticket: $NEXT_TICKET"
     log "Moving ticket to in-progress..."
     "./sdlc.sh" move ticket "$(basename "$NEXT_TICKET" .md)" in-progress
+    commit_changes "chore" "ticket" "move $(basename "$NEXT_TICKET" .md) to in-progress"
     exit 0
   fi
   
   # ========================================================================
-  # Step 3: Close sprints that are ready (all tickets done)
-  # ========================================================================
-  log "Checking for sprints ready to close..."
-  while true; do
-    if NEXT_SPRINT=$("./sdlc.sh" get-next sprint in-progress 2>&1); then
-      # Try to move to done - sdlc.sh will validate that all tickets are done
-      if "./sdlc.sh" move sprint "$(basename "$NEXT_SPRINT")" done 2>&1; then
-        log_success "Closed sprint: $(basename "$NEXT_SPRINT")"
-        # Continue checking for more sprints to close
-      else
-        # Sprint has active tickets, skip it
-        break
-      fi
-    else
-      break
-    fi
-  done
-  
-  # ========================================================================
-  # Step 4: Move todo sprints to in-progress
+  # Step 3: Move todo sprints to in-progress
   # ========================================================================
   log "Checking for todo sprints..."
   if NEXT_SPRINT=$("./sdlc.sh" get-next sprint todo 2>&1); then
     log_success "Found todo sprint: $NEXT_SPRINT"
     log "Moving sprint to in-progress..."
     "./sdlc.sh" move sprint "$(basename "$NEXT_SPRINT")" in-progress
+    commit_changes "chore" "sprint" "move $(basename "$NEXT_SPRINT") to in-progress"
     exit 0
   fi
   
   # ========================================================================
-  # Step 5: Break down in-progress sprint ERD into tickets
+  # Step 4: Break down in-progress sprint ERD into tickets
   # ========================================================================
   log "Checking for in-progress sprints to break down..."
   if NEXT_SPRINT=$("./sdlc.sh" get-next sprint in-progress 2>&1); then
@@ -209,6 +219,32 @@ main() {
     else
       log "Sprint already has tickets, skipping breakdown"
     fi
+  fi
+  
+  # ========================================================================
+  # Step 5: Close sprints that are ready (all tickets done)
+  # ========================================================================
+  log "Checking for sprints ready to close..."
+  local closed_sprints=()
+  while true; do
+    if NEXT_SPRINT=$("./sdlc.sh" get-next sprint in-progress 2>&1); then
+      # Try to move to done - sdlc.sh will validate that all tickets are done
+      if "./sdlc.sh" move sprint "$(basename "$NEXT_SPRINT")" done 2>&1; then
+        log_success "Closed sprint: $(basename "$NEXT_SPRINT")"
+        closed_sprints+=("$(basename "$NEXT_SPRINT")")
+        # Continue checking for more sprints to close
+      else
+        # Sprint has active tickets, skip it
+        break
+      fi
+    else
+      break
+    fi
+  done
+  
+  # Commit all closed sprints together
+  if [ ${#closed_sprints[@]} -gt 0 ]; then
+    commit_changes "chore" "sprint" "close sprints: ${closed_sprints[*]}" "All tickets completed for these sprints"
   fi
   
   # ========================================================================
@@ -265,6 +301,7 @@ main() {
     log_success "Found todo phase: $NEXT_PHASE"
     log "Moving phase to in-progress..."
     "./sdlc.sh" move phase "$(basename "$NEXT_PHASE")" in-progress
+    commit_changes "chore" "phase" "move $(basename "$NEXT_PHASE") to in-progress"
     exit 0
   fi
   
