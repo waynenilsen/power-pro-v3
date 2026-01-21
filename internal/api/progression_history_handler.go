@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/waynenilsen/power-pro-v3/internal/domain/progression"
+	apperrors "github.com/waynenilsen/power-pro-v3/internal/errors"
 	"github.com/waynenilsen/power-pro-v3/internal/middleware"
 	"github.com/waynenilsen/power-pro-v3/internal/repository"
 )
@@ -51,7 +52,7 @@ func (h *ProgressionHistoryHandler) List(w http.ResponseWriter, r *http.Request)
 	// Get userId from path
 	userID := r.PathValue("userId")
 	if userID == "" {
-		writeError(w, http.StatusBadRequest, "Missing user ID")
+		writeDomainError(w, apperrors.NewBadRequest("missing user ID"))
 		return
 	}
 
@@ -59,7 +60,7 @@ func (h *ProgressionHistoryHandler) List(w http.ResponseWriter, r *http.Request)
 	authUserID := middleware.GetUserID(r)
 	isAdmin := middleware.IsAdmin(r)
 	if !isAdmin && authUserID != userID {
-		writeError(w, http.StatusForbidden, "Access denied: you do not have permission to access this resource")
+		writeDomainError(w, apperrors.NewForbidden("you do not have permission to access this resource"))
 		return
 	}
 
@@ -103,7 +104,7 @@ func (h *ProgressionHistoryHandler) List(w http.ResponseWriter, r *http.Request)
 		if progression.ValidProgressionTypes[progression.ProgressionType(normalizedPT)] {
 			filter.ProgressionType = &normalizedPT
 		} else {
-			writeError(w, http.StatusBadRequest, "Invalid progressionType", "Valid values: LINEAR_PROGRESSION, CYCLE_PROGRESSION")
+			writeDomainError(w, apperrors.NewValidation("progressionType", "invalid value; valid values: LINEAR_PROGRESSION, CYCLE_PROGRESSION"))
 			return
 		}
 	}
@@ -116,7 +117,7 @@ func (h *ProgressionHistoryHandler) List(w http.ResponseWriter, r *http.Request)
 		if progression.ValidTriggerTypes[progression.TriggerType(normalizedTT)] {
 			filter.TriggerType = &normalizedTT
 		} else {
-			writeError(w, http.StatusBadRequest, "Invalid triggerType", "Valid values: AFTER_SESSION, AFTER_WEEK, AFTER_CYCLE")
+			writeDomainError(w, apperrors.NewValidation("triggerType", "invalid value; valid values: AFTER_SESSION, AFTER_WEEK, AFTER_CYCLE"))
 			return
 		}
 	}
@@ -129,7 +130,7 @@ func (h *ProgressionHistoryHandler) List(w http.ResponseWriter, r *http.Request)
 		} else if t, err := time.Parse("2006-01-02", sd); err == nil {
 			filter.StartDate = &t
 		} else {
-			writeError(w, http.StatusBadRequest, "Invalid startDate format", "Use ISO 8601 format (e.g., 2024-01-15 or 2024-01-15T10:00:00Z)")
+			writeDomainError(w, apperrors.NewValidation("startDate", "invalid format; use ISO 8601 format (e.g., 2024-01-15 or 2024-01-15T10:00:00Z)"))
 			return
 		}
 	}
@@ -144,7 +145,7 @@ func (h *ProgressionHistoryHandler) List(w http.ResponseWriter, r *http.Request)
 			t = t.Add(24*time.Hour - time.Second)
 			filter.EndDate = &t
 		} else {
-			writeError(w, http.StatusBadRequest, "Invalid endDate format", "Use ISO 8601 format (e.g., 2024-01-15 or 2024-01-15T10:00:00Z)")
+			writeDomainError(w, apperrors.NewValidation("endDate", "invalid format; use ISO 8601 format (e.g., 2024-01-15 or 2024-01-15T10:00:00Z)"))
 			return
 		}
 	}
@@ -152,7 +153,7 @@ func (h *ProgressionHistoryHandler) List(w http.ResponseWriter, r *http.Request)
 	// Fetch data
 	entries, total, err := h.repo.List(r.Context(), filter)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to fetch progression history")
+		writeDomainError(w, apperrors.NewInternal("failed to fetch progression history", err))
 		return
 	}
 

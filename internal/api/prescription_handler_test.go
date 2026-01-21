@@ -330,8 +330,8 @@ func TestGetPrescription(t *testing.T) {
 		var errResp ErrorResponse
 		json.NewDecoder(resp.Body).Decode(&errResp)
 
-		if errResp.Error != "Prescription not found" {
-			t.Errorf("Expected error 'Prescription not found', got %s", errResp.Error)
+		if !strings.Contains(errResp.Error, "prescription not found") {
+			t.Errorf("Expected error to contain 'prescription not found', got %s", errResp.Error)
 		}
 	})
 }
@@ -1342,8 +1342,8 @@ func TestResolvePrescriptionBatch(t *testing.T) {
 		if batchResp.Results[2].Status != "error" {
 			t.Errorf("Expected third result to be 'error', got '%s'", batchResp.Results[2].Status)
 		}
-		if batchResp.Results[2].Error != "Prescription not found" {
-			t.Errorf("Expected 'Prescription not found' error, got: %s", batchResp.Results[2].Error)
+		if !strings.Contains(batchResp.Results[2].Error, "prescription not found") {
+			t.Errorf("Expected error to contain 'prescription not found', got: %s", batchResp.Results[2].Error)
 		}
 	})
 

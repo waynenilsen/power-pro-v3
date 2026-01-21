@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/waynenilsen/power-pro-v3/internal/domain/progression"
+	apperrors "github.com/waynenilsen/power-pro-v3/internal/errors"
 	"github.com/waynenilsen/power-pro-v3/internal/middleware"
 	"github.com/waynenilsen/power-pro-v3/internal/service"
 )
@@ -61,7 +62,7 @@ func (h *ManualTriggerHandler) Trigger(w http.ResponseWriter, r *http.Request) {
 	// Get userId from path
 	userID := r.PathValue("userId")
 	if userID == "" {
-		writeError(w, http.StatusBadRequest, "Missing user ID")
+		writeDomainError(w, apperrors.NewBadRequest("missing user ID"))
 		return
 	}
 
@@ -69,20 +70,20 @@ func (h *ManualTriggerHandler) Trigger(w http.ResponseWriter, r *http.Request) {
 	authUserID := middleware.GetUserID(r)
 	isAdmin := middleware.IsAdmin(r)
 	if !isAdmin && authUserID != userID {
-		writeError(w, http.StatusForbidden, "Access denied: you do not have permission to trigger progressions for this user")
+		writeDomainError(w, apperrors.NewForbidden("you do not have permission to trigger progressions for this user"))
 		return
 	}
 
 	// Parse request body
 	var req TriggerRequest
 	if err := readJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "Invalid request body", err.Error())
+		writeDomainError(w, apperrors.NewBadRequest("invalid request body"))
 		return
 	}
 
 	// Validate required fields
 	if req.ProgressionID == "" {
-		writeError(w, http.StatusBadRequest, "progressionId is required")
+		writeDomainError(w, apperrors.NewValidation("progressionId", "is required"))
 		return
 	}
 
@@ -91,15 +92,15 @@ func (h *ManualTriggerHandler) Trigger(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		switch {
 		case errors.Is(err, service.ErrProgressionNotFound):
-			writeError(w, http.StatusNotFound, "Progression not found")
+			writeDomainError(w, apperrors.NewNotFound("progression", req.ProgressionID))
 		case errors.Is(err, service.ErrLiftNotFound):
-			writeError(w, http.StatusNotFound, "Lift not found")
+			writeDomainError(w, apperrors.NewNotFound("lift", req.LiftID))
 		case errors.Is(err, service.ErrUserNotEnrolled):
-			writeError(w, http.StatusBadRequest, "User is not enrolled in any program")
+			writeDomainError(w, apperrors.NewBadRequest("user is not enrolled in any program"))
 		case errors.Is(err, service.ErrNoApplicableProgressions):
-			writeError(w, http.StatusBadRequest, "No applicable progressions found", err.Error())
+			writeDomainError(w, apperrors.NewBadRequest("no applicable progressions found"))
 		default:
-			writeError(w, http.StatusInternalServerError, "Failed to trigger progression", err.Error())
+			writeDomainError(w, apperrors.NewInternal("failed to trigger progression", err))
 		}
 		return
 	}

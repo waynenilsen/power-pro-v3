@@ -6,6 +6,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/waynenilsen/power-pro-v3/internal/domain/day"
+	apperrors "github.com/waynenilsen/power-pro-v3/internal/errors"
 )
 
 // AddPrescriptionRequest represents the request body for adding a prescription to a day.
@@ -23,51 +24,51 @@ type ReorderPrescriptionsRequest struct {
 func (h *DayHandler) AddPrescription(w http.ResponseWriter, r *http.Request) {
 	dayID := r.PathValue("id")
 	if dayID == "" {
-		writeError(w, http.StatusBadRequest, "Missing day ID")
+		writeDomainError(w, apperrors.NewBadRequest("missing day ID"))
 		return
 	}
 
 	// Check day exists
 	d, err := h.repo.GetByID(dayID)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to get day")
+		writeDomainError(w, apperrors.NewInternal("failed to get day", err))
 		return
 	}
 	if d == nil {
-		writeError(w, http.StatusNotFound, "Day not found")
+		writeDomainError(w, apperrors.NewNotFound("day", dayID))
 		return
 	}
 
 	var req AddPrescriptionRequest
 	if err := readJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "Invalid request body")
+		writeDomainError(w, apperrors.NewBadRequest("invalid request body"))
 		return
 	}
 
 	if strings.TrimSpace(req.PrescriptionID) == "" {
-		writeError(w, http.StatusBadRequest, "prescriptionId is required")
+		writeDomainError(w, apperrors.NewValidation("prescriptionId", "is required"))
 		return
 	}
 
 	// Check prescription exists
 	prescription, err := h.prescriptionRepo.GetByID(req.PrescriptionID)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to verify prescription")
+		writeDomainError(w, apperrors.NewInternal("failed to verify prescription", err))
 		return
 	}
 	if prescription == nil {
-		writeError(w, http.StatusBadRequest, "Prescription not found")
+		writeDomainError(w, apperrors.NewValidation("prescriptionId", "prescription not found"))
 		return
 	}
 
 	// Check if this prescription is already in this day
 	existing, err := h.repo.GetDayPrescriptionByDayAndPrescription(dayID, req.PrescriptionID)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to check existing prescription")
+		writeDomainError(w, apperrors.NewInternal("failed to check existing prescription", err))
 		return
 	}
 	if existing != nil {
-		writeError(w, http.StatusConflict, "Prescription is already in this day")
+		writeDomainError(w, apperrors.NewConflict("prescription is already in this day"))
 		return
 	}
 
@@ -75,7 +76,7 @@ func (h *DayHandler) AddPrescription(w http.ResponseWriter, r *http.Request) {
 	order := 0
 	if req.Order != nil {
 		if *req.Order < 0 {
-			writeError(w, http.StatusBadRequest, "Order must be >= 0")
+			writeDomainError(w, apperrors.NewValidation("order", "must be >= 0"))
 			return
 		}
 		order = *req.Order
@@ -83,7 +84,7 @@ func (h *DayHandler) AddPrescription(w http.ResponseWriter, r *http.Request) {
 		// Auto-assign next order
 		maxOrder, err := h.repo.GetMaxDayPrescriptionOrder(dayID)
 		if err != nil {
-			writeError(w, http.StatusInternalServerError, "Failed to determine order")
+			writeDomainError(w, apperrors.NewInternal("failed to determine order", err))
 			return
 		}
 		order = maxOrder + 1
@@ -105,13 +106,13 @@ func (h *DayHandler) AddPrescription(w http.ResponseWriter, r *http.Request) {
 		for i, err := range result.Errors {
 			details[i] = err.Error()
 		}
-		writeError(w, http.StatusBadRequest, "Validation failed", details...)
+		writeDomainError(w, apperrors.NewValidationMsg("validation failed"), details...)
 		return
 	}
 
 	// Persist
 	if err := h.repo.CreateDayPrescription(newDayPrescription); err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to add prescription to day")
+		writeDomainError(w, apperrors.NewInternal("failed to add prescription to day", err))
 		return
 	}
 
@@ -131,39 +132,39 @@ func (h *DayHandler) RemovePrescription(w http.ResponseWriter, r *http.Request) 
 	prescriptionID := r.PathValue("prescriptionId")
 
 	if dayID == "" {
-		writeError(w, http.StatusBadRequest, "Missing day ID")
+		writeDomainError(w, apperrors.NewBadRequest("missing day ID"))
 		return
 	}
 	if prescriptionID == "" {
-		writeError(w, http.StatusBadRequest, "Missing prescription ID")
+		writeDomainError(w, apperrors.NewBadRequest("missing prescription ID"))
 		return
 	}
 
 	// Check day exists
 	d, err := h.repo.GetByID(dayID)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to get day")
+		writeDomainError(w, apperrors.NewInternal("failed to get day", err))
 		return
 	}
 	if d == nil {
-		writeError(w, http.StatusNotFound, "Day not found")
+		writeDomainError(w, apperrors.NewNotFound("day", dayID))
 		return
 	}
 
 	// Check if prescription is in this day
 	existing, err := h.repo.GetDayPrescriptionByDayAndPrescription(dayID, prescriptionID)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to check prescription")
+		writeDomainError(w, apperrors.NewInternal("failed to check prescription", err))
 		return
 	}
 	if existing == nil {
-		writeError(w, http.StatusNotFound, "Prescription not found in this day")
+		writeDomainError(w, apperrors.NewNotFound("prescription in day", prescriptionID))
 		return
 	}
 
 	// Delete
 	if err := h.repo.DeleteDayPrescription(existing.ID); err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to remove prescription from day")
+		writeDomainError(w, apperrors.NewInternal("failed to remove prescription from day", err))
 		return
 	}
 
@@ -174,24 +175,24 @@ func (h *DayHandler) RemovePrescription(w http.ResponseWriter, r *http.Request) 
 func (h *DayHandler) ReorderPrescriptions(w http.ResponseWriter, r *http.Request) {
 	dayID := r.PathValue("id")
 	if dayID == "" {
-		writeError(w, http.StatusBadRequest, "Missing day ID")
+		writeDomainError(w, apperrors.NewBadRequest("missing day ID"))
 		return
 	}
 
 	// Check day exists
 	d, err := h.repo.GetByID(dayID)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to get day")
+		writeDomainError(w, apperrors.NewInternal("failed to get day", err))
 		return
 	}
 	if d == nil {
-		writeError(w, http.StatusNotFound, "Day not found")
+		writeDomainError(w, apperrors.NewNotFound("day", dayID))
 		return
 	}
 
 	var req ReorderPrescriptionsRequest
 	if err := readJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "Invalid request body")
+		writeDomainError(w, apperrors.NewBadRequest("invalid request body"))
 		return
 	}
 
@@ -206,14 +207,14 @@ func (h *DayHandler) ReorderPrescriptions(w http.ResponseWriter, r *http.Request
 		for i, err := range result.Errors {
 			details[i] = err.Error()
 		}
-		writeError(w, http.StatusBadRequest, "Validation failed", details...)
+		writeDomainError(w, apperrors.NewValidationMsg("validation failed"), details...)
 		return
 	}
 
 	// Get current prescriptions for this day
 	currentPrescriptions, err := h.repo.ListDayPrescriptions(dayID)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to get current prescriptions")
+		writeDomainError(w, apperrors.NewInternal("failed to get current prescriptions", err))
 		return
 	}
 
@@ -226,14 +227,14 @@ func (h *DayHandler) ReorderPrescriptions(w http.ResponseWriter, r *http.Request
 	// Verify all prescription IDs exist in this day
 	for _, prescriptionID := range req.PrescriptionIDs {
 		if _, ok := prescriptionMap[prescriptionID]; !ok {
-			writeError(w, http.StatusBadRequest, "Prescription not found in this day: "+prescriptionID)
+			writeDomainError(w, apperrors.NewValidation("prescriptionIds", "prescription not found in this day: "+prescriptionID))
 			return
 		}
 	}
 
 	// Verify count matches
 	if len(req.PrescriptionIDs) != len(currentPrescriptions) {
-		writeError(w, http.StatusBadRequest, "Prescription IDs count does not match current prescriptions count")
+		writeDomainError(w, apperrors.NewValidation("prescriptionIds", "count does not match current prescriptions count"))
 		return
 	}
 
@@ -242,7 +243,7 @@ func (h *DayHandler) ReorderPrescriptions(w http.ResponseWriter, r *http.Request
 		dayPrescription := prescriptionMap[prescriptionID]
 		if dayPrescription.Order != newOrder {
 			if err := h.repo.UpdateDayPrescriptionOrder(dayPrescription.ID, newOrder); err != nil {
-				writeError(w, http.StatusInternalServerError, "Failed to update prescription order")
+				writeDomainError(w, apperrors.NewInternal("failed to update prescription order", err))
 				return
 			}
 		}
@@ -251,7 +252,7 @@ func (h *DayHandler) ReorderPrescriptions(w http.ResponseWriter, r *http.Request
 	// Return updated day with prescriptions
 	updatedPrescriptions, err := h.repo.ListDayPrescriptions(dayID)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to get updated prescriptions")
+		writeDomainError(w, apperrors.NewInternal("failed to get updated prescriptions", err))
 		return
 	}
 

@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/waynenilsen/power-pro-v3/internal/domain/liftmax"
+	apperrors "github.com/waynenilsen/power-pro-v3/internal/errors"
 	"github.com/waynenilsen/power-pro-v3/internal/middleware"
 	"github.com/waynenilsen/power-pro-v3/internal/repository"
 )
@@ -66,7 +67,7 @@ func liftMaxToResponse(m *liftmax.LiftMax) LiftMaxResponse {
 func (h *LiftMaxHandler) List(w http.ResponseWriter, r *http.Request) {
 	userID := r.PathValue("userId")
 	if userID == "" {
-		writeError(w, http.StatusBadRequest, "Missing user ID")
+		writeDomainError(w, apperrors.NewBadRequest("missing user ID"))
 		return
 	}
 
@@ -109,7 +110,7 @@ func (h *LiftMaxHandler) List(w http.ResponseWriter, r *http.Request) {
 		// Validate type value
 		upperType := strings.ToUpper(maxType)
 		if upperType != string(liftmax.OneRM) && upperType != string(liftmax.TrainingMax) {
-			writeError(w, http.StatusBadRequest, "Invalid type filter: must be ONE_RM or TRAINING_MAX")
+			writeDomainError(w, apperrors.NewValidation("type", "must be ONE_RM or TRAINING_MAX"))
 			return
 		}
 		filterType = &upperType
@@ -126,7 +127,7 @@ func (h *LiftMaxHandler) List(w http.ResponseWriter, r *http.Request) {
 
 	maxes, total, err := h.repo.List(params)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to list lift maxes")
+		writeDomainError(w, apperrors.NewInternal("failed to list lift maxes", err))
 		return
 	}
 
@@ -157,17 +158,17 @@ func (h *LiftMaxHandler) List(w http.ResponseWriter, r *http.Request) {
 func (h *LiftMaxHandler) Get(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if id == "" {
-		writeError(w, http.StatusBadRequest, "Missing lift max ID")
+		writeDomainError(w, apperrors.NewBadRequest("missing lift max ID"))
 		return
 	}
 
 	m, err := h.repo.GetByID(id)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to get lift max")
+		writeDomainError(w, apperrors.NewInternal("failed to get lift max", err))
 		return
 	}
 	if m == nil {
-		writeError(w, http.StatusNotFound, "Lift max not found")
+		writeDomainError(w, apperrors.NewNotFound("lift max", id))
 		return
 	}
 
@@ -175,7 +176,7 @@ func (h *LiftMaxHandler) Get(w http.ResponseWriter, r *http.Request) {
 	requestingUserID := middleware.GetUserID(r)
 	isAdmin := middleware.IsAdmin(r)
 	if requestingUserID != m.UserID && !isAdmin {
-		writeError(w, http.StatusForbidden, "Access denied: you do not have permission to access this resource")
+		writeDomainError(w, apperrors.NewForbidden("you do not have permission to access this resource"))
 		return
 	}
 
@@ -186,24 +187,24 @@ func (h *LiftMaxHandler) Get(w http.ResponseWriter, r *http.Request) {
 func (h *LiftMaxHandler) Create(w http.ResponseWriter, r *http.Request) {
 	userID := r.PathValue("userId")
 	if userID == "" {
-		writeError(w, http.StatusBadRequest, "Missing user ID")
+		writeDomainError(w, apperrors.NewBadRequest("missing user ID"))
 		return
 	}
 
 	var req CreateLiftMaxRequest
 	if err := readJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "Invalid request body")
+		writeDomainError(w, apperrors.NewBadRequest("invalid request body"))
 		return
 	}
 
 	// Verify lift exists
 	lift, err := h.liftRepo.GetByID(req.LiftID)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to verify lift")
+		writeDomainError(w, apperrors.NewInternal("failed to verify lift", err))
 		return
 	}
 	if lift == nil {
-		writeError(w, http.StatusBadRequest, "Lift not found")
+		writeDomainError(w, apperrors.NewValidation("liftId", "lift not found"))
 		return
 	}
 
@@ -225,24 +226,24 @@ func (h *LiftMaxHandler) Create(w http.ResponseWriter, r *http.Request) {
 		for i, err := range result.Errors {
 			details[i] = err.Error()
 		}
-		writeError(w, http.StatusBadRequest, "Validation failed", details...)
+		writeDomainError(w, apperrors.NewValidationMsg("validation failed"), details...)
 		return
 	}
 
 	// Check unique constraint
 	exists, err := h.repo.UniqueConstraintExists(newMax.UserID, newMax.LiftID, string(newMax.Type), newMax.EffectiveDate, nil)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to check uniqueness")
+		writeDomainError(w, apperrors.NewInternal("failed to check uniqueness", err))
 		return
 	}
 	if exists {
-		writeError(w, http.StatusConflict, "A lift max with this user, lift, type, and effective date already exists")
+		writeDomainError(w, apperrors.NewConflict("a lift max with this user, lift, type, and effective date already exists"))
 		return
 	}
 
 	// Persist
 	if err := h.repo.Create(newMax); err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to create lift max")
+		writeDomainError(w, apperrors.NewInternal("failed to create lift max", err))
 		return
 	}
 
@@ -263,18 +264,18 @@ func (h *LiftMaxHandler) Create(w http.ResponseWriter, r *http.Request) {
 func (h *LiftMaxHandler) Update(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if id == "" {
-		writeError(w, http.StatusBadRequest, "Missing lift max ID")
+		writeDomainError(w, apperrors.NewBadRequest("missing lift max ID"))
 		return
 	}
 
 	// Get existing lift max
 	existing, err := h.repo.GetByID(id)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to get lift max")
+		writeDomainError(w, apperrors.NewInternal("failed to get lift max", err))
 		return
 	}
 	if existing == nil {
-		writeError(w, http.StatusNotFound, "Lift max not found")
+		writeDomainError(w, apperrors.NewNotFound("lift max", id))
 		return
 	}
 
@@ -282,13 +283,13 @@ func (h *LiftMaxHandler) Update(w http.ResponseWriter, r *http.Request) {
 	requestingUserID := middleware.GetUserID(r)
 	isAdmin := middleware.IsAdmin(r)
 	if requestingUserID != existing.UserID && !isAdmin {
-		writeError(w, http.StatusForbidden, "Access denied: you do not have permission to modify this resource")
+		writeDomainError(w, apperrors.NewForbidden("you do not have permission to modify this resource"))
 		return
 	}
 
 	var req UpdateLiftMaxRequest
 	if err := readJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "Invalid request body")
+		writeDomainError(w, apperrors.NewBadRequest("invalid request body"))
 		return
 	}
 
@@ -305,7 +306,7 @@ func (h *LiftMaxHandler) Update(w http.ResponseWriter, r *http.Request) {
 		for i, err := range result.Errors {
 			details[i] = err.Error()
 		}
-		writeError(w, http.StatusBadRequest, "Validation failed", details...)
+		writeDomainError(w, apperrors.NewValidationMsg("validation failed"), details...)
 		return
 	}
 
@@ -313,18 +314,18 @@ func (h *LiftMaxHandler) Update(w http.ResponseWriter, r *http.Request) {
 	if req.EffectiveDate != nil {
 		exists, err := h.repo.UniqueConstraintExists(existing.UserID, existing.LiftID, string(existing.Type), existing.EffectiveDate, &id)
 		if err != nil {
-			writeError(w, http.StatusInternalServerError, "Failed to check uniqueness")
+			writeDomainError(w, apperrors.NewInternal("failed to check uniqueness", err))
 			return
 		}
 		if exists {
-			writeError(w, http.StatusConflict, "A lift max with this user, lift, type, and effective date already exists")
+			writeDomainError(w, apperrors.NewConflict("a lift max with this user, lift, type, and effective date already exists"))
 			return
 		}
 	}
 
 	// Persist
 	if err := h.repo.Update(existing); err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to update lift max")
+		writeDomainError(w, apperrors.NewInternal("failed to update lift max", err))
 		return
 	}
 
@@ -345,18 +346,18 @@ func (h *LiftMaxHandler) Update(w http.ResponseWriter, r *http.Request) {
 func (h *LiftMaxHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if id == "" {
-		writeError(w, http.StatusBadRequest, "Missing lift max ID")
+		writeDomainError(w, apperrors.NewBadRequest("missing lift max ID"))
 		return
 	}
 
 	// Check lift max exists
 	existing, err := h.repo.GetByID(id)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to get lift max")
+		writeDomainError(w, apperrors.NewInternal("failed to get lift max", err))
 		return
 	}
 	if existing == nil {
-		writeError(w, http.StatusNotFound, "Lift max not found")
+		writeDomainError(w, apperrors.NewNotFound("lift max", id))
 		return
 	}
 
@@ -364,13 +365,13 @@ func (h *LiftMaxHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	requestingUserID := middleware.GetUserID(r)
 	isAdmin := middleware.IsAdmin(r)
 	if requestingUserID != existing.UserID && !isAdmin {
-		writeError(w, http.StatusForbidden, "Access denied: you do not have permission to delete this resource")
+		writeDomainError(w, apperrors.NewForbidden("you do not have permission to delete this resource"))
 		return
 	}
 
 	// Delete
 	if err := h.repo.Delete(id); err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to delete lift max")
+		writeDomainError(w, apperrors.NewInternal("failed to delete lift max", err))
 		return
 	}
 

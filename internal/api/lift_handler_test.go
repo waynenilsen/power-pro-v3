@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/waynenilsen/power-pro-v3/internal/testutil"
@@ -271,8 +272,8 @@ func TestGetLift(t *testing.T) {
 		var errResp ErrorResponse
 		json.NewDecoder(resp.Body).Decode(&errResp)
 
-		if errResp.Error != "Lift not found" {
-			t.Errorf("Expected error 'Lift not found', got %s", errResp.Error)
+		if !strings.Contains(errResp.Error, "lift not found") {
+			t.Errorf("Expected error to contain 'lift not found', got %s", errResp.Error)
 		}
 	})
 }

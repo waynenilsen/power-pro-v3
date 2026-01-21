@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	apperrors "github.com/waynenilsen/power-pro-v3/internal/errors"
 	"github.com/waynenilsen/power-pro-v3/internal/domain/loadstrategy"
 	"github.com/waynenilsen/power-pro-v3/internal/domain/prescription"
 	"github.com/waynenilsen/power-pro-v3/internal/domain/setscheme"
@@ -133,29 +134,29 @@ func (c *cachedMaxLookup) GetCurrentMax(ctx context.Context, userID, liftID, max
 func (h *PrescriptionHandler) Resolve(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if id == "" {
-		writeError(w, http.StatusBadRequest, "Missing prescription ID")
+		writeDomainError(w, apperrors.NewBadRequest("missing prescription ID"))
 		return
 	}
 
 	var req ResolveRequest
 	if err := readJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "Invalid request body")
+		writeDomainError(w, apperrors.NewBadRequest("invalid request body"))
 		return
 	}
 
 	if strings.TrimSpace(req.UserID) == "" {
-		writeError(w, http.StatusBadRequest, "userId is required")
+		writeDomainError(w, apperrors.NewValidation("userId", "is required"))
 		return
 	}
 
 	// Fetch prescription
 	p, err := h.repo.GetByID(id)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to get prescription")
+		writeDomainError(w, apperrors.NewInternal("failed to get prescription", err))
 		return
 	}
 	if p == nil {
-		writeError(w, http.StatusNotFound, "Prescription not found")
+		writeDomainError(w, apperrors.NewNotFound("prescription", id))
 		return
 	}
 
@@ -174,14 +175,14 @@ func (h *PrescriptionHandler) Resolve(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		// Check for specific error types
 		if errors.Is(err, prescription.ErrLiftNotFound) {
-			writeError(w, http.StatusNotFound, "Lift not found")
+			writeDomainError(w, apperrors.NewNotFound("lift", ""))
 			return
 		}
 		if errors.Is(err, prescription.ErrMaxNotFound) || errors.Is(err, loadstrategy.ErrMaxNotFound) {
 			writeError(w, http.StatusUnprocessableEntity, err.Error())
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "Failed to resolve prescription")
+		writeDomainError(w, apperrors.NewInternal("failed to resolve prescription", err))
 		return
 	}
 
@@ -200,17 +201,17 @@ func (h *PrescriptionHandler) Resolve(w http.ResponseWriter, r *http.Request) {
 func (h *PrescriptionHandler) ResolveBatch(w http.ResponseWriter, r *http.Request) {
 	var req BatchResolveRequest
 	if err := readJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "Invalid request body")
+		writeDomainError(w, apperrors.NewBadRequest("invalid request body"))
 		return
 	}
 
 	if strings.TrimSpace(req.UserID) == "" {
-		writeError(w, http.StatusBadRequest, "userId is required")
+		writeDomainError(w, apperrors.NewValidation("userId", "is required"))
 		return
 	}
 
 	if len(req.PrescriptionIDs) == 0 {
-		writeError(w, http.StatusBadRequest, "prescriptionIds is required")
+		writeDomainError(w, apperrors.NewValidation("prescriptionIds", "is required"))
 		return
 	}
 
@@ -233,13 +234,13 @@ func (h *PrescriptionHandler) ResolveBatch(w http.ResponseWriter, r *http.Reques
 		p, err := h.repo.GetByID(prescriptionID)
 		if err != nil {
 			result.Status = "error"
-			result.Error = "Failed to get prescription"
+			result.Error = "failed to get prescription"
 			results[i] = result
 			continue
 		}
 		if p == nil {
 			result.Status = "error"
-			result.Error = "Prescription not found"
+			result.Error = "prescription not found: " + prescriptionID
 			results[i] = result
 			continue
 		}
@@ -254,9 +255,9 @@ func (h *PrescriptionHandler) ResolveBatch(w http.ResponseWriter, r *http.Reques
 			if errors.Is(err, prescription.ErrMaxNotFound) || errors.Is(err, loadstrategy.ErrMaxNotFound) {
 				result.Error = err.Error()
 			} else if errors.Is(err, prescription.ErrLiftNotFound) {
-				result.Error = "Lift not found"
+				result.Error = "lift not found"
 			} else {
-				result.Error = "Failed to resolve prescription"
+				result.Error = "failed to resolve prescription"
 			}
 			results[i] = result
 			continue

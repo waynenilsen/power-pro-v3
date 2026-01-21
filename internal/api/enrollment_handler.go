@@ -6,6 +6,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/waynenilsen/power-pro-v3/internal/domain/userprogramstate"
+	apperrors "github.com/waynenilsen/power-pro-v3/internal/errors"
 	"github.com/waynenilsen/power-pro-v3/internal/middleware"
 	"github.com/waynenilsen/power-pro-v3/internal/repository"
 )
@@ -80,7 +81,7 @@ func enrollmentToResponse(e *userprogramstate.EnrollmentWithProgram) EnrollmentR
 func (h *EnrollmentHandler) Enroll(w http.ResponseWriter, r *http.Request) {
 	userID := r.PathValue("userId")
 	if userID == "" {
-		writeError(w, http.StatusBadRequest, "Missing user ID")
+		writeDomainError(w, apperrors.NewBadRequest("missing user ID"))
 		return
 	}
 
@@ -88,31 +89,31 @@ func (h *EnrollmentHandler) Enroll(w http.ResponseWriter, r *http.Request) {
 	authUserID := middleware.GetUserID(r)
 	isAdmin := middleware.IsAdmin(r)
 	if authUserID != userID && !isAdmin {
-		writeError(w, http.StatusForbidden, "Access denied: you can only manage your own enrollment")
+		writeDomainError(w, apperrors.NewForbidden("you can only manage your own enrollment"))
 		return
 	}
 
 	var req EnrollRequest
 	if err := readJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "Invalid request body")
+		writeDomainError(w, apperrors.NewBadRequest("invalid request body"))
 		return
 	}
 
 	// Validate program exists
 	program, err := h.programRepo.GetByID(req.ProgramID)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to verify program")
+		writeDomainError(w, apperrors.NewInternal("failed to verify program", err))
 		return
 	}
 	if program == nil {
-		writeError(w, http.StatusBadRequest, "Program not found", "program_id does not reference a valid program")
+		writeDomainError(w, apperrors.NewValidation("programId", "program not found"))
 		return
 	}
 
 	// Check if user is already enrolled
 	isEnrolled, err := h.stateRepo.UserIsEnrolled(userID)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to check enrollment status")
+		writeDomainError(w, apperrors.NewInternal("failed to check enrollment status", err))
 		return
 	}
 
@@ -120,7 +121,7 @@ func (h *EnrollmentHandler) Enroll(w http.ResponseWriter, r *http.Request) {
 	if isEnrolled {
 		// Delete existing enrollment
 		if err := h.stateRepo.DeleteByUserID(userID); err != nil {
-			writeError(w, http.StatusInternalServerError, "Failed to remove existing enrollment")
+			writeDomainError(w, apperrors.NewInternal("failed to remove existing enrollment", err))
 			return
 		}
 	}
@@ -140,24 +141,24 @@ func (h *EnrollmentHandler) Enroll(w http.ResponseWriter, r *http.Request) {
 		for i, err := range result.Errors {
 			details[i] = err.Error()
 		}
-		writeError(w, http.StatusBadRequest, "Validation failed", details...)
+		writeDomainError(w, apperrors.NewValidationMsg("validation failed"), details...)
 		return
 	}
 
 	// Persist
 	if err := h.stateRepo.Create(newState); err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to create enrollment")
+		writeDomainError(w, apperrors.NewInternal("failed to create enrollment", err))
 		return
 	}
 
 	// Fetch the full enrollment with program details for response
 	enrollment, err := h.stateRepo.GetEnrollmentWithProgram(userID)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to retrieve enrollment details")
+		writeDomainError(w, apperrors.NewInternal("failed to retrieve enrollment details", err))
 		return
 	}
 	if enrollment == nil {
-		writeError(w, http.StatusInternalServerError, "Enrollment created but could not be retrieved")
+		writeDomainError(w, apperrors.NewInternal("enrollment created but could not be retrieved", nil))
 		return
 	}
 
@@ -168,7 +169,7 @@ func (h *EnrollmentHandler) Enroll(w http.ResponseWriter, r *http.Request) {
 func (h *EnrollmentHandler) Get(w http.ResponseWriter, r *http.Request) {
 	userID := r.PathValue("userId")
 	if userID == "" {
-		writeError(w, http.StatusBadRequest, "Missing user ID")
+		writeDomainError(w, apperrors.NewBadRequest("missing user ID"))
 		return
 	}
 
@@ -176,17 +177,17 @@ func (h *EnrollmentHandler) Get(w http.ResponseWriter, r *http.Request) {
 	authUserID := middleware.GetUserID(r)
 	isAdmin := middleware.IsAdmin(r)
 	if authUserID != userID && !isAdmin {
-		writeError(w, http.StatusForbidden, "Access denied: you can only view your own enrollment")
+		writeDomainError(w, apperrors.NewForbidden("you can only view your own enrollment"))
 		return
 	}
 
 	enrollment, err := h.stateRepo.GetEnrollmentWithProgram(userID)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to get enrollment")
+		writeDomainError(w, apperrors.NewInternal("failed to get enrollment", err))
 		return
 	}
 	if enrollment == nil {
-		writeError(w, http.StatusNotFound, "Not enrolled in any program")
+		writeDomainError(w, apperrors.NewNotFound("enrollment", userID))
 		return
 	}
 
@@ -197,7 +198,7 @@ func (h *EnrollmentHandler) Get(w http.ResponseWriter, r *http.Request) {
 func (h *EnrollmentHandler) Unenroll(w http.ResponseWriter, r *http.Request) {
 	userID := r.PathValue("userId")
 	if userID == "" {
-		writeError(w, http.StatusBadRequest, "Missing user ID")
+		writeDomainError(w, apperrors.NewBadRequest("missing user ID"))
 		return
 	}
 
@@ -205,24 +206,24 @@ func (h *EnrollmentHandler) Unenroll(w http.ResponseWriter, r *http.Request) {
 	authUserID := middleware.GetUserID(r)
 	isAdmin := middleware.IsAdmin(r)
 	if authUserID != userID && !isAdmin {
-		writeError(w, http.StatusForbidden, "Access denied: you can only manage your own enrollment")
+		writeDomainError(w, apperrors.NewForbidden("you can only manage your own enrollment"))
 		return
 	}
 
 	// Check if enrolled
 	isEnrolled, err := h.stateRepo.UserIsEnrolled(userID)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to check enrollment status")
+		writeDomainError(w, apperrors.NewInternal("failed to check enrollment status", err))
 		return
 	}
 	if !isEnrolled {
-		writeError(w, http.StatusNotFound, "Not enrolled in any program")
+		writeDomainError(w, apperrors.NewNotFound("enrollment", userID))
 		return
 	}
 
 	// Delete enrollment
 	if err := h.stateRepo.DeleteByUserID(userID); err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to unenroll")
+		writeDomainError(w, apperrors.NewInternal("failed to unenroll", err))
 		return
 	}
 

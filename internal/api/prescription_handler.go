@@ -11,6 +11,7 @@ import (
 	"github.com/waynenilsen/power-pro-v3/internal/domain/loadstrategy"
 	"github.com/waynenilsen/power-pro-v3/internal/domain/prescription"
 	"github.com/waynenilsen/power-pro-v3/internal/domain/setscheme"
+	apperrors "github.com/waynenilsen/power-pro-v3/internal/errors"
 	"github.com/waynenilsen/power-pro-v3/internal/repository"
 )
 
@@ -153,7 +154,7 @@ func (h *PrescriptionHandler) List(w http.ResponseWriter, r *http.Request) {
 
 	prescriptions, total, err := h.repo.List(params)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to list prescriptions")
+		writeDomainError(w, apperrors.NewInternal("failed to list prescriptions", err))
 		return
 	}
 
@@ -162,7 +163,7 @@ func (h *PrescriptionHandler) List(w http.ResponseWriter, r *http.Request) {
 	for _, p := range prescriptions {
 		resp, err := h.prescriptionToResponse(&p)
 		if err != nil {
-			writeError(w, http.StatusInternalServerError, "Failed to format prescription")
+			writeDomainError(w, apperrors.NewInternal("failed to format prescription", err))
 			return
 		}
 		data = append(data, resp)
@@ -189,23 +190,23 @@ func (h *PrescriptionHandler) List(w http.ResponseWriter, r *http.Request) {
 func (h *PrescriptionHandler) Get(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if id == "" {
-		writeError(w, http.StatusBadRequest, "Missing prescription ID")
+		writeDomainError(w, apperrors.NewBadRequest("missing prescription ID"))
 		return
 	}
 
 	p, err := h.repo.GetByID(id)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to get prescription")
+		writeDomainError(w, apperrors.NewInternal("failed to get prescription", err))
 		return
 	}
 	if p == nil {
-		writeError(w, http.StatusNotFound, "Prescription not found")
+		writeDomainError(w, apperrors.NewNotFound("prescription", id))
 		return
 	}
 
 	resp, err := h.prescriptionToResponse(p)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to format prescription")
+		writeDomainError(w, apperrors.NewInternal("failed to format prescription", err))
 		return
 	}
 
@@ -216,21 +217,21 @@ func (h *PrescriptionHandler) Get(w http.ResponseWriter, r *http.Request) {
 func (h *PrescriptionHandler) Create(w http.ResponseWriter, r *http.Request) {
 	var req CreatePrescriptionRequest
 	if err := readJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "Invalid request body")
+		writeDomainError(w, apperrors.NewBadRequest("invalid request body"))
 		return
 	}
 
 	// Parse load strategy
 	loadStrategy, err := h.strategyFactory.CreateFromJSON(req.LoadStrategy)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "Invalid load strategy", err.Error())
+		writeDomainError(w, apperrors.NewValidation("loadStrategy", err.Error()))
 		return
 	}
 
 	// Parse set scheme
 	setScheme, err := h.schemeFactory.CreateFromJSON(req.SetScheme)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "Invalid set scheme", err.Error())
+		writeDomainError(w, apperrors.NewValidation("setScheme", err.Error()))
 		return
 	}
 
@@ -259,30 +260,30 @@ func (h *PrescriptionHandler) Create(w http.ResponseWriter, r *http.Request) {
 		for i, err := range result.Errors {
 			details[i] = err.Error()
 		}
-		writeError(w, http.StatusBadRequest, "Validation failed", details...)
+		writeDomainError(w, apperrors.NewValidationMsg("validation failed"), details...)
 		return
 	}
 
 	// Check lift exists
 	lift, err := h.liftRepo.GetByID(req.LiftID)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to verify lift")
+		writeDomainError(w, apperrors.NewInternal("failed to verify lift", err))
 		return
 	}
 	if lift == nil {
-		writeError(w, http.StatusBadRequest, "Lift not found")
+		writeDomainError(w, apperrors.NewValidation("liftId", "lift not found"))
 		return
 	}
 
 	// Persist
 	if err := h.repo.Create(newPrescription); err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to create prescription")
+		writeDomainError(w, apperrors.NewInternal("failed to create prescription", err))
 		return
 	}
 
 	resp, err := h.prescriptionToResponse(newPrescription)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to format prescription")
+		writeDomainError(w, apperrors.NewInternal("failed to format prescription", err))
 		return
 	}
 
@@ -293,24 +294,24 @@ func (h *PrescriptionHandler) Create(w http.ResponseWriter, r *http.Request) {
 func (h *PrescriptionHandler) Update(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if id == "" {
-		writeError(w, http.StatusBadRequest, "Missing prescription ID")
+		writeDomainError(w, apperrors.NewBadRequest("missing prescription ID"))
 		return
 	}
 
 	// Get existing prescription
 	existing, err := h.repo.GetByID(id)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to get prescription")
+		writeDomainError(w, apperrors.NewInternal("failed to get prescription", err))
 		return
 	}
 	if existing == nil {
-		writeError(w, http.StatusNotFound, "Prescription not found")
+		writeDomainError(w, apperrors.NewNotFound("prescription", id))
 		return
 	}
 
 	var req UpdatePrescriptionRequest
 	if err := readJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "Invalid request body")
+		writeDomainError(w, apperrors.NewBadRequest("invalid request body"))
 		return
 	}
 
@@ -319,7 +320,7 @@ func (h *PrescriptionHandler) Update(w http.ResponseWriter, r *http.Request) {
 	if len(req.LoadStrategy) > 0 {
 		newLoadStrategy, err = h.strategyFactory.CreateFromJSON(req.LoadStrategy)
 		if err != nil {
-			writeError(w, http.StatusBadRequest, "Invalid load strategy", err.Error())
+			writeDomainError(w, apperrors.NewValidation("loadStrategy", err.Error()))
 			return
 		}
 	}
@@ -329,7 +330,7 @@ func (h *PrescriptionHandler) Update(w http.ResponseWriter, r *http.Request) {
 	if len(req.SetScheme) > 0 {
 		newSetScheme, err = h.schemeFactory.CreateFromJSON(req.SetScheme)
 		if err != nil {
-			writeError(w, http.StatusBadRequest, "Invalid set scheme", err.Error())
+			writeDomainError(w, apperrors.NewValidation("setScheme", err.Error()))
 			return
 		}
 	}
@@ -338,11 +339,11 @@ func (h *PrescriptionHandler) Update(w http.ResponseWriter, r *http.Request) {
 	if req.LiftID != nil {
 		lift, err := h.liftRepo.GetByID(*req.LiftID)
 		if err != nil {
-			writeError(w, http.StatusInternalServerError, "Failed to verify lift")
+			writeDomainError(w, apperrors.NewInternal("failed to verify lift", err))
 			return
 		}
 		if lift == nil {
-			writeError(w, http.StatusBadRequest, "Lift not found")
+			writeDomainError(w, apperrors.NewValidation("liftId", "lift not found"))
 			return
 		}
 	}
@@ -364,19 +365,19 @@ func (h *PrescriptionHandler) Update(w http.ResponseWriter, r *http.Request) {
 		for i, err := range result.Errors {
 			details[i] = err.Error()
 		}
-		writeError(w, http.StatusBadRequest, "Validation failed", details...)
+		writeDomainError(w, apperrors.NewValidationMsg("validation failed"), details...)
 		return
 	}
 
 	// Persist
 	if err := h.repo.Update(existing); err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to update prescription")
+		writeDomainError(w, apperrors.NewInternal("failed to update prescription", err))
 		return
 	}
 
 	resp, err := h.prescriptionToResponse(existing)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to format prescription")
+		writeDomainError(w, apperrors.NewInternal("failed to format prescription", err))
 		return
 	}
 
@@ -387,24 +388,24 @@ func (h *PrescriptionHandler) Update(w http.ResponseWriter, r *http.Request) {
 func (h *PrescriptionHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if id == "" {
-		writeError(w, http.StatusBadRequest, "Missing prescription ID")
+		writeDomainError(w, apperrors.NewBadRequest("missing prescription ID"))
 		return
 	}
 
 	// Check prescription exists
 	existing, err := h.repo.GetByID(id)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to get prescription")
+		writeDomainError(w, apperrors.NewInternal("failed to get prescription", err))
 		return
 	}
 	if existing == nil {
-		writeError(w, http.StatusNotFound, "Prescription not found")
+		writeDomainError(w, apperrors.NewNotFound("prescription", id))
 		return
 	}
 
 	// Delete
 	if err := h.repo.Delete(id); err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to delete prescription")
+		writeDomainError(w, apperrors.NewInternal("failed to delete prescription", err))
 		return
 	}
 

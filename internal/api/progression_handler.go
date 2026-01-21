@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/waynenilsen/power-pro-v3/internal/domain/progression"
+	apperrors "github.com/waynenilsen/power-pro-v3/internal/errors"
 	"github.com/waynenilsen/power-pro-v3/internal/repository"
 )
 
@@ -106,7 +107,7 @@ func (h *ProgressionHandler) List(w http.ResponseWriter, r *http.Request) {
 
 	entities, total, err := h.repo.List(params)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to list progressions")
+		writeDomainError(w, apperrors.NewInternal("failed to list progressions", err))
 		return
 	}
 
@@ -137,17 +138,17 @@ func (h *ProgressionHandler) List(w http.ResponseWriter, r *http.Request) {
 func (h *ProgressionHandler) Get(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if id == "" {
-		writeError(w, http.StatusBadRequest, "Missing progression ID")
+		writeDomainError(w, apperrors.NewBadRequest("missing progression ID"))
 		return
 	}
 
 	entity, err := h.repo.GetByID(id)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to get progression")
+		writeDomainError(w, apperrors.NewInternal("failed to get progression", err))
 		return
 	}
 	if entity == nil {
-		writeError(w, http.StatusNotFound, "Progression not found")
+		writeDomainError(w, apperrors.NewNotFound("progression", id))
 		return
 	}
 
@@ -158,14 +159,14 @@ func (h *ProgressionHandler) Get(w http.ResponseWriter, r *http.Request) {
 func (h *ProgressionHandler) Create(w http.ResponseWriter, r *http.Request) {
 	var req CreateProgressionRequest
 	if err := readJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "Invalid request body")
+		writeDomainError(w, apperrors.NewBadRequest("invalid request body"))
 		return
 	}
 
 	// Validate request
 	validationErrors := h.validateProgressionRequest(req.Name, req.Type, req.Parameters)
 	if len(validationErrors) > 0 {
-		writeError(w, http.StatusBadRequest, "Validation failed", validationErrors...)
+		writeDomainError(w, apperrors.NewValidationMsg("validation failed"), validationErrors...)
 		return
 	}
 
@@ -176,7 +177,7 @@ func (h *ProgressionHandler) Create(w http.ResponseWriter, r *http.Request) {
 	// Inject ID and Name into the parameters for domain validation
 	enrichedParams, err := enrichProgressionParams(id, req.Name, req.Parameters)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to process parameters")
+		writeDomainError(w, apperrors.NewInternal("failed to process parameters", err))
 		return
 	}
 
@@ -191,7 +192,7 @@ func (h *ProgressionHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 	// Persist
 	if err := h.repo.Create(entity); err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to create progression")
+		writeDomainError(w, apperrors.NewInternal("failed to create progression", err))
 		return
 	}
 
@@ -217,24 +218,24 @@ func enrichProgressionParams(id, name string, params json.RawMessage) (json.RawM
 func (h *ProgressionHandler) Update(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if id == "" {
-		writeError(w, http.StatusBadRequest, "Missing progression ID")
+		writeDomainError(w, apperrors.NewBadRequest("missing progression ID"))
 		return
 	}
 
 	// Get existing progression
 	existing, err := h.repo.GetByID(id)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to get progression")
+		writeDomainError(w, apperrors.NewInternal("failed to get progression", err))
 		return
 	}
 	if existing == nil {
-		writeError(w, http.StatusNotFound, "Progression not found")
+		writeDomainError(w, apperrors.NewNotFound("progression", id))
 		return
 	}
 
 	var req UpdateProgressionRequest
 	if err := readJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "Invalid request body")
+		writeDomainError(w, apperrors.NewBadRequest("invalid request body"))
 		return
 	}
 
@@ -257,14 +258,14 @@ func (h *ProgressionHandler) Update(w http.ResponseWriter, r *http.Request) {
 	// Validate the updated values
 	validationErrors := h.validateProgressionRequest(name, progType, params)
 	if len(validationErrors) > 0 {
-		writeError(w, http.StatusBadRequest, "Validation failed", validationErrors...)
+		writeDomainError(w, apperrors.NewValidationMsg("validation failed"), validationErrors...)
 		return
 	}
 
 	// Inject ID and Name into the parameters
 	enrichedParams, err := enrichProgressionParams(id, name, params)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to process parameters")
+		writeDomainError(w, apperrors.NewInternal("failed to process parameters", err))
 		return
 	}
 
@@ -276,7 +277,7 @@ func (h *ProgressionHandler) Update(w http.ResponseWriter, r *http.Request) {
 
 	// Persist
 	if err := h.repo.Update(existing); err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to update progression")
+		writeDomainError(w, apperrors.NewInternal("failed to update progression", err))
 		return
 	}
 
@@ -287,35 +288,35 @@ func (h *ProgressionHandler) Update(w http.ResponseWriter, r *http.Request) {
 func (h *ProgressionHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if id == "" {
-		writeError(w, http.StatusBadRequest, "Missing progression ID")
+		writeDomainError(w, apperrors.NewBadRequest("missing progression ID"))
 		return
 	}
 
 	// Check progression exists
 	existing, err := h.repo.GetByID(id)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to get progression")
+		writeDomainError(w, apperrors.NewInternal("failed to get progression", err))
 		return
 	}
 	if existing == nil {
-		writeError(w, http.StatusNotFound, "Progression not found")
+		writeDomainError(w, apperrors.NewNotFound("progression", id))
 		return
 	}
 
 	// Check for references (program_progressions)
 	hasRefs, err := h.repo.HasProgramReferences(id)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to check references")
+		writeDomainError(w, apperrors.NewInternal("failed to check references", err))
 		return
 	}
 	if hasRefs {
-		writeError(w, http.StatusConflict, "Cannot delete progression: it is referenced by program progressions")
+		writeDomainError(w, apperrors.NewConflict("cannot delete progression: it is referenced by program progressions"))
 		return
 	}
 
 	// Delete
 	if err := h.repo.Delete(id); err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to delete progression")
+		writeDomainError(w, apperrors.NewInternal("failed to delete progression", err))
 		return
 	}
 

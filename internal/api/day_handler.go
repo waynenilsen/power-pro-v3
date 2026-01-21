@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/waynenilsen/power-pro-v3/internal/domain/day"
+	apperrors "github.com/waynenilsen/power-pro-v3/internal/errors"
 	"github.com/waynenilsen/power-pro-v3/internal/repository"
 )
 
@@ -165,7 +166,7 @@ func (h *DayHandler) List(w http.ResponseWriter, r *http.Request) {
 
 	days, total, err := h.repo.List(params)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to list days")
+		writeDomainError(w, apperrors.NewInternal("failed to list days", err))
 		return
 	}
 
@@ -196,24 +197,24 @@ func (h *DayHandler) List(w http.ResponseWriter, r *http.Request) {
 func (h *DayHandler) Get(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if id == "" {
-		writeError(w, http.StatusBadRequest, "Missing day ID")
+		writeDomainError(w, apperrors.NewBadRequest("missing day ID"))
 		return
 	}
 
 	d, err := h.repo.GetByID(id)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to get day")
+		writeDomainError(w, apperrors.NewInternal("failed to get day", err))
 		return
 	}
 	if d == nil {
-		writeError(w, http.StatusNotFound, "Day not found")
+		writeDomainError(w, apperrors.NewNotFound("day", id))
 		return
 	}
 
 	// Get prescriptions for this day
 	prescriptions, err := h.repo.ListDayPrescriptions(id)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to get day prescriptions")
+		writeDomainError(w, apperrors.NewInternal("failed to get day prescriptions", err))
 		return
 	}
 
@@ -224,7 +225,7 @@ func (h *DayHandler) Get(w http.ResponseWriter, r *http.Request) {
 func (h *DayHandler) GetBySlug(w http.ResponseWriter, r *http.Request) {
 	slug := r.PathValue("slug")
 	if slug == "" {
-		writeError(w, http.StatusBadRequest, "Missing slug")
+		writeDomainError(w, apperrors.NewBadRequest("missing slug"))
 		return
 	}
 
@@ -236,18 +237,18 @@ func (h *DayHandler) GetBySlug(w http.ResponseWriter, r *http.Request) {
 
 	d, err := h.repo.GetBySlug(slug, programID)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to get day")
+		writeDomainError(w, apperrors.NewInternal("failed to get day", err))
 		return
 	}
 	if d == nil {
-		writeError(w, http.StatusNotFound, "Day not found")
+		writeDomainError(w, apperrors.NewNotFound("day", slug))
 		return
 	}
 
 	// Get prescriptions for this day
 	prescriptions, err := h.repo.ListDayPrescriptions(d.ID)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to get day prescriptions")
+		writeDomainError(w, apperrors.NewInternal("failed to get day prescriptions", err))
 		return
 	}
 
@@ -258,14 +259,14 @@ func (h *DayHandler) GetBySlug(w http.ResponseWriter, r *http.Request) {
 func (h *DayHandler) Create(w http.ResponseWriter, r *http.Request) {
 	var req CreateDayRequest
 	if err := readJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "Invalid request body")
+		writeDomainError(w, apperrors.NewBadRequest("invalid request body"))
 		return
 	}
 
 	// Validate metadata JSON if provided
 	if req.Metadata != nil {
 		if _, err := json.Marshal(req.Metadata); err != nil {
-			writeError(w, http.StatusBadRequest, "Invalid metadata JSON")
+			writeDomainError(w, apperrors.NewValidation("metadata", "invalid JSON"))
 			return
 		}
 	}
@@ -287,24 +288,24 @@ func (h *DayHandler) Create(w http.ResponseWriter, r *http.Request) {
 		for i, err := range result.Errors {
 			details[i] = err.Error()
 		}
-		writeError(w, http.StatusBadRequest, "Validation failed", details...)
+		writeDomainError(w, apperrors.NewValidationMsg("validation failed"), details...)
 		return
 	}
 
 	// Check for slug conflict within the program
 	exists, err := h.repo.SlugExists(newDay.Slug, newDay.ProgramID, nil)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to check slug uniqueness")
+		writeDomainError(w, apperrors.NewInternal("failed to check slug uniqueness", err))
 		return
 	}
 	if exists {
-		writeError(w, http.StatusConflict, "Slug already exists within this program")
+		writeDomainError(w, apperrors.NewConflict("slug already exists within this program"))
 		return
 	}
 
 	// Persist
 	if err := h.repo.Create(newDay); err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to create day")
+		writeDomainError(w, apperrors.NewInternal("failed to create day", err))
 		return
 	}
 
@@ -315,31 +316,31 @@ func (h *DayHandler) Create(w http.ResponseWriter, r *http.Request) {
 func (h *DayHandler) Update(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if id == "" {
-		writeError(w, http.StatusBadRequest, "Missing day ID")
+		writeDomainError(w, apperrors.NewBadRequest("missing day ID"))
 		return
 	}
 
 	// Get existing day
 	existing, err := h.repo.GetByID(id)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to get day")
+		writeDomainError(w, apperrors.NewInternal("failed to get day", err))
 		return
 	}
 	if existing == nil {
-		writeError(w, http.StatusNotFound, "Day not found")
+		writeDomainError(w, apperrors.NewNotFound("day", id))
 		return
 	}
 
 	var req UpdateDayRequest
 	if err := readJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "Invalid request body")
+		writeDomainError(w, apperrors.NewBadRequest("invalid request body"))
 		return
 	}
 
 	// Validate metadata JSON if provided
 	if req.Metadata != nil {
 		if _, err := json.Marshal(req.Metadata); err != nil {
-			writeError(w, http.StatusBadRequest, "Invalid metadata JSON")
+			writeDomainError(w, apperrors.NewValidation("metadata", "invalid JSON"))
 			return
 		}
 	}
@@ -360,11 +361,11 @@ func (h *DayHandler) Update(w http.ResponseWriter, r *http.Request) {
 	if newSlug != existing.Slug || !ptrStringEqual(newProgramID, existing.ProgramID) {
 		exists, err := h.repo.SlugExists(newSlug, newProgramID, &id)
 		if err != nil {
-			writeError(w, http.StatusInternalServerError, "Failed to check slug uniqueness")
+			writeDomainError(w, apperrors.NewInternal("failed to check slug uniqueness", err))
 			return
 		}
 		if exists {
-			writeError(w, http.StatusConflict, "Slug already exists within this program")
+			writeDomainError(w, apperrors.NewConflict("slug already exists within this program"))
 			return
 		}
 	}
@@ -385,13 +386,13 @@ func (h *DayHandler) Update(w http.ResponseWriter, r *http.Request) {
 		for i, err := range result.Errors {
 			details[i] = err.Error()
 		}
-		writeError(w, http.StatusBadRequest, "Validation failed", details...)
+		writeDomainError(w, apperrors.NewValidationMsg("validation failed"), details...)
 		return
 	}
 
 	// Persist
 	if err := h.repo.Update(existing); err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to update day")
+		writeDomainError(w, apperrors.NewInternal("failed to update day", err))
 		return
 	}
 
@@ -402,35 +403,35 @@ func (h *DayHandler) Update(w http.ResponseWriter, r *http.Request) {
 func (h *DayHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if id == "" {
-		writeError(w, http.StatusBadRequest, "Missing day ID")
+		writeDomainError(w, apperrors.NewBadRequest("missing day ID"))
 		return
 	}
 
 	// Check day exists
 	existing, err := h.repo.GetByID(id)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to get day")
+		writeDomainError(w, apperrors.NewInternal("failed to get day", err))
 		return
 	}
 	if existing == nil {
-		writeError(w, http.StatusNotFound, "Day not found")
+		writeDomainError(w, apperrors.NewNotFound("day", id))
 		return
 	}
 
 	// Check if day is used in any weeks
 	isUsed, err := h.repo.IsUsedInWeeks(id)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to check if day is used")
+		writeDomainError(w, apperrors.NewInternal("failed to check if day is used", err))
 		return
 	}
 	if isUsed {
-		writeError(w, http.StatusConflict, "Cannot delete day: it is used in one or more weeks")
+		writeDomainError(w, apperrors.NewConflict("cannot delete day: it is used in one or more weeks"))
 		return
 	}
 
 	// Delete
 	if err := h.repo.Delete(id); err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to delete day")
+		writeDomainError(w, apperrors.NewInternal("failed to delete day", err))
 		return
 	}
 

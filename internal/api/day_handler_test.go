@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/waynenilsen/power-pro-v3/internal/testutil"
@@ -212,8 +213,8 @@ func TestGetDay(t *testing.T) {
 		var errResp ErrorResponse
 		json.NewDecoder(resp.Body).Decode(&errResp)
 
-		if errResp.Error != "Day not found" {
-			t.Errorf("Expected error 'Day not found', got %s", errResp.Error)
+		if !strings.Contains(errResp.Error, "day not found") {
+			t.Errorf("Expected error to contain 'day not found', got %s", errResp.Error)
 		}
 	})
 }

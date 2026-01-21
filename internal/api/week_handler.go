@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/waynenilsen/power-pro-v3/internal/domain/week"
+	apperrors "github.com/waynenilsen/power-pro-v3/internal/errors"
 	"github.com/waynenilsen/power-pro-v3/internal/repository"
 )
 
@@ -155,7 +156,7 @@ func (h *WeekHandler) List(w http.ResponseWriter, r *http.Request) {
 
 	weeks, total, err := h.repo.List(params)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to list weeks")
+		writeDomainError(w, apperrors.NewInternal("failed to list weeks", err))
 		return
 	}
 
@@ -186,24 +187,24 @@ func (h *WeekHandler) List(w http.ResponseWriter, r *http.Request) {
 func (h *WeekHandler) Get(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if id == "" {
-		writeError(w, http.StatusBadRequest, "Missing week ID")
+		writeDomainError(w, apperrors.NewBadRequest("missing week ID"))
 		return
 	}
 
 	wk, err := h.repo.GetByID(id)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to get week")
+		writeDomainError(w, apperrors.NewInternal("failed to get week", err))
 		return
 	}
 	if wk == nil {
-		writeError(w, http.StatusNotFound, "Week not found")
+		writeDomainError(w, apperrors.NewNotFound("week", id))
 		return
 	}
 
 	// Get days for this week
 	days, err := h.repo.ListWeekDays(id)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to get week days")
+		writeDomainError(w, apperrors.NewInternal("failed to get week days", err))
 		return
 	}
 
@@ -214,18 +215,18 @@ func (h *WeekHandler) Get(w http.ResponseWriter, r *http.Request) {
 func (h *WeekHandler) Create(w http.ResponseWriter, r *http.Request) {
 	var req CreateWeekRequest
 	if err := readJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "Invalid request body")
+		writeDomainError(w, apperrors.NewBadRequest("invalid request body"))
 		return
 	}
 
 	// Check if cycle exists
 	cycleExists, err := h.repo.CycleExists(req.CycleID)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to verify cycle")
+		writeDomainError(w, apperrors.NewInternal("failed to verify cycle", err))
 		return
 	}
 	if !cycleExists {
-		writeError(w, http.StatusBadRequest, "Cycle not found")
+		writeDomainError(w, apperrors.NewValidation("cycleId", "cycle not found"))
 		return
 	}
 
@@ -245,24 +246,24 @@ func (h *WeekHandler) Create(w http.ResponseWriter, r *http.Request) {
 		for i, err := range result.Errors {
 			details[i] = err.Error()
 		}
-		writeError(w, http.StatusBadRequest, "Validation failed", details...)
+		writeDomainError(w, apperrors.NewValidationMsg("validation failed"), details...)
 		return
 	}
 
 	// Check for week number conflict within the cycle
 	exists, err := h.repo.WeekNumberExistsInCycle(newWeek.CycleID, newWeek.WeekNumber, nil)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to check week number uniqueness")
+		writeDomainError(w, apperrors.NewInternal("failed to check week number uniqueness", err))
 		return
 	}
 	if exists {
-		writeError(w, http.StatusConflict, "Week number already exists within this cycle")
+		writeDomainError(w, apperrors.NewConflict("week number already exists within this cycle"))
 		return
 	}
 
 	// Persist
 	if err := h.repo.Create(newWeek); err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to create week")
+		writeDomainError(w, apperrors.NewInternal("failed to create week", err))
 		return
 	}
 
@@ -273,24 +274,24 @@ func (h *WeekHandler) Create(w http.ResponseWriter, r *http.Request) {
 func (h *WeekHandler) Update(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if id == "" {
-		writeError(w, http.StatusBadRequest, "Missing week ID")
+		writeDomainError(w, apperrors.NewBadRequest("missing week ID"))
 		return
 	}
 
 	// Get existing week
 	existing, err := h.repo.GetByID(id)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to get week")
+		writeDomainError(w, apperrors.NewInternal("failed to get week", err))
 		return
 	}
 	if existing == nil {
-		writeError(w, http.StatusNotFound, "Week not found")
+		writeDomainError(w, apperrors.NewNotFound("week", id))
 		return
 	}
 
 	var req UpdateWeekRequest
 	if err := readJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "Invalid request body")
+		writeDomainError(w, apperrors.NewBadRequest("invalid request body"))
 		return
 	}
 
@@ -299,11 +300,11 @@ func (h *WeekHandler) Update(w http.ResponseWriter, r *http.Request) {
 	if req.CycleID != nil {
 		cycleExists, err := h.repo.CycleExists(*req.CycleID)
 		if err != nil {
-			writeError(w, http.StatusInternalServerError, "Failed to verify cycle")
+			writeDomainError(w, apperrors.NewInternal("failed to verify cycle", err))
 			return
 		}
 		if !cycleExists {
-			writeError(w, http.StatusBadRequest, "Cycle not found")
+			writeDomainError(w, apperrors.NewValidation("cycleId", "cycle not found"))
 			return
 		}
 		newCycleID = *req.CycleID
@@ -317,11 +318,11 @@ func (h *WeekHandler) Update(w http.ResponseWriter, r *http.Request) {
 	if newWeekNumber != existing.WeekNumber || newCycleID != existing.CycleID {
 		exists, err := h.repo.WeekNumberExistsInCycle(newCycleID, newWeekNumber, &id)
 		if err != nil {
-			writeError(w, http.StatusInternalServerError, "Failed to check week number uniqueness")
+			writeDomainError(w, apperrors.NewInternal("failed to check week number uniqueness", err))
 			return
 		}
 		if exists {
-			writeError(w, http.StatusConflict, "Week number already exists within this cycle")
+			writeDomainError(w, apperrors.NewConflict("week number already exists within this cycle"))
 			return
 		}
 	}
@@ -340,13 +341,13 @@ func (h *WeekHandler) Update(w http.ResponseWriter, r *http.Request) {
 		for i, err := range result.Errors {
 			details[i] = err.Error()
 		}
-		writeError(w, http.StatusBadRequest, "Validation failed", details...)
+		writeDomainError(w, apperrors.NewValidationMsg("validation failed"), details...)
 		return
 	}
 
 	// Persist
 	if err := h.repo.Update(existing); err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to update week")
+		writeDomainError(w, apperrors.NewInternal("failed to update week", err))
 		return
 	}
 
@@ -357,35 +358,35 @@ func (h *WeekHandler) Update(w http.ResponseWriter, r *http.Request) {
 func (h *WeekHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if id == "" {
-		writeError(w, http.StatusBadRequest, "Missing week ID")
+		writeDomainError(w, apperrors.NewBadRequest("missing week ID"))
 		return
 	}
 
 	// Check week exists
 	existing, err := h.repo.GetByID(id)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to get week")
+		writeDomainError(w, apperrors.NewInternal("failed to get week", err))
 		return
 	}
 	if existing == nil {
-		writeError(w, http.StatusNotFound, "Week not found")
+		writeDomainError(w, apperrors.NewNotFound("week", id))
 		return
 	}
 
 	// Check if week is used in an active cycle
 	isUsed, err := h.repo.IsUsedInActiveCycle(id)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to check if week is used")
+		writeDomainError(w, apperrors.NewInternal("failed to check if week is used", err))
 		return
 	}
 	if isUsed {
-		writeError(w, http.StatusConflict, "Cannot delete week: it is part of an active cycle with enrolled users")
+		writeDomainError(w, apperrors.NewConflict("cannot delete week: it is part of an active cycle with enrolled users"))
 		return
 	}
 
 	// Delete
 	if err := h.repo.Delete(id); err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to delete week")
+		writeDomainError(w, apperrors.NewInternal("failed to delete week", err))
 		return
 	}
 

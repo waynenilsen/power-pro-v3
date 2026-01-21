@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -301,8 +302,8 @@ func TestGetLiftMax(t *testing.T) {
 		var errResp ErrorResponse
 		json.NewDecoder(resp.Body).Decode(&errResp)
 
-		if errResp.Error != "Lift max not found" {
-			t.Errorf("Expected error 'Lift max not found', got %s", errResp.Error)
+		if !strings.Contains(errResp.Error, "lift max not found") {
+			t.Errorf("Expected error to contain 'lift max not found', got %s", errResp.Error)
 		}
 	})
 }

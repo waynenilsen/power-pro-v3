@@ -1,7 +1,6 @@
 package api
 
 import (
-	"errors"
 	"net/http"
 	"strconv"
 	"strings"
@@ -9,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/waynenilsen/power-pro-v3/internal/domain/lift"
+	apperrors "github.com/waynenilsen/power-pro-v3/internal/errors"
 	"github.com/waynenilsen/power-pro-v3/internal/repository"
 )
 
@@ -118,7 +118,7 @@ func (h *LiftHandler) List(w http.ResponseWriter, r *http.Request) {
 
 	lifts, total, err := h.repo.List(params)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to list lifts")
+		writeDomainError(w, apperrors.NewInternal("failed to list lifts", err))
 		return
 	}
 
@@ -149,17 +149,17 @@ func (h *LiftHandler) List(w http.ResponseWriter, r *http.Request) {
 func (h *LiftHandler) Get(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if id == "" {
-		writeError(w, http.StatusBadRequest, "Missing lift ID")
+		writeDomainError(w, apperrors.NewBadRequest("missing lift ID"))
 		return
 	}
 
 	l, err := h.repo.GetByID(id)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to get lift")
+		writeDomainError(w, apperrors.NewInternal("failed to get lift", err))
 		return
 	}
 	if l == nil {
-		writeError(w, http.StatusNotFound, "Lift not found")
+		writeDomainError(w, apperrors.NewNotFound("lift", id))
 		return
 	}
 
@@ -170,17 +170,17 @@ func (h *LiftHandler) Get(w http.ResponseWriter, r *http.Request) {
 func (h *LiftHandler) GetBySlug(w http.ResponseWriter, r *http.Request) {
 	slug := r.PathValue("slug")
 	if slug == "" {
-		writeError(w, http.StatusBadRequest, "Missing slug")
+		writeDomainError(w, apperrors.NewBadRequest("missing slug"))
 		return
 	}
 
 	l, err := h.repo.GetBySlug(slug)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to get lift")
+		writeDomainError(w, apperrors.NewInternal("failed to get lift", err))
 		return
 	}
 	if l == nil {
-		writeError(w, http.StatusNotFound, "Lift not found")
+		writeDomainError(w, apperrors.NewNotFound("lift", slug))
 		return
 	}
 
@@ -191,7 +191,7 @@ func (h *LiftHandler) GetBySlug(w http.ResponseWriter, r *http.Request) {
 func (h *LiftHandler) Create(w http.ResponseWriter, r *http.Request) {
 	var req CreateLiftRequest
 	if err := readJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "Invalid request body")
+		writeDomainError(w, apperrors.NewBadRequest("invalid request body"))
 		return
 	}
 
@@ -212,18 +212,18 @@ func (h *LiftHandler) Create(w http.ResponseWriter, r *http.Request) {
 		for i, err := range result.Errors {
 			details[i] = err.Error()
 		}
-		writeError(w, http.StatusBadRequest, "Validation failed", details...)
+		writeDomainError(w, apperrors.NewValidationMsg("validation failed"), details...)
 		return
 	}
 
 	// Check for slug conflict
 	exists, err := h.repo.SlugExists(newLift.Slug, nil)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to check slug uniqueness")
+		writeDomainError(w, apperrors.NewInternal("failed to check slug uniqueness", err))
 		return
 	}
 	if exists {
-		writeError(w, http.StatusConflict, "Slug already exists")
+		writeDomainError(w, apperrors.NewConflict("slug already exists"))
 		return
 	}
 
@@ -231,18 +231,18 @@ func (h *LiftHandler) Create(w http.ResponseWriter, r *http.Request) {
 	if req.ParentLiftID != nil {
 		parent, err := h.repo.GetByID(*req.ParentLiftID)
 		if err != nil {
-			writeError(w, http.StatusInternalServerError, "Failed to verify parent lift")
+			writeDomainError(w, apperrors.NewInternal("failed to verify parent lift", err))
 			return
 		}
 		if parent == nil {
-			writeError(w, http.StatusBadRequest, "Parent lift not found")
+			writeDomainError(w, apperrors.NewValidation("parentLiftId", "parent lift not found"))
 			return
 		}
 	}
 
 	// Persist
 	if err := h.repo.Create(newLift); err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to create lift")
+		writeDomainError(w, apperrors.NewInternal("failed to create lift", err))
 		return
 	}
 
@@ -253,24 +253,24 @@ func (h *LiftHandler) Create(w http.ResponseWriter, r *http.Request) {
 func (h *LiftHandler) Update(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if id == "" {
-		writeError(w, http.StatusBadRequest, "Missing lift ID")
+		writeDomainError(w, apperrors.NewBadRequest("missing lift ID"))
 		return
 	}
 
 	// Get existing lift
 	existing, err := h.repo.GetByID(id)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to get lift")
+		writeDomainError(w, apperrors.NewInternal("failed to get lift", err))
 		return
 	}
 	if existing == nil {
-		writeError(w, http.StatusNotFound, "Lift not found")
+		writeDomainError(w, apperrors.NewNotFound("lift", id))
 		return
 	}
 
 	var req UpdateLiftRequest
 	if err := readJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "Invalid request body")
+		writeDomainError(w, apperrors.NewBadRequest("invalid request body"))
 		return
 	}
 
@@ -278,11 +278,11 @@ func (h *LiftHandler) Update(w http.ResponseWriter, r *http.Request) {
 	if req.Slug != nil && *req.Slug != existing.Slug {
 		exists, err := h.repo.SlugExists(*req.Slug, &id)
 		if err != nil {
-			writeError(w, http.StatusInternalServerError, "Failed to check slug uniqueness")
+			writeDomainError(w, apperrors.NewInternal("failed to check slug uniqueness", err))
 			return
 		}
 		if exists {
-			writeError(w, http.StatusConflict, "Slug already exists")
+			writeDomainError(w, apperrors.NewConflict("slug already exists"))
 			return
 		}
 	}
@@ -291,11 +291,11 @@ func (h *LiftHandler) Update(w http.ResponseWriter, r *http.Request) {
 	if req.ParentLiftID != nil && !req.ClearParentLift {
 		parent, err := h.repo.GetByID(*req.ParentLiftID)
 		if err != nil {
-			writeError(w, http.StatusInternalServerError, "Failed to verify parent lift")
+			writeDomainError(w, apperrors.NewInternal("failed to verify parent lift", err))
 			return
 		}
 		if parent == nil {
-			writeError(w, http.StatusBadRequest, "Parent lift not found")
+			writeDomainError(w, apperrors.NewValidation("parentLiftId", "parent lift not found"))
 			return
 		}
 	}
@@ -315,13 +315,13 @@ func (h *LiftHandler) Update(w http.ResponseWriter, r *http.Request) {
 		for i, err := range result.Errors {
 			details[i] = err.Error()
 		}
-		writeError(w, http.StatusBadRequest, "Validation failed", details...)
+		writeDomainError(w, apperrors.NewValidationMsg("validation failed"), details...)
 		return
 	}
 
 	// Persist
 	if err := h.repo.Update(existing); err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to update lift")
+		writeDomainError(w, apperrors.NewInternal("failed to update lift", err))
 		return
 	}
 
@@ -332,29 +332,29 @@ func (h *LiftHandler) Update(w http.ResponseWriter, r *http.Request) {
 func (h *LiftHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if id == "" {
-		writeError(w, http.StatusBadRequest, "Missing lift ID")
+		writeDomainError(w, apperrors.NewBadRequest("missing lift ID"))
 		return
 	}
 
 	// Check lift exists
 	existing, err := h.repo.GetByID(id)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to get lift")
+		writeDomainError(w, apperrors.NewInternal("failed to get lift", err))
 		return
 	}
 	if existing == nil {
-		writeError(w, http.StatusNotFound, "Lift not found")
+		writeDomainError(w, apperrors.NewNotFound("lift", id))
 		return
 	}
 
 	// Check for references (child lifts)
 	hasRefs, err := h.repo.HasChildReferences(id)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to check references")
+		writeDomainError(w, apperrors.NewInternal("failed to check references", err))
 		return
 	}
 	if hasRefs {
-		writeError(w, http.StatusConflict, "Cannot delete lift: it is referenced by other lifts as a parent")
+		writeDomainError(w, apperrors.NewConflict("cannot delete lift: it is referenced by other lifts as a parent"))
 		return
 	}
 
@@ -363,11 +363,11 @@ func (h *LiftHandler) Delete(w http.ResponseWriter, r *http.Request) {
 
 	// Delete
 	if err := h.repo.Delete(id); err != nil {
-		if errors.Is(err, errors.New("FOREIGN KEY constraint failed")) {
-			writeError(w, http.StatusConflict, "Cannot delete lift: it is referenced by other records")
+		if strings.Contains(err.Error(), "FOREIGN KEY constraint") {
+			writeDomainError(w, apperrors.NewConflict("cannot delete lift: it is referenced by other records"))
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "Failed to delete lift")
+		writeDomainError(w, apperrors.NewInternal("failed to delete lift", err))
 		return
 	}
 

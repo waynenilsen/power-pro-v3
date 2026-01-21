@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/waynenilsen/power-pro-v3/internal/domain/dailylookup"
+	apperrors "github.com/waynenilsen/power-pro-v3/internal/errors"
 	"github.com/waynenilsen/power-pro-v3/internal/repository"
 )
 
@@ -141,7 +142,7 @@ func (h *DailyLookupHandler) List(w http.ResponseWriter, r *http.Request) {
 
 	lookups, total, err := h.repo.List(params)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to list daily lookups")
+		writeDomainError(w, apperrors.NewInternal("failed to list daily lookups", err))
 		return
 	}
 
@@ -172,17 +173,17 @@ func (h *DailyLookupHandler) List(w http.ResponseWriter, r *http.Request) {
 func (h *DailyLookupHandler) Get(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if id == "" {
-		writeError(w, http.StatusBadRequest, "Missing daily lookup ID")
+		writeDomainError(w, apperrors.NewBadRequest("missing daily lookup ID"))
 		return
 	}
 
 	lookup, err := h.repo.GetByID(id)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to get daily lookup")
+		writeDomainError(w, apperrors.NewInternal("failed to get daily lookup", err))
 		return
 	}
 	if lookup == nil {
-		writeError(w, http.StatusNotFound, "Daily lookup not found")
+		writeDomainError(w, apperrors.NewNotFound("daily lookup", id))
 		return
 	}
 
@@ -193,7 +194,7 @@ func (h *DailyLookupHandler) Get(w http.ResponseWriter, r *http.Request) {
 func (h *DailyLookupHandler) Create(w http.ResponseWriter, r *http.Request) {
 	var req CreateDailyLookupRequest
 	if err := readJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "Invalid request body")
+		writeDomainError(w, apperrors.NewBadRequest("invalid request body"))
 		return
 	}
 
@@ -213,13 +214,13 @@ func (h *DailyLookupHandler) Create(w http.ResponseWriter, r *http.Request) {
 		for i, err := range result.Errors {
 			details[i] = err.Error()
 		}
-		writeError(w, http.StatusBadRequest, "Validation failed", details...)
+		writeDomainError(w, apperrors.NewValidationMsg("validation failed"), details...)
 		return
 	}
 
 	// Persist
 	if err := h.repo.Create(newLookup); err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to create daily lookup")
+		writeDomainError(w, apperrors.NewInternal("failed to create daily lookup", err))
 		return
 	}
 
@@ -230,24 +231,24 @@ func (h *DailyLookupHandler) Create(w http.ResponseWriter, r *http.Request) {
 func (h *DailyLookupHandler) Update(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if id == "" {
-		writeError(w, http.StatusBadRequest, "Missing daily lookup ID")
+		writeDomainError(w, apperrors.NewBadRequest("missing daily lookup ID"))
 		return
 	}
 
 	// Get existing lookup
 	existing, err := h.repo.GetByID(id)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to get daily lookup")
+		writeDomainError(w, apperrors.NewInternal("failed to get daily lookup", err))
 		return
 	}
 	if existing == nil {
-		writeError(w, http.StatusNotFound, "Daily lookup not found")
+		writeDomainError(w, apperrors.NewNotFound("daily lookup", id))
 		return
 	}
 
 	var req UpdateDailyLookupRequest
 	if err := readJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "Invalid request body")
+		writeDomainError(w, apperrors.NewBadRequest("invalid request body"))
 		return
 	}
 
@@ -267,13 +268,13 @@ func (h *DailyLookupHandler) Update(w http.ResponseWriter, r *http.Request) {
 		for i, err := range result.Errors {
 			details[i] = err.Error()
 		}
-		writeError(w, http.StatusBadRequest, "Validation failed", details...)
+		writeDomainError(w, apperrors.NewValidationMsg("validation failed"), details...)
 		return
 	}
 
 	// Persist
 	if err := h.repo.Update(existing); err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to update daily lookup")
+		writeDomainError(w, apperrors.NewInternal("failed to update daily lookup", err))
 		return
 	}
 
@@ -284,35 +285,35 @@ func (h *DailyLookupHandler) Update(w http.ResponseWriter, r *http.Request) {
 func (h *DailyLookupHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if id == "" {
-		writeError(w, http.StatusBadRequest, "Missing daily lookup ID")
+		writeDomainError(w, apperrors.NewBadRequest("missing daily lookup ID"))
 		return
 	}
 
 	// Check lookup exists
 	existing, err := h.repo.GetByID(id)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to get daily lookup")
+		writeDomainError(w, apperrors.NewInternal("failed to get daily lookup", err))
 		return
 	}
 	if existing == nil {
-		writeError(w, http.StatusNotFound, "Daily lookup not found")
+		writeDomainError(w, apperrors.NewNotFound("daily lookup", id))
 		return
 	}
 
 	// Check if lookup is used by programs
 	isUsed, err := h.repo.IsUsedByPrograms(id)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to check if daily lookup is used")
+		writeDomainError(w, apperrors.NewInternal("failed to check if daily lookup is used", err))
 		return
 	}
 	if isUsed {
-		writeError(w, http.StatusConflict, "Cannot delete daily lookup: it is used by one or more programs")
+		writeDomainError(w, apperrors.NewConflict("cannot delete daily lookup: it is used by one or more programs"))
 		return
 	}
 
 	// Delete
 	if err := h.repo.Delete(id); err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to delete daily lookup")
+		writeDomainError(w, apperrors.NewInternal("failed to delete daily lookup", err))
 		return
 	}
 

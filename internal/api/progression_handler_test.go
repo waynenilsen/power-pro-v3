@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/waynenilsen/power-pro-v3/internal/testutil"
@@ -201,8 +202,8 @@ func TestGetProgression(t *testing.T) {
 		var errResp ErrorResponse
 		json.NewDecoder(resp.Body).Decode(&errResp)
 
-		if errResp.Error != "Progression not found" {
-			t.Errorf("Expected error 'Progression not found', got %s", errResp.Error)
+		if !strings.Contains(errResp.Error, "progression not found") {
+			t.Errorf("Expected error to contain 'progression not found', got %s", errResp.Error)
 		}
 	})
 }

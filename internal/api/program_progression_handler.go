@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	apperrors "github.com/waynenilsen/power-pro-v3/internal/errors"
 	"github.com/waynenilsen/power-pro-v3/internal/repository"
 )
 
@@ -106,25 +107,25 @@ func programProgressionWithDetailsToResponse(entity *repository.ProgramProgressi
 func (h *ProgramProgressionHandler) List(w http.ResponseWriter, r *http.Request) {
 	programID := r.PathValue("programId")
 	if programID == "" {
-		writeError(w, http.StatusBadRequest, "Missing program ID")
+		writeDomainError(w, apperrors.NewBadRequest("missing program ID"))
 		return
 	}
 
 	// Verify program exists
 	program, err := h.programRepo.GetByID(programID)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to get program")
+		writeDomainError(w, apperrors.NewInternal("failed to get program", err))
 		return
 	}
 	if program == nil {
-		writeError(w, http.StatusNotFound, "Program not found")
+		writeDomainError(w, apperrors.NewNotFound("program", programID))
 		return
 	}
 
 	// Get program progressions with details
 	entities, err := h.ppRepo.ListByProgram(programID)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to list program progressions")
+		writeDomainError(w, apperrors.NewInternal("failed to list program progressions", err))
 		return
 	}
 
@@ -143,28 +144,28 @@ func (h *ProgramProgressionHandler) Get(w http.ResponseWriter, r *http.Request) 
 	configID := r.PathValue("configId")
 
 	if programID == "" {
-		writeError(w, http.StatusBadRequest, "Missing program ID")
+		writeDomainError(w, apperrors.NewBadRequest("missing program ID"))
 		return
 	}
 	if configID == "" {
-		writeError(w, http.StatusBadRequest, "Missing config ID")
+		writeDomainError(w, apperrors.NewBadRequest("missing config ID"))
 		return
 	}
 
 	// Get the program progression
 	entity, err := h.ppRepo.GetByID(configID)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to get program progression")
+		writeDomainError(w, apperrors.NewInternal("failed to get program progression", err))
 		return
 	}
 	if entity == nil {
-		writeError(w, http.StatusNotFound, "Program progression configuration not found")
+		writeDomainError(w, apperrors.NewNotFound("program progression configuration", configID))
 		return
 	}
 
 	// Verify it belongs to the specified program
 	if entity.ProgramID != programID {
-		writeError(w, http.StatusNotFound, "Program progression configuration not found")
+		writeDomainError(w, apperrors.NewNotFound("program progression configuration", configID))
 		return
 	}
 
@@ -175,42 +176,42 @@ func (h *ProgramProgressionHandler) Get(w http.ResponseWriter, r *http.Request) 
 func (h *ProgramProgressionHandler) Create(w http.ResponseWriter, r *http.Request) {
 	programID := r.PathValue("programId")
 	if programID == "" {
-		writeError(w, http.StatusBadRequest, "Missing program ID")
+		writeDomainError(w, apperrors.NewBadRequest("missing program ID"))
 		return
 	}
 
 	// Verify program exists
 	program, err := h.programRepo.GetByID(programID)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to get program")
+		writeDomainError(w, apperrors.NewInternal("failed to get program", err))
 		return
 	}
 	if program == nil {
-		writeError(w, http.StatusNotFound, "Program not found")
+		writeDomainError(w, apperrors.NewNotFound("program", programID))
 		return
 	}
 
 	var req CreateProgramProgressionRequest
 	if err := readJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "Invalid request body")
+		writeDomainError(w, apperrors.NewBadRequest("invalid request body"))
 		return
 	}
 
 	// Validate request
 	validationErrors := h.validateCreateRequest(&req)
 	if len(validationErrors) > 0 {
-		writeError(w, http.StatusBadRequest, "Validation failed", validationErrors...)
+		writeDomainError(w, apperrors.NewValidationMsg("validation failed"), validationErrors...)
 		return
 	}
 
 	// Verify progression exists
 	progression, err := h.progressionRepo.GetByID(req.ProgressionID)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to get progression")
+		writeDomainError(w, apperrors.NewInternal("failed to get progression", err))
 		return
 	}
 	if progression == nil {
-		writeError(w, http.StatusBadRequest, "Progression not found", "progressionId references a non-existent progression")
+		writeDomainError(w, apperrors.NewValidation("progressionId", "progression not found"))
 		return
 	}
 
@@ -218,11 +219,11 @@ func (h *ProgramProgressionHandler) Create(w http.ResponseWriter, r *http.Reques
 	if req.LiftID != nil {
 		lift, err := h.liftRepo.GetByID(*req.LiftID)
 		if err != nil {
-			writeError(w, http.StatusInternalServerError, "Failed to get lift")
+			writeDomainError(w, apperrors.NewInternal("failed to get lift", err))
 			return
 		}
 		if lift == nil {
-			writeError(w, http.StatusBadRequest, "Lift not found", "liftId references a non-existent lift")
+			writeDomainError(w, apperrors.NewValidation("liftId", "lift not found"))
 			return
 		}
 	}
@@ -230,11 +231,11 @@ func (h *ProgramProgressionHandler) Create(w http.ResponseWriter, r *http.Reques
 	// Check for duplicate
 	existing, err := h.ppRepo.CheckDuplicate(programID, req.ProgressionID, req.LiftID)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to check for duplicate")
+		writeDomainError(w, apperrors.NewInternal("failed to check for duplicate", err))
 		return
 	}
 	if existing != nil {
-		writeError(w, http.StatusConflict, "Duplicate configuration", "A program progression with the same program, progression, and lift already exists")
+		writeDomainError(w, apperrors.NewConflict("a program progression with the same program, progression, and lift already exists"))
 		return
 	}
 
@@ -266,7 +267,7 @@ func (h *ProgramProgressionHandler) Create(w http.ResponseWriter, r *http.Reques
 
 	// Persist
 	if err := h.ppRepo.Create(entity); err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to create program progression")
+		writeDomainError(w, apperrors.NewInternal("failed to create program progression", err))
 		return
 	}
 
@@ -279,34 +280,34 @@ func (h *ProgramProgressionHandler) Update(w http.ResponseWriter, r *http.Reques
 	configID := r.PathValue("configId")
 
 	if programID == "" {
-		writeError(w, http.StatusBadRequest, "Missing program ID")
+		writeDomainError(w, apperrors.NewBadRequest("missing program ID"))
 		return
 	}
 	if configID == "" {
-		writeError(w, http.StatusBadRequest, "Missing config ID")
+		writeDomainError(w, apperrors.NewBadRequest("missing config ID"))
 		return
 	}
 
 	// Get existing configuration
 	existing, err := h.ppRepo.GetByID(configID)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to get program progression")
+		writeDomainError(w, apperrors.NewInternal("failed to get program progression", err))
 		return
 	}
 	if existing == nil {
-		writeError(w, http.StatusNotFound, "Program progression configuration not found")
+		writeDomainError(w, apperrors.NewNotFound("program progression configuration", configID))
 		return
 	}
 
 	// Verify it belongs to the specified program
 	if existing.ProgramID != programID {
-		writeError(w, http.StatusNotFound, "Program progression configuration not found")
+		writeDomainError(w, apperrors.NewNotFound("program progression configuration", configID))
 		return
 	}
 
 	var req UpdateProgramProgressionRequest
 	if err := readJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "Invalid request body")
+		writeDomainError(w, apperrors.NewBadRequest("invalid request body"))
 		return
 	}
 
@@ -327,7 +328,7 @@ func (h *ProgramProgressionHandler) Update(w http.ResponseWriter, r *http.Reques
 
 	// Persist
 	if err := h.ppRepo.Update(existing); err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to update program progression")
+		writeDomainError(w, apperrors.NewInternal("failed to update program progression", err))
 		return
 	}
 
@@ -340,34 +341,34 @@ func (h *ProgramProgressionHandler) Delete(w http.ResponseWriter, r *http.Reques
 	configID := r.PathValue("configId")
 
 	if programID == "" {
-		writeError(w, http.StatusBadRequest, "Missing program ID")
+		writeDomainError(w, apperrors.NewBadRequest("missing program ID"))
 		return
 	}
 	if configID == "" {
-		writeError(w, http.StatusBadRequest, "Missing config ID")
+		writeDomainError(w, apperrors.NewBadRequest("missing config ID"))
 		return
 	}
 
 	// Get existing configuration
 	existing, err := h.ppRepo.GetByID(configID)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to get program progression")
+		writeDomainError(w, apperrors.NewInternal("failed to get program progression", err))
 		return
 	}
 	if existing == nil {
-		writeError(w, http.StatusNotFound, "Program progression configuration not found")
+		writeDomainError(w, apperrors.NewNotFound("program progression configuration", configID))
 		return
 	}
 
 	// Verify it belongs to the specified program
 	if existing.ProgramID != programID {
-		writeError(w, http.StatusNotFound, "Program progression configuration not found")
+		writeDomainError(w, apperrors.NewNotFound("program progression configuration", configID))
 		return
 	}
 
 	// Delete
 	if err := h.ppRepo.Delete(configID); err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to delete program progression")
+		writeDomainError(w, apperrors.NewInternal("failed to delete program progression", err))
 		return
 	}
 

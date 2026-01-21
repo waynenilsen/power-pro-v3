@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/waynenilsen/power-pro-v3/internal/domain/cycle"
+	apperrors "github.com/waynenilsen/power-pro-v3/internal/errors"
 	"github.com/waynenilsen/power-pro-v3/internal/repository"
 )
 
@@ -139,7 +140,7 @@ func (h *CycleHandler) List(w http.ResponseWriter, r *http.Request) {
 
 	cycles, total, err := h.repo.List(params)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to list cycles")
+		writeDomainError(w, apperrors.NewInternal("failed to list cycles", err))
 		return
 	}
 
@@ -170,24 +171,24 @@ func (h *CycleHandler) List(w http.ResponseWriter, r *http.Request) {
 func (h *CycleHandler) Get(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if id == "" {
-		writeError(w, http.StatusBadRequest, "Missing cycle ID")
+		writeDomainError(w, apperrors.NewBadRequest("missing cycle ID"))
 		return
 	}
 
 	c, err := h.repo.GetByID(id)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to get cycle")
+		writeDomainError(w, apperrors.NewInternal("failed to get cycle", err))
 		return
 	}
 	if c == nil {
-		writeError(w, http.StatusNotFound, "Cycle not found")
+		writeDomainError(w, apperrors.NewNotFound("cycle", id))
 		return
 	}
 
 	// Get weeks for this cycle
 	weeks, err := h.repo.ListWeeks(id)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to get cycle weeks")
+		writeDomainError(w, apperrors.NewInternal("failed to get cycle weeks", err))
 		return
 	}
 
@@ -198,7 +199,7 @@ func (h *CycleHandler) Get(w http.ResponseWriter, r *http.Request) {
 func (h *CycleHandler) Create(w http.ResponseWriter, r *http.Request) {
 	var req CreateCycleRequest
 	if err := readJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "Invalid request body")
+		writeDomainError(w, apperrors.NewBadRequest("invalid request body"))
 		return
 	}
 
@@ -217,13 +218,13 @@ func (h *CycleHandler) Create(w http.ResponseWriter, r *http.Request) {
 		for i, err := range result.Errors {
 			details[i] = err.Error()
 		}
-		writeError(w, http.StatusBadRequest, "Validation failed", details...)
+		writeDomainError(w, apperrors.NewValidationMsg("validation failed"), details...)
 		return
 	}
 
 	// Persist
 	if err := h.repo.Create(newCycle); err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to create cycle")
+		writeDomainError(w, apperrors.NewInternal("failed to create cycle", err))
 		return
 	}
 
@@ -234,24 +235,24 @@ func (h *CycleHandler) Create(w http.ResponseWriter, r *http.Request) {
 func (h *CycleHandler) Update(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if id == "" {
-		writeError(w, http.StatusBadRequest, "Missing cycle ID")
+		writeDomainError(w, apperrors.NewBadRequest("missing cycle ID"))
 		return
 	}
 
 	// Get existing cycle
 	existing, err := h.repo.GetByID(id)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to get cycle")
+		writeDomainError(w, apperrors.NewInternal("failed to get cycle", err))
 		return
 	}
 	if existing == nil {
-		writeError(w, http.StatusNotFound, "Cycle not found")
+		writeDomainError(w, apperrors.NewNotFound("cycle", id))
 		return
 	}
 
 	var req UpdateCycleRequest
 	if err := readJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "Invalid request body")
+		writeDomainError(w, apperrors.NewBadRequest("invalid request body"))
 		return
 	}
 
@@ -267,13 +268,13 @@ func (h *CycleHandler) Update(w http.ResponseWriter, r *http.Request) {
 		for i, err := range result.Errors {
 			details[i] = err.Error()
 		}
-		writeError(w, http.StatusBadRequest, "Validation failed", details...)
+		writeDomainError(w, apperrors.NewValidationMsg("validation failed"), details...)
 		return
 	}
 
 	// Persist
 	if err := h.repo.Update(existing); err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to update cycle")
+		writeDomainError(w, apperrors.NewInternal("failed to update cycle", err))
 		return
 	}
 
@@ -284,35 +285,35 @@ func (h *CycleHandler) Update(w http.ResponseWriter, r *http.Request) {
 func (h *CycleHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if id == "" {
-		writeError(w, http.StatusBadRequest, "Missing cycle ID")
+		writeDomainError(w, apperrors.NewBadRequest("missing cycle ID"))
 		return
 	}
 
 	// Check cycle exists
 	existing, err := h.repo.GetByID(id)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to get cycle")
+		writeDomainError(w, apperrors.NewInternal("failed to get cycle", err))
 		return
 	}
 	if existing == nil {
-		writeError(w, http.StatusNotFound, "Cycle not found")
+		writeDomainError(w, apperrors.NewNotFound("cycle", id))
 		return
 	}
 
 	// Check if cycle is used by programs
 	isUsed, err := h.repo.IsUsedByPrograms(id)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to check if cycle is used")
+		writeDomainError(w, apperrors.NewInternal("failed to check if cycle is used", err))
 		return
 	}
 	if isUsed {
-		writeError(w, http.StatusConflict, "Cannot delete cycle: it is used by one or more programs")
+		writeDomainError(w, apperrors.NewConflict("cannot delete cycle: it is used by one or more programs"))
 		return
 	}
 
 	// Delete
 	if err := h.repo.Delete(id); err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to delete cycle")
+		writeDomainError(w, apperrors.NewInternal("failed to delete cycle", err))
 		return
 	}
 

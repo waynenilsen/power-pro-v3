@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/waynenilsen/power-pro-v3/internal/domain/userprogramstate"
+	apperrors "github.com/waynenilsen/power-pro-v3/internal/errors"
 	"github.com/waynenilsen/power-pro-v3/internal/middleware"
 	"github.com/waynenilsen/power-pro-v3/internal/repository"
 )
@@ -37,7 +38,7 @@ type StateAdvancementResponse struct {
 func (h *StateAdvancementHandler) Advance(w http.ResponseWriter, r *http.Request) {
 	userID := r.PathValue("userId")
 	if userID == "" {
-		writeError(w, http.StatusBadRequest, "Missing user ID")
+		writeDomainError(w, apperrors.NewBadRequest("missing user ID"))
 		return
 	}
 
@@ -45,18 +46,18 @@ func (h *StateAdvancementHandler) Advance(w http.ResponseWriter, r *http.Request
 	authUserID := middleware.GetUserID(r)
 	isAdmin := middleware.IsAdmin(r)
 	if authUserID != userID && !isAdmin {
-		writeError(w, http.StatusForbidden, "Access denied: you can only advance your own state")
+		writeDomainError(w, apperrors.NewForbidden("you can only advance your own state"))
 		return
 	}
 
 	// Get state advancement context
 	advCtx, err := h.stateRepo.GetStateAdvancementContext(userID)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to get state context")
+		writeDomainError(w, apperrors.NewInternal("failed to get state context", err))
 		return
 	}
 	if advCtx == nil {
-		writeError(w, http.StatusNotFound, "Not enrolled in any program")
+		writeDomainError(w, apperrors.NewNotFound("enrollment", userID))
 		return
 	}
 
@@ -79,13 +80,13 @@ func (h *StateAdvancementHandler) Advance(w http.ResponseWriter, r *http.Request
 		for i, err := range validation.Errors {
 			details[i] = err.Error()
 		}
-		writeError(w, http.StatusBadRequest, "State advancement failed", details...)
+		writeDomainError(w, apperrors.NewValidationMsg("state advancement failed"), details...)
 		return
 	}
 
 	// Update state in database (atomic via single UPDATE statement)
 	if err := h.stateRepo.Update(advResult.NewState); err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to update state")
+		writeDomainError(w, apperrors.NewInternal("failed to update state", err))
 		return
 	}
 

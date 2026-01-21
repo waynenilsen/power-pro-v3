@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/waynenilsen/power-pro-v3/internal/domain/program"
+	apperrors "github.com/waynenilsen/power-pro-v3/internal/errors"
 	"github.com/waynenilsen/power-pro-v3/internal/repository"
 )
 
@@ -206,7 +207,7 @@ func (h *ProgramHandler) List(w http.ResponseWriter, r *http.Request) {
 
 	programs, total, err := h.repo.List(params)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to list programs")
+		writeDomainError(w, apperrors.NewInternal("failed to list programs", err))
 		return
 	}
 
@@ -237,24 +238,24 @@ func (h *ProgramHandler) List(w http.ResponseWriter, r *http.Request) {
 func (h *ProgramHandler) Get(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if id == "" {
-		writeError(w, http.StatusBadRequest, "Missing program ID")
+		writeDomainError(w, apperrors.NewBadRequest("missing program ID"))
 		return
 	}
 
 	p, err := h.repo.GetByID(id)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to get program")
+		writeDomainError(w, apperrors.NewInternal("failed to get program", err))
 		return
 	}
 	if p == nil {
-		writeError(w, http.StatusNotFound, "Program not found")
+		writeDomainError(w, apperrors.NewNotFound("program", id))
 		return
 	}
 
 	// Get the associated cycle with its weeks
 	cycle, err := h.repo.GetCycleForProgram(p.CycleID)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to get program cycle")
+		writeDomainError(w, apperrors.NewInternal("failed to get program cycle", err))
 		return
 	}
 
@@ -263,7 +264,7 @@ func (h *ProgramHandler) Get(w http.ResponseWriter, r *http.Request) {
 	if p.WeeklyLookupID != nil {
 		weeklyLookup, err = h.repo.GetWeeklyLookupReference(*p.WeeklyLookupID)
 		if err != nil {
-			writeError(w, http.StatusInternalServerError, "Failed to get weekly lookup")
+			writeDomainError(w, apperrors.NewInternal("failed to get weekly lookup", err))
 			return
 		}
 	}
@@ -272,7 +273,7 @@ func (h *ProgramHandler) Get(w http.ResponseWriter, r *http.Request) {
 	if p.DailyLookupID != nil {
 		dailyLookup, err = h.repo.GetDailyLookupReference(*p.DailyLookupID)
 		if err != nil {
-			writeError(w, http.StatusInternalServerError, "Failed to get daily lookup")
+			writeDomainError(w, apperrors.NewInternal("failed to get daily lookup", err))
 			return
 		}
 	}
@@ -284,29 +285,29 @@ func (h *ProgramHandler) Get(w http.ResponseWriter, r *http.Request) {
 func (h *ProgramHandler) Create(w http.ResponseWriter, r *http.Request) {
 	var req CreateProgramRequest
 	if err := readJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "Invalid request body")
+		writeDomainError(w, apperrors.NewBadRequest("invalid request body"))
 		return
 	}
 
 	// Check if cycle exists
 	cycle, err := h.cycleRepo.GetByID(req.CycleID)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to verify cycle")
+		writeDomainError(w, apperrors.NewInternal("failed to verify cycle", err))
 		return
 	}
 	if cycle == nil {
-		writeError(w, http.StatusBadRequest, "Cycle not found", "cycle_id does not reference a valid cycle")
+		writeDomainError(w, apperrors.NewValidation("cycleId", "cycle not found"))
 		return
 	}
 
 	// Check slug uniqueness
 	slugExists, err := h.repo.SlugExists(req.Slug)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to check slug uniqueness")
+		writeDomainError(w, apperrors.NewInternal("failed to check slug uniqueness", err))
 		return
 	}
 	if slugExists {
-		writeError(w, http.StatusConflict, "Slug already exists", "A program with this slug already exists")
+		writeDomainError(w, apperrors.NewConflict("a program with this slug already exists"))
 		return
 	}
 
@@ -330,13 +331,13 @@ func (h *ProgramHandler) Create(w http.ResponseWriter, r *http.Request) {
 		for i, err := range result.Errors {
 			details[i] = err.Error()
 		}
-		writeError(w, http.StatusBadRequest, "Validation failed", details...)
+		writeDomainError(w, apperrors.NewValidationMsg("validation failed"), details...)
 		return
 	}
 
 	// Persist
 	if err := h.repo.Create(newProgram); err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to create program")
+		writeDomainError(w, apperrors.NewInternal("failed to create program", err))
 		return
 	}
 
@@ -347,24 +348,24 @@ func (h *ProgramHandler) Create(w http.ResponseWriter, r *http.Request) {
 func (h *ProgramHandler) Update(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if id == "" {
-		writeError(w, http.StatusBadRequest, "Missing program ID")
+		writeDomainError(w, apperrors.NewBadRequest("missing program ID"))
 		return
 	}
 
 	// Get existing program
 	existing, err := h.repo.GetByID(id)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to get program")
+		writeDomainError(w, apperrors.NewInternal("failed to get program", err))
 		return
 	}
 	if existing == nil {
-		writeError(w, http.StatusNotFound, "Program not found")
+		writeDomainError(w, apperrors.NewNotFound("program", id))
 		return
 	}
 
 	var req UpdateProgramRequest
 	if err := readJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "Invalid request body")
+		writeDomainError(w, apperrors.NewBadRequest("invalid request body"))
 		return
 	}
 
@@ -372,11 +373,11 @@ func (h *ProgramHandler) Update(w http.ResponseWriter, r *http.Request) {
 	if req.CycleID != nil {
 		cycle, err := h.cycleRepo.GetByID(*req.CycleID)
 		if err != nil {
-			writeError(w, http.StatusInternalServerError, "Failed to verify cycle")
+			writeDomainError(w, apperrors.NewInternal("failed to verify cycle", err))
 			return
 		}
 		if cycle == nil {
-			writeError(w, http.StatusBadRequest, "Cycle not found", "cycle_id does not reference a valid cycle")
+			writeDomainError(w, apperrors.NewValidation("cycleId", "cycle not found"))
 			return
 		}
 	}
@@ -385,11 +386,11 @@ func (h *ProgramHandler) Update(w http.ResponseWriter, r *http.Request) {
 	if req.Slug != nil && *req.Slug != existing.Slug {
 		slugExists, err := h.repo.SlugExistsExcluding(*req.Slug, id)
 		if err != nil {
-			writeError(w, http.StatusInternalServerError, "Failed to check slug uniqueness")
+			writeDomainError(w, apperrors.NewInternal("failed to check slug uniqueness", err))
 			return
 		}
 		if slugExists {
-			writeError(w, http.StatusConflict, "Slug already exists", "A program with this slug already exists")
+			writeDomainError(w, apperrors.NewConflict("a program with this slug already exists"))
 			return
 		}
 	}
@@ -411,13 +412,13 @@ func (h *ProgramHandler) Update(w http.ResponseWriter, r *http.Request) {
 		for i, err := range result.Errors {
 			details[i] = err.Error()
 		}
-		writeError(w, http.StatusBadRequest, "Validation failed", details...)
+		writeDomainError(w, apperrors.NewValidationMsg("validation failed"), details...)
 		return
 	}
 
 	// Persist
 	if err := h.repo.Update(existing); err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to update program")
+		writeDomainError(w, apperrors.NewInternal("failed to update program", err))
 		return
 	}
 
@@ -428,35 +429,35 @@ func (h *ProgramHandler) Update(w http.ResponseWriter, r *http.Request) {
 func (h *ProgramHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if id == "" {
-		writeError(w, http.StatusBadRequest, "Missing program ID")
+		writeDomainError(w, apperrors.NewBadRequest("missing program ID"))
 		return
 	}
 
 	// Check program exists
 	existing, err := h.repo.GetByID(id)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to get program")
+		writeDomainError(w, apperrors.NewInternal("failed to get program", err))
 		return
 	}
 	if existing == nil {
-		writeError(w, http.StatusNotFound, "Program not found")
+		writeDomainError(w, apperrors.NewNotFound("program", id))
 		return
 	}
 
 	// Check if any users are enrolled
 	hasEnrolled, err := h.repo.HasEnrolledUsers(id)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to check if users are enrolled")
+		writeDomainError(w, apperrors.NewInternal("failed to check if users are enrolled", err))
 		return
 	}
 	if hasEnrolled {
-		writeError(w, http.StatusConflict, "Cannot delete program: users are enrolled")
+		writeDomainError(w, apperrors.NewConflict("cannot delete program: users are enrolled"))
 		return
 	}
 
 	// Delete
 	if err := h.repo.Delete(id); err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to delete program")
+		writeDomainError(w, apperrors.NewInternal("failed to delete program", err))
 		return
 	}
 

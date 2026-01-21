@@ -11,6 +11,7 @@ import (
 	"github.com/waynenilsen/power-pro-v3/internal/domain/prescription"
 	"github.com/waynenilsen/power-pro-v3/internal/domain/setscheme"
 	"github.com/waynenilsen/power-pro-v3/internal/domain/workout"
+	apperrors "github.com/waynenilsen/power-pro-v3/internal/errors"
 	"github.com/waynenilsen/power-pro-v3/internal/middleware"
 	"github.com/waynenilsen/power-pro-v3/internal/repository"
 )
@@ -108,7 +109,7 @@ func workoutToResponse(w *workout.Workout) WorkoutResponse {
 func (h *WorkoutHandler) Generate(w http.ResponseWriter, r *http.Request) {
 	userID := r.PathValue("userId")
 	if userID == "" {
-		writeError(w, http.StatusBadRequest, "Missing user ID")
+		writeDomainError(w, apperrors.NewBadRequest("missing user ID"))
 		return
 	}
 
@@ -116,7 +117,7 @@ func (h *WorkoutHandler) Generate(w http.ResponseWriter, r *http.Request) {
 	authUserID := middleware.GetUserID(r)
 	isAdmin := middleware.IsAdmin(r)
 	if authUserID != userID && !isAdmin {
-		writeError(w, http.StatusForbidden, "Access denied: you can only view your own workouts")
+		writeDomainError(w, apperrors.NewForbidden("you can only view your own workouts"))
 		return
 	}
 
@@ -128,7 +129,7 @@ func (h *WorkoutHandler) Generate(w http.ResponseWriter, r *http.Request) {
 	if weekStr := r.URL.Query().Get("weekNumber"); weekStr != "" {
 		week, err := strconv.Atoi(weekStr)
 		if err != nil || week < 1 {
-			writeError(w, http.StatusBadRequest, "Invalid weekNumber: must be a positive integer")
+			writeDomainError(w, apperrors.NewValidation("weekNumber", "must be a positive integer"))
 			return
 		}
 		weekNumber = &week
@@ -146,23 +147,23 @@ func (h *WorkoutHandler) Generate(w http.ResponseWriter, r *http.Request) {
 	data, err := h.workoutRepo.GetWorkoutGenerationData(userID, weekNumber, daySlug)
 	if err != nil {
 		if errors.Is(err, workout.ErrUserNotEnrolled) {
-			writeError(w, http.StatusNotFound, "User is not enrolled in any program")
+			writeDomainError(w, apperrors.NewNotFound("enrollment", userID))
 			return
 		}
 		if errors.Is(err, workout.ErrWeekNotFound) {
-			writeError(w, http.StatusBadRequest, "Week not found in cycle")
+			writeDomainError(w, apperrors.NewValidation("weekNumber", "week not found in cycle"))
 			return
 		}
 		if errors.Is(err, workout.ErrDayNotFound) {
-			writeError(w, http.StatusBadRequest, "Day not found for the specified position")
+			writeDomainError(w, apperrors.NewValidation("daySlug", "day not found for the specified position"))
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "Failed to retrieve workout data")
+		writeDomainError(w, apperrors.NewInternal("failed to retrieve workout data", err))
 		return
 	}
 
 	if len(data.Prescriptions) == 0 {
-		writeError(w, http.StatusNotFound, "Day has no prescriptions")
+		writeDomainError(w, apperrors.NewNotFound("prescriptions", "day has no prescriptions"))
 		return
 	}
 
@@ -227,10 +228,10 @@ func (h *WorkoutHandler) Generate(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		// Check for specific errors
 		if errors.Is(err, prescription.ErrMaxNotFound) {
-			writeError(w, http.StatusBadRequest, "Missing lift max: set up your training maxes to generate workouts", err.Error())
+			writeDomainError(w, apperrors.NewValidationMsg("missing lift max: set up your training maxes to generate workouts"), err.Error())
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "Failed to generate workout", err.Error())
+		writeDomainError(w, apperrors.NewInternal("failed to generate workout", err))
 		return
 	}
 
@@ -243,7 +244,7 @@ func (h *WorkoutHandler) Generate(w http.ResponseWriter, r *http.Request) {
 func (h *WorkoutHandler) Preview(w http.ResponseWriter, r *http.Request) {
 	userID := r.PathValue("userId")
 	if userID == "" {
-		writeError(w, http.StatusBadRequest, "Missing user ID")
+		writeDomainError(w, apperrors.NewBadRequest("missing user ID"))
 		return
 	}
 
@@ -251,25 +252,25 @@ func (h *WorkoutHandler) Preview(w http.ResponseWriter, r *http.Request) {
 	authUserID := middleware.GetUserID(r)
 	isAdmin := middleware.IsAdmin(r)
 	if authUserID != userID && !isAdmin {
-		writeError(w, http.StatusForbidden, "Access denied: you can only view your own workouts")
+		writeDomainError(w, apperrors.NewForbidden("you can only view your own workouts"))
 		return
 	}
 
 	// Parse required query parameters
 	weekStr := r.URL.Query().Get("week")
 	if weekStr == "" {
-		writeError(w, http.StatusBadRequest, "Missing required parameter: week")
+		writeDomainError(w, apperrors.NewValidation("week", "missing required parameter"))
 		return
 	}
 	week, err := strconv.Atoi(weekStr)
 	if err != nil || week < 1 {
-		writeError(w, http.StatusBadRequest, "Invalid week: must be a positive integer")
+		writeDomainError(w, apperrors.NewValidation("week", "must be a positive integer"))
 		return
 	}
 
 	daySlug := r.URL.Query().Get("day")
 	if daySlug == "" {
-		writeError(w, http.StatusBadRequest, "Missing required parameter: day")
+		writeDomainError(w, apperrors.NewValidation("day", "missing required parameter"))
 		return
 	}
 
@@ -277,23 +278,23 @@ func (h *WorkoutHandler) Preview(w http.ResponseWriter, r *http.Request) {
 	data, err := h.workoutRepo.GetWorkoutGenerationData(userID, &week, &daySlug)
 	if err != nil {
 		if errors.Is(err, workout.ErrUserNotEnrolled) {
-			writeError(w, http.StatusNotFound, "User is not enrolled in any program")
+			writeDomainError(w, apperrors.NewNotFound("enrollment", userID))
 			return
 		}
 		if errors.Is(err, workout.ErrWeekNotFound) {
-			writeError(w, http.StatusBadRequest, "Week not found in cycle")
+			writeDomainError(w, apperrors.NewValidation("week", "week not found in cycle"))
 			return
 		}
 		if errors.Is(err, workout.ErrDayNotFound) {
-			writeError(w, http.StatusBadRequest, "Day not found for the specified week")
+			writeDomainError(w, apperrors.NewValidation("day", "day not found for the specified week"))
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "Failed to retrieve workout data")
+		writeDomainError(w, apperrors.NewInternal("failed to retrieve workout data", err))
 		return
 	}
 
 	if len(data.Prescriptions) == 0 {
-		writeError(w, http.StatusNotFound, "Day has no prescriptions")
+		writeDomainError(w, apperrors.NewNotFound("prescriptions", "day has no prescriptions"))
 		return
 	}
 
@@ -355,10 +356,10 @@ func (h *WorkoutHandler) Preview(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		// Check for specific errors
 		if errors.Is(err, prescription.ErrMaxNotFound) {
-			writeError(w, http.StatusBadRequest, "Missing lift max: set up your training maxes to generate workouts", err.Error())
+			writeDomainError(w, apperrors.NewValidationMsg("missing lift max: set up your training maxes to generate workouts"), err.Error())
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "Failed to generate workout preview", err.Error())
+		writeDomainError(w, apperrors.NewInternal("failed to generate workout preview", err))
 		return
 	}
 
