@@ -10,12 +10,12 @@ Audit and ensure all API endpoints follow RESTful conventions. Consistent conven
 RESTful APIs follow established conventions that developers expect. Inconsistent use of HTTP methods, status codes, or URL patterns creates confusion and increases integration effort.
 
 ## Acceptance Criteria
-- [ ] GET used for reads (retrieving resources)
-- [ ] POST used for creates (creating new resources)
-- [ ] PUT used for updates (replacing resources)
-- [ ] DELETE used for deletes (removing resources)
-- [ ] Resource-oriented URLs (nouns, not verbs)
-- [ ] Proper HTTP status codes used:
+- [x] GET used for reads (retrieving resources)
+- [x] POST used for creates (creating new resources)
+- [x] PUT used for updates (replacing resources)
+- [x] DELETE used for deletes (removing resources)
+- [x] Resource-oriented URLs (nouns, not verbs)
+- [x] Proper HTTP status codes used:
   - 200 OK for successful reads/updates
   - 201 Created for successful creates
   - 204 No Content for successful deletes (if applicable)
@@ -23,7 +23,7 @@ RESTful APIs follow established conventions that developers expect. Inconsistent
   - 401 Unauthorized for auth failures
   - 404 Not Found for missing resources
   - 500 Internal Server Error for server errors
-- [ ] Any non-compliant endpoints identified and fixed or documented
+- [x] Any non-compliant endpoints identified and fixed or documented
 
 ## Technical Notes
 - Audit process:
@@ -45,3 +45,4 @@ RESTful APIs follow established conventions that developers expect. Inconsistent
 
 ## Resources / Links
 - ERD: phases/in-progress/001-core-foundation/sprints/in-progress/006-api-developer-experience/erd.md
+- Audit Report: docs/restful-conventions-audit.md
