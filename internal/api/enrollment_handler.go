@@ -162,7 +162,7 @@ func (h *EnrollmentHandler) Enroll(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusCreated, enrollmentToResponse(enrollment))
+	writeData(w, http.StatusCreated, enrollmentToResponse(enrollment))
 }
 
 // Get handles GET /users/{userId}/program
@@ -191,7 +191,7 @@ func (h *EnrollmentHandler) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, enrollmentToResponse(enrollment))
+	writeData(w, http.StatusOK, enrollmentToResponse(enrollment))
 }
 
 // Unenroll handles DELETE /users/{userId}/program

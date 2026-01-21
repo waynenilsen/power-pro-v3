@@ -76,7 +76,7 @@ func createPHTestLift(t *testing.T, ts *testutil.TestServer, name, slug string) 
 
 	var lift LiftResponse
 	json.NewDecoder(resp.Body).Decode(&lift)
-	return lift.ID
+	return lift.Data.ID
 }
 
 // createPHTestProgression creates a test progression and returns its ID

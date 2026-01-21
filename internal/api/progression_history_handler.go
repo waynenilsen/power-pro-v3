@@ -176,12 +176,6 @@ func (h *ProgressionHistoryHandler) List(w http.ResponseWriter, r *http.Request)
 		}
 	}
 
-	resp := ProgressionHistoryListResponse{
-		Data:       data,
-		Limit:      limit,
-		Offset:     offset,
-		TotalItems: total,
-	}
-
-	writeJSON(w, http.StatusOK, resp)
+	// Use standard envelope with pagination metadata
+	writePaginatedData(w, http.StatusOK, data, total, limit, offset)
 }

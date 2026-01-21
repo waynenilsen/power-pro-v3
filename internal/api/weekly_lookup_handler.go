@@ -156,21 +156,9 @@ func (h *WeeklyLookupHandler) List(w http.ResponseWriter, r *http.Request) {
 		data[i] = weeklyLookupToResponse(&l)
 	}
 
-	// Calculate total pages
-	totalPages := total / int64(pageSize)
-	if total%int64(pageSize) > 0 {
-		totalPages++
-	}
-
-	resp := PaginatedResponse{
-		Data:       data,
-		Page:       page,
-		PageSize:   pageSize,
-		TotalItems: total,
-		TotalPages: totalPages,
-	}
-
-	writeJSON(w, http.StatusOK, resp)
+	// Use standard envelope with offset-based pagination
+	offset := (page - 1) * pageSize
+	writePaginatedData(w, http.StatusOK, data, total, pageSize, offset)
 }
 
 // Get handles GET /weekly-lookups/{id}
@@ -191,7 +179,7 @@ func (h *WeeklyLookupHandler) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, weeklyLookupToResponse(lookup))
+	writeData(w, http.StatusOK, weeklyLookupToResponse(lookup))
 }
 
 // Create handles POST /weekly-lookups
@@ -228,7 +216,7 @@ func (h *WeeklyLookupHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusCreated, weeklyLookupToResponse(newLookup))
+	writeData(w, http.StatusCreated, weeklyLookupToResponse(newLookup))
 }
 
 // Update handles PUT /weekly-lookups/{id}
@@ -282,7 +270,7 @@ func (h *WeeklyLookupHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, weeklyLookupToResponse(existing))
+	writeData(w, http.StatusOK, weeklyLookupToResponse(existing))
 }
 
 // Delete handles DELETE /weekly-lookups/{id}

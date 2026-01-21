@@ -117,21 +117,9 @@ func (h *ProgressionHandler) List(w http.ResponseWriter, r *http.Request) {
 		data[i] = progressionEntityToResponse(&entity)
 	}
 
-	// Calculate total pages
-	totalPages := total / int64(pageSize)
-	if total%int64(pageSize) > 0 {
-		totalPages++
-	}
-
-	resp := PaginatedResponse{
-		Data:       data,
-		Page:       page,
-		PageSize:   pageSize,
-		TotalItems: total,
-		TotalPages: totalPages,
-	}
-
-	writeJSON(w, http.StatusOK, resp)
+	// Use standard envelope with offset-based pagination
+	offset := (page - 1) * pageSize
+	writePaginatedData(w, http.StatusOK, data, total, pageSize, offset)
 }
 
 // Get handles GET /progressions/{id}
@@ -152,7 +140,7 @@ func (h *ProgressionHandler) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, progressionEntityToResponse(entity))
+	writeData(w, http.StatusOK, progressionEntityToResponse(entity))
 }
 
 // Create handles POST /progressions
@@ -196,7 +184,7 @@ func (h *ProgressionHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusCreated, progressionEntityToResponse(entity))
+	writeData(w, http.StatusCreated, progressionEntityToResponse(entity))
 }
 
 // enrichProgressionParams injects id and name into progression parameters.
@@ -281,7 +269,7 @@ func (h *ProgressionHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, progressionEntityToResponse(existing))
+	writeData(w, http.StatusOK, progressionEntityToResponse(existing))
 }
 
 // Delete handles DELETE /progressions/{id}

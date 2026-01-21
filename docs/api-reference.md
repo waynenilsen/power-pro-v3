@@ -53,17 +53,48 @@ All endpoints (except `/health`) require authentication via HTTP headers.
 
 ---
 
-## Common Response Formats
+## Standard Response Envelope
+
+All API responses follow a consistent envelope format for predictable client handling.
+
+### Success Response (Single Entity)
+
+```json
+{
+  "data": {
+    "id": "abc123",
+    "name": "Squat",
+    ...
+  }
+}
+```
+
+### Success Response with Warnings
+
+```json
+{
+  "data": {
+    "id": "abc123",
+    ...
+  },
+  "warnings": ["informational message"]
+}
+```
 
 ### Paginated Response
 
 ```json
 {
-  "data": [...],
-  "page": 1,
-  "pageSize": 20,
-  "totalItems": 100,
-  "totalPages": 5
+  "data": [
+    {"id": "abc123", ...},
+    {"id": "def456", ...}
+  ],
+  "meta": {
+    "total": 100,
+    "limit": 20,
+    "offset": 0,
+    "hasMore": true
+  }
 }
 ```
 
@@ -71,19 +102,27 @@ All endpoints (except `/health`) require authentication via HTTP headers.
 
 ```json
 {
-  "error": "error message",
-  "details": ["detail 1", "detail 2"]
+  "error": {
+    "code": "NOT_FOUND",
+    "message": "lift not found: abc123",
+    "details": {
+      "validationErrors": ["field is required"]
+    }
+  }
 }
 ```
 
-### Response with Warnings
+#### Error Codes
 
-```json
-{
-  "data": {...},
-  "warnings": ["warning message"]
-}
-```
+| Code | HTTP Status | Description |
+|------|-------------|-------------|
+| `NOT_FOUND` | 404 | Resource not found |
+| `VALIDATION_ERROR` | 400 | Request validation failed |
+| `BAD_REQUEST` | 400 | Malformed request |
+| `CONFLICT` | 409 | Resource conflict (e.g., duplicate) |
+| `FORBIDDEN` | 403 | Permission denied |
+| `UNAUTHORIZED` | 401 | Authentication required |
+| `INTERNAL_ERROR` | 500 | Server error |
 
 ---
 
@@ -95,6 +134,8 @@ All endpoints (except `/health`) require authentication via HTTP headers.
 | `pageSize` | int | 20 | Items per page (max: 100) |
 | `sortBy` | string | varies | Field to sort by |
 | `sortOrder` | string | "asc" | "asc" or "desc" |
+
+Note: While the API accepts `page` and `pageSize` parameters, the response uses offset-based pagination metadata (`offset`, `limit`, `hasMore`, `total`) for better compatibility with various client implementations.
 
 ---
 

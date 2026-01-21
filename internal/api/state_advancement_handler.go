@@ -99,5 +99,5 @@ func (h *StateAdvancementHandler) Advance(w http.ResponseWriter, r *http.Request
 		UpdatedAt:             advResult.NewState.UpdatedAt,
 	}
 
-	writeJSON(w, http.StatusOK, resp)
+	writeData(w, http.StatusOK, resp)
 }

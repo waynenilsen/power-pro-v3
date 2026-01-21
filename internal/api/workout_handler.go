@@ -235,7 +235,7 @@ func (h *WorkoutHandler) Generate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, workoutToResponse(generatedWorkout))
+	writeData(w, http.StatusOK, workoutToResponse(generatedWorkout))
 }
 
 // Preview handles GET /users/{userId}/workout/preview
@@ -363,5 +363,5 @@ func (h *WorkoutHandler) Preview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, workoutToResponse(generatedWorkout))
+	writeData(w, http.StatusOK, workoutToResponse(generatedWorkout))
 }

@@ -157,7 +157,7 @@ func createPPTestLift(t *testing.T, ts *testutil.TestServer, name, slug string) 
 
 	var lift LiftResponse
 	json.NewDecoder(resp.Body).Decode(&lift)
-	return lift.ID
+	return lift.Data.ID
 }
 
 func TestProgramProgressionCRUD(t *testing.T) {

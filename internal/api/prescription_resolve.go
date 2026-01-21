@@ -179,7 +179,7 @@ func (h *PrescriptionHandler) Resolve(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if errors.Is(err, prescription.ErrMaxNotFound) || errors.Is(err, loadstrategy.ErrMaxNotFound) {
-			writeError(w, http.StatusUnprocessableEntity, err.Error())
+			writeDomainError(w, apperrors.NewValidationMsg(err.Error()))
 			return
 		}
 		writeDomainError(w, apperrors.NewInternal("failed to resolve prescription", err))
@@ -194,7 +194,7 @@ func (h *PrescriptionHandler) Resolve(w http.ResponseWriter, r *http.Request) {
 		RestSeconds:    resolved.RestSeconds,
 	}
 
-	writeJSON(w, http.StatusOK, resp)
+	writeData(w, http.StatusOK, resp)
 }
 
 // ResolveBatch handles POST /prescriptions/resolve-batch
@@ -278,7 +278,7 @@ func (h *PrescriptionHandler) ResolveBatch(w http.ResponseWriter, r *http.Reques
 		Results: results,
 	}
 
-	writeJSON(w, http.StatusOK, resp)
+	writeData(w, http.StatusOK, resp)
 }
 
 // injectMaxLookup injects a MaxLookup into a LoadStrategy if it supports it.

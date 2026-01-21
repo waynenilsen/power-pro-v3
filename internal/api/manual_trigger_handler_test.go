@@ -98,7 +98,7 @@ func createMTTestLift(t *testing.T, ts *testutil.TestServer, name, slug string) 
 
 	var lift LiftResponse
 	json.NewDecoder(resp.Body).Decode(&lift)
-	return lift.ID
+	return lift.Data.ID
 }
 
 // createMTTestProgression creates a test progression and returns its ID

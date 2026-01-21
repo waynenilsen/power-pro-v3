@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/waynenilsen/power-pro-v3/internal/domain/liftmax"
+	apperrors "github.com/waynenilsen/power-pro-v3/internal/errors"
 	"github.com/waynenilsen/power-pro-v3/internal/middleware"
 )
 
@@ -24,7 +25,7 @@ type ConversionResponse struct {
 func (h *LiftMaxHandler) GetCurrent(w http.ResponseWriter, r *http.Request) {
 	userID := r.PathValue("userId")
 	if userID == "" {
-		writeError(w, http.StatusBadRequest, "Missing user ID")
+		writeDomainError(w, apperrors.NewBadRequest("missing user ID"))
 		return
 	}
 
@@ -37,41 +38,41 @@ func (h *LiftMaxHandler) GetCurrent(w http.ResponseWriter, r *http.Request) {
 	// lift is required
 	liftID := query.Get("lift")
 	if liftID == "" {
-		writeError(w, http.StatusBadRequest, "Missing required query parameter: lift")
+		writeDomainError(w, apperrors.NewValidation("lift", "missing required query parameter"))
 		return
 	}
 
 	// Validate lift is a valid UUID
 	if _, err := uuid.Parse(liftID); err != nil {
-		writeError(w, http.StatusBadRequest, "Invalid lift parameter: must be a valid UUID")
+		writeDomainError(w, apperrors.NewValidation("lift", "must be a valid UUID"))
 		return
 	}
 
 	// type is required
 	maxType := strings.ToUpper(query.Get("type"))
 	if maxType == "" {
-		writeError(w, http.StatusBadRequest, "Missing required query parameter: type")
+		writeDomainError(w, apperrors.NewValidation("type", "missing required query parameter"))
 		return
 	}
 
 	// Validate type
 	if maxType != string(liftmax.OneRM) && maxType != string(liftmax.TrainingMax) {
-		writeError(w, http.StatusBadRequest, "Invalid type parameter: must be ONE_RM or TRAINING_MAX")
+		writeDomainError(w, apperrors.NewValidation("type", "must be ONE_RM or TRAINING_MAX"))
 		return
 	}
 
 	// Query for the current max
 	m, err := h.repo.GetCurrentMax(userID, liftID, maxType)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to get current lift max")
+		writeDomainError(w, apperrors.NewInternal("failed to get current lift max", err))
 		return
 	}
 	if m == nil {
-		writeError(w, http.StatusNotFound, "No lift max found for the specified user, lift, and type")
+		writeDomainError(w, apperrors.NewNotFound("lift max", "user/lift/type combination"))
 		return
 	}
 
-	writeJSON(w, http.StatusOK, liftMaxToResponse(m))
+	writeData(w, http.StatusOK, liftMaxToResponse(m))
 }
 
 // Convert handles GET /lift-maxes/{id}/convert
@@ -79,18 +80,18 @@ func (h *LiftMaxHandler) GetCurrent(w http.ResponseWriter, r *http.Request) {
 func (h *LiftMaxHandler) Convert(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if id == "" {
-		writeError(w, http.StatusBadRequest, "Missing lift max ID")
+		writeDomainError(w, apperrors.NewBadRequest("missing lift max ID"))
 		return
 	}
 
 	// Get the lift max
 	existing, err := h.repo.GetByID(id)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to get lift max")
+		writeDomainError(w, apperrors.NewInternal("failed to get lift max", err))
 		return
 	}
 	if existing == nil {
-		writeError(w, http.StatusNotFound, "Lift max not found")
+		writeDomainError(w, apperrors.NewNotFound("lift max", id))
 		return
 	}
 
@@ -98,7 +99,7 @@ func (h *LiftMaxHandler) Convert(w http.ResponseWriter, r *http.Request) {
 	requestingUserID := middleware.GetUserID(r)
 	isAdmin := middleware.IsAdmin(r)
 	if requestingUserID != existing.UserID && !isAdmin {
-		writeError(w, http.StatusForbidden, "Access denied: you do not have permission to access this resource")
+		writeDomainError(w, apperrors.NewForbidden("you do not have permission to access this resource"))
 		return
 	}
 
@@ -108,19 +109,19 @@ func (h *LiftMaxHandler) Convert(w http.ResponseWriter, r *http.Request) {
 	// to_type is required
 	toType := strings.ToUpper(query.Get("to_type"))
 	if toType == "" {
-		writeError(w, http.StatusBadRequest, "Missing required query parameter: to_type")
+		writeDomainError(w, apperrors.NewValidation("to_type", "missing required query parameter"))
 		return
 	}
 
 	// Validate to_type
 	if toType != string(liftmax.OneRM) && toType != string(liftmax.TrainingMax) {
-		writeError(w, http.StatusBadRequest, "Invalid to_type: must be ONE_RM or TRAINING_MAX")
+		writeDomainError(w, apperrors.NewValidation("to_type", "must be ONE_RM or TRAINING_MAX"))
 		return
 	}
 
 	// Check if to_type is same as current type
 	if toType == string(existing.Type) {
-		writeError(w, http.StatusBadRequest, "Cannot convert to same type: lift max is already "+toType)
+		writeDomainError(w, apperrors.NewBadRequest("cannot convert to same type: lift max is already "+toType))
 		return
 	}
 
@@ -129,11 +130,11 @@ func (h *LiftMaxHandler) Convert(w http.ResponseWriter, r *http.Request) {
 	if pctStr := query.Get("percentage"); pctStr != "" {
 		pct, err := strconv.ParseFloat(pctStr, 64)
 		if err != nil {
-			writeError(w, http.StatusBadRequest, "Invalid percentage: must be a number")
+			writeDomainError(w, apperrors.NewValidation("percentage", "must be a number"))
 			return
 		}
 		if pct < 1 || pct > 100 {
-			writeError(w, http.StatusBadRequest, "Invalid percentage: must be between 1 and 100")
+			writeDomainError(w, apperrors.NewValidation("percentage", "must be between 1 and 100"))
 			return
 		}
 		percentage = pct
@@ -152,7 +153,7 @@ func (h *LiftMaxHandler) Convert(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeDomainError(w, apperrors.NewBadRequest(err.Error()))
 		return
 	}
 
@@ -164,5 +165,5 @@ func (h *LiftMaxHandler) Convert(w http.ResponseWriter, r *http.Request) {
 		Percentage:     percentage,
 	}
 
-	writeJSON(w, http.StatusOK, response)
+	writeData(w, http.StatusOK, response)
 }

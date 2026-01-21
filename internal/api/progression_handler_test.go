@@ -3,6 +3,7 @@ package api_test
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -202,8 +203,8 @@ func TestGetProgression(t *testing.T) {
 		var errResp ErrorResponse
 		json.NewDecoder(resp.Body).Decode(&errResp)
 
-		if !strings.Contains(errResp.Error, "progression not found") {
-			t.Errorf("Expected error to contain 'progression not found', got %s", errResp.Error)
+		if !strings.Contains(errResp.Error.Message, "progression not found") {
+			t.Errorf("Expected error to contain 'progression not found', got %s", errResp.Error.Message)
 		}
 	})
 }
@@ -322,16 +323,10 @@ func TestCreateProgression(t *testing.T) {
 		var errResp ErrorResponse
 		json.NewDecoder(resp.Body).Decode(&errResp)
 
-		// Should have validation error about increment
-		found := false
-		for _, detail := range errResp.Details {
-			if detail == "increment must be positive" {
-				found = true
-				break
-			}
-		}
-		if !found {
-			t.Errorf("Expected 'increment must be positive' in details, got %v", errResp.Details)
+		// Should have validation error about increment - details is now in Error.Details
+		detailsStr := fmt.Sprintf("%v", errResp.Error.Details)
+		if !strings.Contains(detailsStr, "increment must be positive") {
+			t.Errorf("Expected 'increment must be positive' in details, got %v", errResp.Error.Details)
 		}
 	})
 
@@ -377,16 +372,10 @@ func TestCreateProgression(t *testing.T) {
 		var errResp ErrorResponse
 		json.NewDecoder(resp.Body).Decode(&errResp)
 
-		// Should have validation error about trigger type
-		found := false
-		for _, detail := range errResp.Details {
-			if detail == "linear progression only supports AFTER_SESSION and AFTER_WEEK triggers" {
-				found = true
-				break
-			}
-		}
-		if !found {
-			t.Errorf("Expected trigger type error in details, got %v", errResp.Details)
+		// Should have validation error about trigger type - details is now in Error.Details
+		detailsStr := fmt.Sprintf("%v", errResp.Error.Details)
+		if !strings.Contains(detailsStr, "linear progression only supports AFTER_SESSION and AFTER_WEEK triggers") {
+			t.Errorf("Expected trigger type error in details, got %v", errResp.Error.Details)
 		}
 	})
 

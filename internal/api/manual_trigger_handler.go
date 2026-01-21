@@ -136,5 +136,5 @@ func (h *ManualTriggerHandler) Trigger(w http.ResponseWriter, r *http.Request) {
 		response.Results[i] = resp
 	}
 
-	writeJSON(w, http.StatusOK, response)
+	writeData(w, http.StatusOK, response)
 }

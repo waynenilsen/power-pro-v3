@@ -35,43 +35,69 @@ For example requests, see [`docs/example-requests.md`](./example-requests.md).
 
 ## Response Formats
 
+### Standard Success Response
+
+All successful responses wrap data in a standard envelope:
+
+```json
+{
+  "data": {
+    "id": "abc123",
+    "name": "Squat",
+    ...
+  }
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `data` | object/array | The requested resource or array of resources |
+
 ### Paginated Response Format
 
-All list endpoints return data in this paginated format:
+All list endpoints return data with pagination metadata:
 
 ```json
 {
   "data": [...],
-  "page": 1,
-  "pageSize": 20,
-  "totalItems": 100,
-  "totalPages": 5
+  "meta": {
+    "total": 100,
+    "limit": 20,
+    "offset": 0,
+    "hasMore": true
+  }
 }
 ```
 
 | Field | Type | Description |
 |-------|------|-------------|
 | `data` | array | Array of resource objects |
-| `page` | int | Current page number (1-indexed) |
-| `pageSize` | int | Number of items per page |
-| `totalItems` | int | Total number of items across all pages |
-| `totalPages` | int | Total number of pages |
+| `meta.total` | int | Total number of items across all pages |
+| `meta.limit` | int | Maximum items returned per request |
+| `meta.offset` | int | Number of items skipped (0-indexed) |
+| `meta.hasMore` | bool | Whether more items exist beyond this page |
 
 ### Error Response Format
 
-All error responses follow this format:
+All error responses follow this structured format:
 
 ```json
 {
-  "error": "error message",
-  "details": ["detail 1", "detail 2"]
+  "error": {
+    "code": "NOT_FOUND",
+    "message": "lift not found: abc123",
+    "details": {
+      "validationErrors": ["field is required"]
+    }
+  }
 }
 ```
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `error` | string | Human-readable error message |
-| `details` | array | Optional array of specific error details |
+| `error.code` | string | Machine-readable error code |
+| `error.message` | string | Human-readable error message |
+| `error.details` | object | Optional structured error details |
 
 ### Response with Warnings Format
 

@@ -213,8 +213,8 @@ func TestGetDay(t *testing.T) {
 		var errResp ErrorResponse
 		json.NewDecoder(resp.Body).Decode(&errResp)
 
-		if !strings.Contains(errResp.Error, "day not found") {
-			t.Errorf("Expected error to contain 'day not found', got %s", errResp.Error)
+		if !strings.Contains(errResp.Error.Message, "day not found") {
+			t.Errorf("Expected error to contain 'day not found', got %s", errResp.Error.Message)
 		}
 	})
 }

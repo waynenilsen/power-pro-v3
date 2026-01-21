@@ -351,7 +351,7 @@ func TestWorkoutGenerationWorkflowIntegration(t *testing.T) {
 		liftResp.Body.Close()
 
 		// Create lift max using helper
-		createMax(t, ts, userID, lift.ID, "TRAINING_MAX", 400.0, nil)
+		createMax(t, ts, userID, lift.Data.ID, "TRAINING_MAX", 400.0, nil)
 
 		// Create RAMP prescription
 		prescBody := fmt.Sprintf(`{
@@ -359,7 +359,7 @@ func TestWorkoutGenerationWorkflowIntegration(t *testing.T) {
 			"loadStrategy": {"type": "PERCENT_OF", "referenceType": "TRAINING_MAX", "percentage": 100},
 			"setScheme": {"type": "RAMP", "steps": [{"percentage": 50, "reps": 5}, {"percentage": 60, "reps": 3}, {"percentage": 70, "reps": 2}, {"percentage": 80, "reps": 1}], "workSetThreshold": 70},
 			"order": 0
-		}`, lift.ID)
+		}`, lift.Data.ID)
 		prescResp, _ := adminPost(ts.URL("/prescriptions"), prescBody)
 		var presc PrescriptionResponse
 		json.NewDecoder(prescResp.Body).Decode(&presc)

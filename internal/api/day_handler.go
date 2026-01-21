@@ -176,21 +176,9 @@ func (h *DayHandler) List(w http.ResponseWriter, r *http.Request) {
 		data[i] = dayToResponse(&d)
 	}
 
-	// Calculate total pages
-	totalPages := total / int64(pageSize)
-	if total%int64(pageSize) > 0 {
-		totalPages++
-	}
-
-	resp := PaginatedResponse{
-		Data:       data,
-		Page:       page,
-		PageSize:   pageSize,
-		TotalItems: total,
-		TotalPages: totalPages,
-	}
-
-	writeJSON(w, http.StatusOK, resp)
+	// Use standard envelope with offset-based pagination
+	offset := (page - 1) * pageSize
+	writePaginatedData(w, http.StatusOK, data, total, pageSize, offset)
 }
 
 // Get handles GET /days/{id}
@@ -218,7 +206,7 @@ func (h *DayHandler) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, dayToResponseWithPrescriptions(d, prescriptions))
+	writeData(w, http.StatusOK, dayToResponseWithPrescriptions(d, prescriptions))
 }
 
 // GetBySlug handles GET /days/by-slug/{slug}
@@ -252,7 +240,7 @@ func (h *DayHandler) GetBySlug(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, dayToResponseWithPrescriptions(d, prescriptions))
+	writeData(w, http.StatusOK, dayToResponseWithPrescriptions(d, prescriptions))
 }
 
 // Create handles POST /days
@@ -309,7 +297,7 @@ func (h *DayHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusCreated, dayToResponse(newDay))
+	writeData(w, http.StatusCreated, dayToResponse(newDay))
 }
 
 // Update handles PUT /days/{id}
@@ -396,7 +384,7 @@ func (h *DayHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, dayToResponse(existing))
+	writeData(w, http.StatusOK, dayToResponse(existing))
 }
 
 // Delete handles DELETE /days/{id}

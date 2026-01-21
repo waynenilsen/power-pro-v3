@@ -237,7 +237,7 @@ func TestLiftAuthorizationWrite(t *testing.T) {
 		createResp.Body.Close()
 
 		// Try to delete without auth
-		req, _ := http.NewRequest(http.MethodDelete, ts.URL("/lifts/"+createdLift.ID), nil)
+		req, _ := http.NewRequest(http.MethodDelete, ts.URL("/lifts/"+createdLift.Data.ID), nil)
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Fatalf("Failed to make request: %v", err)
@@ -262,7 +262,7 @@ func TestLiftAuthorizationWrite(t *testing.T) {
 		createResp.Body.Close()
 
 		// Try to delete as non-admin
-		req, _ := http.NewRequest(http.MethodDelete, ts.URL("/lifts/"+createdLift.ID), nil)
+		req, _ := http.NewRequest(http.MethodDelete, ts.URL("/lifts/"+createdLift.Data.ID), nil)
 		req.Header.Set("X-User-ID", testutil.TestUserID)
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
@@ -288,7 +288,7 @@ func TestLiftAuthorizationWrite(t *testing.T) {
 		createResp.Body.Close()
 
 		// Delete as admin
-		req, _ := http.NewRequest(http.MethodDelete, ts.URL("/lifts/"+createdLift.ID), nil)
+		req, _ := http.NewRequest(http.MethodDelete, ts.URL("/lifts/"+createdLift.Data.ID), nil)
 		req.Header.Set("X-User-ID", testutil.TestAdminID)
 		req.Header.Set("X-Admin", "true")
 		resp, err := http.DefaultClient.Do(req)
@@ -336,7 +336,7 @@ func TestLiftMaxAuthorizationOwnership(t *testing.T) {
 		}
 		var max LiftMaxResponse
 		json.NewDecoder(resp.Body).Decode(&max)
-		return max.ID
+		return max.Data.ID
 	}
 
 	userAMaxID := createMax(userAID)
@@ -588,7 +588,7 @@ func TestLiftMaxAuthorizationOwnership(t *testing.T) {
 		json.NewDecoder(createResp.Body).Decode(&newMax)
 		createResp.Body.Close()
 
-		req, _ := http.NewRequest(http.MethodDelete, ts.URL("/lift-maxes/"+newMax.ID), nil)
+		req, _ := http.NewRequest(http.MethodDelete, ts.URL("/lift-maxes/"+newMax.Data.ID), nil)
 		req.Header.Set("X-User-ID", userAID)
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
@@ -707,7 +707,7 @@ func TestLiftMaxConvertAuthorization(t *testing.T) {
 	createResp.Body.Close()
 
 	t.Run("unauthenticated user gets 401 on convert", func(t *testing.T) {
-		url := fmt.Sprintf("/lift-maxes/%s/convert?to_type=TRAINING_MAX", max.ID)
+		url := fmt.Sprintf("/lift-maxes/%s/convert?to_type=TRAINING_MAX", max.Data.ID)
 		resp, err := http.Get(ts.URL(url))
 		if err != nil {
 			t.Fatalf("Failed to make request: %v", err)
@@ -720,7 +720,7 @@ func TestLiftMaxConvertAuthorization(t *testing.T) {
 	})
 
 	t.Run("owner can convert their lift max", func(t *testing.T) {
-		url := fmt.Sprintf("/lift-maxes/%s/convert?to_type=TRAINING_MAX", max.ID)
+		url := fmt.Sprintf("/lift-maxes/%s/convert?to_type=TRAINING_MAX", max.Data.ID)
 		req, _ := http.NewRequest(http.MethodGet, ts.URL(url), nil)
 		req.Header.Set("X-User-ID", userAID)
 		resp, err := http.DefaultClient.Do(req)
@@ -736,7 +736,7 @@ func TestLiftMaxConvertAuthorization(t *testing.T) {
 	})
 
 	t.Run("non-owner cannot convert another user's lift max", func(t *testing.T) {
-		url := fmt.Sprintf("/lift-maxes/%s/convert?to_type=TRAINING_MAX", max.ID)
+		url := fmt.Sprintf("/lift-maxes/%s/convert?to_type=TRAINING_MAX", max.Data.ID)
 		req, _ := http.NewRequest(http.MethodGet, ts.URL(url), nil)
 		req.Header.Set("X-User-ID", userBID)
 		resp, err := http.DefaultClient.Do(req)
@@ -752,7 +752,7 @@ func TestLiftMaxConvertAuthorization(t *testing.T) {
 	})
 
 	t.Run("admin can convert any user's lift max", func(t *testing.T) {
-		url := fmt.Sprintf("/lift-maxes/%s/convert?to_type=TRAINING_MAX", max.ID)
+		url := fmt.Sprintf("/lift-maxes/%s/convert?to_type=TRAINING_MAX", max.Data.ID)
 		req, _ := http.NewRequest(http.MethodGet, ts.URL(url), nil)
 		req.Header.Set("X-User-ID", testutil.TestAdminID)
 		req.Header.Set("X-Admin", "true")
@@ -839,8 +839,8 @@ func TestAuthorizationErrorMessages(t *testing.T) {
 		var errResp ErrorResponse
 		json.NewDecoder(resp.Body).Decode(&errResp)
 
-		if errResp.Error != "Authentication required" {
-			t.Errorf("Expected error 'Authentication required', got '%s'", errResp.Error)
+		if errResp.Error.Message != "Authentication required" {
+			t.Errorf("Expected error 'Authentication required', got '%s'", errResp.Error.Message)
 		}
 	})
 
@@ -855,8 +855,8 @@ func TestAuthorizationErrorMessages(t *testing.T) {
 		var errResp ErrorResponse
 		json.NewDecoder(resp.Body).Decode(&errResp)
 
-		if errResp.Error != "Admin privileges required" {
-			t.Errorf("Expected error 'Admin privileges required', got '%s'", errResp.Error)
+		if errResp.Error.Message != "Admin privileges required" {
+			t.Errorf("Expected error 'Admin privileges required', got '%s'", errResp.Error.Message)
 		}
 	})
 }

@@ -20,12 +20,15 @@ This document provides comprehensive documentation of all errors returned by the
 
 ## Error Response Format
 
-All API errors are returned as JSON with a consistent structure:
+All API errors are returned as JSON with a consistent, structured envelope:
 
 ```json
 {
-  "error": "string",
-  "details": ["string", "string"]
+  "error": {
+    "code": "ERROR_CODE",
+    "message": "Human-readable error message",
+    "details": {}
+  }
 }
 ```
 
@@ -33,27 +36,59 @@ All API errors are returned as JSON with a consistent structure:
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `error` | string | Yes | Human-readable error message describing what went wrong |
-| `details` | string[] | No | Optional array of specific error details, typically used for validation errors with multiple issues |
+| `error.code` | string | Yes | Machine-readable error code (e.g., `NOT_FOUND`, `VALIDATION_ERROR`) |
+| `error.message` | string | Yes | Human-readable error message describing what went wrong |
+| `error.details` | object | No | Optional structured details, typically containing validation errors |
+
+### Error Codes
+
+| Code | HTTP Status | Description |
+|------|-------------|-------------|
+| `NOT_FOUND` | 404 | Resource does not exist |
+| `VALIDATION_ERROR` | 400 | Input validation failed |
+| `BAD_REQUEST` | 400 | Malformed request |
+| `CONFLICT` | 409 | Resource conflict (e.g., duplicate slug) |
+| `FORBIDDEN` | 403 | Permission denied |
+| `UNAUTHORIZED` | 401 | Authentication required |
+| `UNPROCESSABLE_ENTITY` | 422 | Valid request but cannot be processed |
+| `INTERNAL_ERROR` | 500 | Server error |
 
 ### Example Responses
 
-**Simple error (no details):**
+**Resource not found:**
 ```json
 {
-  "error": "lift not found"
+  "error": {
+    "code": "NOT_FOUND",
+    "message": "lift not found: abc123"
+  }
 }
 ```
 
-**Error with details (validation failures):**
+**Validation failure with details:**
 ```json
 {
-  "error": "validation failed",
-  "details": [
-    "name is required",
-    "value must be positive",
-    "slug must be unique"
-  ]
+  "error": {
+    "code": "VALIDATION_ERROR",
+    "message": "validation failed",
+    "details": {
+      "validationErrors": [
+        "name is required",
+        "value must be positive",
+        "slug must be unique"
+      ]
+    }
+  }
+}
+```
+
+**Conflict error:**
+```json
+{
+  "error": {
+    "code": "CONFLICT",
+    "message": "a lift with this slug already exists"
+  }
 }
 ```
 

@@ -6,6 +6,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/waynenilsen/power-pro-v3/internal/domain/week"
+	apperrors "github.com/waynenilsen/power-pro-v3/internal/errors"
 )
 
 // AddDayRequest represents the request body for adding a day to a week.
@@ -18,45 +19,45 @@ type AddDayRequest struct {
 func (h *WeekHandler) AddDay(w http.ResponseWriter, r *http.Request) {
 	weekID := r.PathValue("id")
 	if weekID == "" {
-		writeError(w, http.StatusBadRequest, "Missing week ID")
+		writeDomainError(w, apperrors.NewBadRequest("missing week ID"))
 		return
 	}
 
 	// Check week exists
 	wk, err := h.repo.GetByID(weekID)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to get week")
+		writeDomainError(w, apperrors.NewInternal("failed to get week", err))
 		return
 	}
 	if wk == nil {
-		writeError(w, http.StatusNotFound, "Week not found")
+		writeDomainError(w, apperrors.NewNotFound("week", weekID))
 		return
 	}
 
 	var req AddDayRequest
 	if err := readJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "Invalid request body")
+		writeDomainError(w, apperrors.NewBadRequest("invalid request body"))
 		return
 	}
 
 	if strings.TrimSpace(req.DayID) == "" {
-		writeError(w, http.StatusBadRequest, "dayId is required")
+		writeDomainError(w, apperrors.NewValidation("dayId", "is required"))
 		return
 	}
 
 	if strings.TrimSpace(req.DayOfWeek) == "" {
-		writeError(w, http.StatusBadRequest, "dayOfWeek is required")
+		writeDomainError(w, apperrors.NewValidation("dayOfWeek", "is required"))
 		return
 	}
 
 	// Check day exists
 	dayExists, err := h.repo.DayExists(req.DayID)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to verify day")
+		writeDomainError(w, apperrors.NewInternal("failed to verify day", err))
 		return
 	}
 	if !dayExists {
-		writeError(w, http.StatusBadRequest, "Day not found")
+		writeDomainError(w, apperrors.NewValidation("dayId", "day not found"))
 		return
 	}
 
@@ -76,13 +77,13 @@ func (h *WeekHandler) AddDay(w http.ResponseWriter, r *http.Request) {
 		for i, err := range result.Errors {
 			details[i] = err.Error()
 		}
-		writeError(w, http.StatusBadRequest, "Validation failed", details...)
+		writeDomainError(w, apperrors.NewValidationMsg("validation failed"), details...)
 		return
 	}
 
 	// Persist
 	if err := h.repo.CreateWeekDay(newWeekDay); err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to add day to week")
+		writeDomainError(w, apperrors.NewInternal("failed to add day to week", err))
 		return
 	}
 
@@ -93,7 +94,7 @@ func (h *WeekHandler) AddDay(w http.ResponseWriter, r *http.Request) {
 		CreatedAt: newWeekDay.CreatedAt,
 	}
 
-	writeJSON(w, http.StatusCreated, resp)
+	writeData(w, http.StatusCreated, resp)
 }
 
 // RemoveDay handles DELETE /weeks/{id}/days/{dayId}
@@ -102,11 +103,11 @@ func (h *WeekHandler) RemoveDay(w http.ResponseWriter, r *http.Request) {
 	dayID := r.PathValue("dayId")
 
 	if weekID == "" {
-		writeError(w, http.StatusBadRequest, "Missing week ID")
+		writeDomainError(w, apperrors.NewBadRequest("missing week ID"))
 		return
 	}
 	if dayID == "" {
-		writeError(w, http.StatusBadRequest, "Missing day ID")
+		writeDomainError(w, apperrors.NewBadRequest("missing day ID"))
 		return
 	}
 
@@ -114,35 +115,35 @@ func (h *WeekHandler) RemoveDay(w http.ResponseWriter, r *http.Request) {
 	// (since the same day can be mapped to multiple days of the week)
 	dayOfWeek := r.URL.Query().Get("day_of_week")
 	if dayOfWeek == "" {
-		writeError(w, http.StatusBadRequest, "day_of_week query parameter is required")
+		writeDomainError(w, apperrors.NewValidation("day_of_week", "query parameter is required"))
 		return
 	}
 
 	// Check week exists
 	wk, err := h.repo.GetByID(weekID)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to get week")
+		writeDomainError(w, apperrors.NewInternal("failed to get week", err))
 		return
 	}
 	if wk == nil {
-		writeError(w, http.StatusNotFound, "Week not found")
+		writeDomainError(w, apperrors.NewNotFound("week", weekID))
 		return
 	}
 
 	// Check if day mapping exists in this week
 	existing, err := h.repo.GetWeekDayByWeekAndDayAndDayOfWeek(weekID, dayID, dayOfWeek)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to check day mapping")
+		writeDomainError(w, apperrors.NewInternal("failed to check day mapping", err))
 		return
 	}
 	if existing == nil {
-		writeError(w, http.StatusNotFound, "Day mapping not found in this week")
+		writeDomainError(w, apperrors.NewNotFound("day mapping in week", dayID))
 		return
 	}
 
 	// Delete
 	if err := h.repo.DeleteWeekDay(existing.ID); err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to remove day from week")
+		writeDomainError(w, apperrors.NewInternal("failed to remove day from week", err))
 		return
 	}
 

@@ -217,21 +217,9 @@ func (h *ProgramHandler) List(w http.ResponseWriter, r *http.Request) {
 		data[i] = programToResponse(&p)
 	}
 
-	// Calculate total pages
-	totalPages := total / int64(pageSize)
-	if total%int64(pageSize) > 0 {
-		totalPages++
-	}
-
-	resp := PaginatedResponse{
-		Data:       data,
-		Page:       page,
-		PageSize:   pageSize,
-		TotalItems: total,
-		TotalPages: totalPages,
-	}
-
-	writeJSON(w, http.StatusOK, resp)
+	// Use standard envelope with offset-based pagination
+	offset := (page - 1) * pageSize
+	writePaginatedData(w, http.StatusOK, data, total, pageSize, offset)
 }
 
 // Get handles GET /programs/{id}
@@ -278,7 +266,7 @@ func (h *ProgramHandler) Get(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	writeJSON(w, http.StatusOK, programToDetailResponse(p, cycle, weeklyLookup, dailyLookup))
+	writeData(w, http.StatusOK, programToDetailResponse(p, cycle, weeklyLookup, dailyLookup))
 }
 
 // Create handles POST /programs
@@ -341,7 +329,7 @@ func (h *ProgramHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusCreated, programToResponse(newProgram))
+	writeData(w, http.StatusCreated, programToResponse(newProgram))
 }
 
 // Update handles PUT /programs/{id}
@@ -422,7 +410,7 @@ func (h *ProgramHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, programToResponse(existing))
+	writeData(w, http.StatusOK, programToResponse(existing))
 }
 
 // Delete handles DELETE /programs/{id}

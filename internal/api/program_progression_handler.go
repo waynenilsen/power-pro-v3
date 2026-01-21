@@ -135,7 +135,7 @@ func (h *ProgramProgressionHandler) List(w http.ResponseWriter, r *http.Request)
 		data[i] = programProgressionWithDetailsToResponse(&entity)
 	}
 
-	writeJSON(w, http.StatusOK, data)
+	writeData(w, http.StatusOK, data)
 }
 
 // Get handles GET /programs/{programId}/progressions/{configId}
@@ -169,7 +169,7 @@ func (h *ProgramProgressionHandler) Get(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	writeJSON(w, http.StatusOK, programProgressionEntityToResponse(entity))
+	writeData(w, http.StatusOK, programProgressionEntityToResponse(entity))
 }
 
 // Create handles POST /programs/{programId}/progressions
@@ -271,7 +271,7 @@ func (h *ProgramProgressionHandler) Create(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	writeJSON(w, http.StatusCreated, programProgressionEntityToResponse(entity))
+	writeData(w, http.StatusCreated, programProgressionEntityToResponse(entity))
 }
 
 // Update handles PUT /programs/{programId}/progressions/{configId}
@@ -332,7 +332,7 @@ func (h *ProgramProgressionHandler) Update(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	writeJSON(w, http.StatusOK, programProgressionEntityToResponse(existing))
+	writeData(w, http.StatusOK, programProgressionEntityToResponse(existing))
 }
 
 // Delete handles DELETE /programs/{programId}/progressions/{configId}

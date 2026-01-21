@@ -134,15 +134,9 @@ func (h *LiftHandler) List(w http.ResponseWriter, r *http.Request) {
 		totalPages++
 	}
 
-	resp := PaginatedResponse{
-		Data:       data,
-		Page:       page,
-		PageSize:   pageSize,
-		TotalItems: total,
-		TotalPages: totalPages,
-	}
-
-	writeJSON(w, http.StatusOK, resp)
+	// Use standard envelope with offset-based pagination
+	offset := (page - 1) * pageSize
+	writePaginatedData(w, http.StatusOK, data, total, pageSize, offset)
 }
 
 // Get handles GET /lifts/{id}
@@ -163,7 +157,7 @@ func (h *LiftHandler) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, liftToResponse(l))
+	writeData(w, http.StatusOK, liftToResponse(l))
 }
 
 // GetBySlug handles GET /lifts/by-slug/{slug}
@@ -184,7 +178,7 @@ func (h *LiftHandler) GetBySlug(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, liftToResponse(l))
+	writeData(w, http.StatusOK, liftToResponse(l))
 }
 
 // Create handles POST /lifts
@@ -246,7 +240,7 @@ func (h *LiftHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusCreated, liftToResponse(newLift))
+	writeData(w, http.StatusCreated, liftToResponse(newLift))
 }
 
 // Update handles PUT /lifts/{id}
@@ -325,7 +319,7 @@ func (h *LiftHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, liftToResponse(existing))
+	writeData(w, http.StatusOK, liftToResponse(existing))
 }
 
 // Delete handles DELETE /lifts/{id}

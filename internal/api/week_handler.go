@@ -166,21 +166,9 @@ func (h *WeekHandler) List(w http.ResponseWriter, r *http.Request) {
 		data[i] = weekToResponse(&wk)
 	}
 
-	// Calculate total pages
-	totalPages := total / int64(pageSize)
-	if total%int64(pageSize) > 0 {
-		totalPages++
-	}
-
-	resp := PaginatedResponse{
-		Data:       data,
-		Page:       page,
-		PageSize:   pageSize,
-		TotalItems: total,
-		TotalPages: totalPages,
-	}
-
-	writeJSON(w, http.StatusOK, resp)
+	// Use standard envelope with offset-based pagination
+	offset := (page - 1) * pageSize
+	writePaginatedData(w, http.StatusOK, data, total, pageSize, offset)
 }
 
 // Get handles GET /weeks/{id}
@@ -208,7 +196,7 @@ func (h *WeekHandler) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, weekToResponseWithDays(wk, days))
+	writeData(w, http.StatusOK, weekToResponseWithDays(wk, days))
 }
 
 // Create handles POST /weeks
@@ -267,7 +255,7 @@ func (h *WeekHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusCreated, weekToResponse(newWeek))
+	writeData(w, http.StatusCreated, weekToResponse(newWeek))
 }
 
 // Update handles PUT /weeks/{id}
@@ -351,7 +339,7 @@ func (h *WeekHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, weekToResponse(existing))
+	writeData(w, http.StatusOK, weekToResponse(existing))
 }
 
 // Delete handles DELETE /weeks/{id}

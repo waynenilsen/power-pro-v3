@@ -143,15 +143,9 @@ func (h *LiftMaxHandler) List(w http.ResponseWriter, r *http.Request) {
 		totalPages++
 	}
 
-	resp := PaginatedResponse{
-		Data:       data,
-		Page:       page,
-		PageSize:   pageSize,
-		TotalItems: total,
-		TotalPages: totalPages,
-	}
-
-	writeJSON(w, http.StatusOK, resp)
+	// Use standard envelope with offset-based pagination
+	offset := (page - 1) * pageSize
+	writePaginatedData(w, http.StatusOK, data, total, pageSize, offset)
 }
 
 // Get handles GET /lift-maxes/{id}
@@ -180,7 +174,7 @@ func (h *LiftMaxHandler) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, liftMaxToResponse(m))
+	writeData(w, http.StatusOK, liftMaxToResponse(m))
 }
 
 // Create handles POST /users/{userId}/lift-maxes
@@ -250,14 +244,11 @@ func (h *LiftMaxHandler) Create(w http.ResponseWriter, r *http.Request) {
 	// Return with warnings if any
 	response := liftMaxToResponse(newMax)
 	if result.HasWarnings() {
-		writeJSON(w, http.StatusCreated, ResponseWithWarnings{
-			Data:     response,
-			Warnings: result.Warnings,
-		})
+		writeDataWithWarnings(w, http.StatusCreated, response, result.Warnings)
 		return
 	}
 
-	writeJSON(w, http.StatusCreated, response)
+	writeData(w, http.StatusCreated, response)
 }
 
 // Update handles PUT /lift-maxes/{id}
@@ -332,14 +323,11 @@ func (h *LiftMaxHandler) Update(w http.ResponseWriter, r *http.Request) {
 	// Return with warnings if any
 	response := liftMaxToResponse(existing)
 	if result.HasWarnings() {
-		writeJSON(w, http.StatusOK, ResponseWithWarnings{
-			Data:     response,
-			Warnings: result.Warnings,
-		})
+		writeDataWithWarnings(w, http.StatusOK, response, result.Warnings)
 		return
 	}
 
-	writeJSON(w, http.StatusOK, response)
+	writeData(w, http.StatusOK, response)
 }
 
 // Delete handles DELETE /lift-maxes/{id}

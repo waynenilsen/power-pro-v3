@@ -169,21 +169,9 @@ func (h *PrescriptionHandler) List(w http.ResponseWriter, r *http.Request) {
 		data = append(data, resp)
 	}
 
-	// Calculate total pages
-	totalPages := total / int64(pageSize)
-	if total%int64(pageSize) > 0 {
-		totalPages++
-	}
-
-	resp := PaginatedResponse{
-		Data:       data,
-		Page:       page,
-		PageSize:   pageSize,
-		TotalItems: total,
-		TotalPages: totalPages,
-	}
-
-	writeJSON(w, http.StatusOK, resp)
+	// Use standard envelope with offset-based pagination
+	offset := (page - 1) * pageSize
+	writePaginatedData(w, http.StatusOK, data, total, pageSize, offset)
 }
 
 // Get handles GET /prescriptions/{id}
@@ -210,7 +198,7 @@ func (h *PrescriptionHandler) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, resp)
+	writeData(w, http.StatusOK, resp)
 }
 
 // Create handles POST /prescriptions
@@ -287,7 +275,7 @@ func (h *PrescriptionHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusCreated, resp)
+	writeData(w, http.StatusCreated, resp)
 }
 
 // Update handles PUT /prescriptions/{id}
@@ -381,7 +369,7 @@ func (h *PrescriptionHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, resp)
+	writeData(w, http.StatusOK, resp)
 }
 
 // Delete handles DELETE /prescriptions/{id}

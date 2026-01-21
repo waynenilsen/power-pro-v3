@@ -150,21 +150,9 @@ func (h *CycleHandler) List(w http.ResponseWriter, r *http.Request) {
 		data[i] = cycleToResponse(&c)
 	}
 
-	// Calculate total pages
-	totalPages := total / int64(pageSize)
-	if total%int64(pageSize) > 0 {
-		totalPages++
-	}
-
-	resp := PaginatedResponse{
-		Data:       data,
-		Page:       page,
-		PageSize:   pageSize,
-		TotalItems: total,
-		TotalPages: totalPages,
-	}
-
-	writeJSON(w, http.StatusOK, resp)
+	// Use standard envelope with offset-based pagination
+	offset := (page - 1) * pageSize
+	writePaginatedData(w, http.StatusOK, data, total, pageSize, offset)
 }
 
 // Get handles GET /cycles/{id}
@@ -192,7 +180,7 @@ func (h *CycleHandler) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, cycleToResponseWithWeeks(c, weeks))
+	writeData(w, http.StatusOK, cycleToResponseWithWeeks(c, weeks))
 }
 
 // Create handles POST /cycles
@@ -228,7 +216,7 @@ func (h *CycleHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusCreated, cycleToResponse(newCycle))
+	writeData(w, http.StatusCreated, cycleToResponse(newCycle))
 }
 
 // Update handles PUT /cycles/{id}
@@ -278,7 +266,7 @@ func (h *CycleHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, cycleToResponse(existing))
+	writeData(w, http.StatusOK, cycleToResponse(existing))
 }
 
 // Delete handles DELETE /cycles/{id}

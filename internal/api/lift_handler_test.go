@@ -12,8 +12,8 @@ import (
 	"github.com/waynenilsen/power-pro-v3/internal/testutil"
 )
 
-// LiftResponse matches the API response format.
-type LiftResponse struct {
+// LiftData matches the lift data format within the response envelope.
+type LiftData struct {
 	ID                string  `json:"id"`
 	Name              string  `json:"name"`
 	Slug              string  `json:"slug"`
@@ -23,19 +23,35 @@ type LiftResponse struct {
 	UpdatedAt         string  `json:"updatedAt"`
 }
 
-// PaginatedLiftsResponse is the paginated list response.
+// LiftResponse is the standard envelope for single lift responses.
+type LiftResponse struct {
+	Data LiftData `json:"data"`
+}
+
+// PaginationMeta contains pagination metadata.
+type PaginationMeta struct {
+	Total   int64 `json:"total"`
+	Limit   int   `json:"limit"`
+	Offset  int   `json:"offset"`
+	HasMore bool  `json:"hasMore"`
+}
+
+// PaginatedLiftsResponse is the paginated list response with standard envelope.
 type PaginatedLiftsResponse struct {
-	Data       []LiftResponse `json:"data"`
-	Page       int            `json:"page"`
-	PageSize   int            `json:"pageSize"`
-	TotalItems int64          `json:"totalItems"`
-	TotalPages int64          `json:"totalPages"`
+	Data []LiftData      `json:"data"`
+	Meta *PaginationMeta `json:"meta"`
+}
+
+// ErrorDetail contains structured error information.
+type ErrorDetail struct {
+	Code    string      `json:"code"`
+	Message string      `json:"message"`
+	Details interface{} `json:"details,omitempty"`
 }
 
 // ErrorResponse is the error response format.
 type ErrorResponse struct {
-	Error   string   `json:"error"`
-	Details []string `json:"details,omitempty"`
+	Error ErrorDetail `json:"error"`
 }
 
 // authGet performs an authenticated GET request
@@ -122,8 +138,11 @@ func TestListLifts(t *testing.T) {
 		if len(result.Data) != 3 {
 			t.Errorf("Expected 3 lifts, got %d", len(result.Data))
 		}
-		if result.TotalItems != 3 {
-			t.Errorf("Expected totalItems 3, got %d", result.TotalItems)
+		if result.Meta == nil {
+			t.Fatal("Expected meta to be present")
+		}
+		if result.Meta.Total != 3 {
+			t.Errorf("Expected total 3, got %d", result.Meta.Total)
 		}
 	})
 
@@ -140,11 +159,17 @@ func TestListLifts(t *testing.T) {
 		if len(result.Data) != 2 {
 			t.Errorf("Expected 2 lifts on page 1, got %d", len(result.Data))
 		}
-		if result.Page != 1 {
-			t.Errorf("Expected page 1, got %d", result.Page)
+		if result.Meta == nil {
+			t.Fatal("Expected meta to be present")
 		}
-		if result.PageSize != 2 {
-			t.Errorf("Expected pageSize 2, got %d", result.PageSize)
+		if result.Meta.Offset != 0 {
+			t.Errorf("Expected offset 0, got %d", result.Meta.Offset)
+		}
+		if result.Meta.Limit != 2 {
+			t.Errorf("Expected limit 2, got %d", result.Meta.Limit)
+		}
+		if !result.Meta.HasMore {
+			t.Error("Expected hasMore to be true for page 1")
 		}
 
 		// Get page 2
@@ -156,6 +181,9 @@ func TestListLifts(t *testing.T) {
 
 		if len(result2.Data) != 1 {
 			t.Errorf("Expected 1 lift on page 2, got %d", len(result2.Data))
+		}
+		if result2.Meta.HasMore {
+			t.Error("Expected hasMore to be false for last page")
 		}
 	})
 
@@ -244,19 +272,19 @@ func TestGetLift(t *testing.T) {
 			t.Fatalf("Expected status 200, got %d", resp.StatusCode)
 		}
 
-		var lift LiftResponse
-		json.NewDecoder(resp.Body).Decode(&lift)
+		var result LiftResponse
+		json.NewDecoder(resp.Body).Decode(&result)
 
-		if lift.ID != squatID {
-			t.Errorf("Expected ID %s, got %s", squatID, lift.ID)
+		if result.Data.ID != squatID {
+			t.Errorf("Expected ID %s, got %s", squatID, result.Data.ID)
 		}
-		if lift.Name != "Squat" {
-			t.Errorf("Expected name 'Squat', got %s", lift.Name)
+		if result.Data.Name != "Squat" {
+			t.Errorf("Expected name 'Squat', got %s", result.Data.Name)
 		}
-		if lift.Slug != "squat" {
-			t.Errorf("Expected slug 'squat', got %s", lift.Slug)
+		if result.Data.Slug != "squat" {
+			t.Errorf("Expected slug 'squat', got %s", result.Data.Slug)
 		}
-		if !lift.IsCompetitionLift {
+		if !result.Data.IsCompetitionLift {
 			t.Errorf("Expected isCompetitionLift to be true")
 		}
 	})
@@ -272,8 +300,8 @@ func TestGetLift(t *testing.T) {
 		var errResp ErrorResponse
 		json.NewDecoder(resp.Body).Decode(&errResp)
 
-		if !strings.Contains(errResp.Error, "lift not found") {
-			t.Errorf("Expected error to contain 'lift not found', got %s", errResp.Error)
+		if !strings.Contains(errResp.Error.Message, "lift not found") {
+			t.Errorf("Expected error to contain 'lift not found', got %s", errResp.Error.Message)
 		}
 	})
 }
@@ -296,14 +324,14 @@ func TestGetLiftBySlug(t *testing.T) {
 			t.Fatalf("Expected status 200, got %d", resp.StatusCode)
 		}
 
-		var lift LiftResponse
-		json.NewDecoder(resp.Body).Decode(&lift)
+		var result LiftResponse
+		json.NewDecoder(resp.Body).Decode(&result)
 
-		if lift.Slug != "bench-press" {
-			t.Errorf("Expected slug 'bench-press', got %s", lift.Slug)
+		if result.Data.Slug != "bench-press" {
+			t.Errorf("Expected slug 'bench-press', got %s", result.Data.Slug)
 		}
-		if lift.Name != "Bench Press" {
-			t.Errorf("Expected name 'Bench Press', got %s", lift.Name)
+		if result.Data.Name != "Bench Press" {
+			t.Errorf("Expected name 'Bench Press', got %s", result.Data.Name)
 		}
 	})
 
@@ -337,19 +365,19 @@ func TestCreateLift(t *testing.T) {
 			t.Fatalf("Expected status 201, got %d: %s", resp.StatusCode, body)
 		}
 
-		var lift LiftResponse
-		json.NewDecoder(resp.Body).Decode(&lift)
+		var result LiftResponse
+		json.NewDecoder(resp.Body).Decode(&result)
 
-		if lift.Name != "Pause Squat" {
-			t.Errorf("Expected name 'Pause Squat', got %s", lift.Name)
+		if result.Data.Name != "Pause Squat" {
+			t.Errorf("Expected name 'Pause Squat', got %s", result.Data.Name)
 		}
-		if lift.Slug != "pause-squat" {
-			t.Errorf("Expected slug 'pause-squat', got %s", lift.Slug)
+		if result.Data.Slug != "pause-squat" {
+			t.Errorf("Expected slug 'pause-squat', got %s", result.Data.Slug)
 		}
-		if lift.IsCompetitionLift {
+		if result.Data.IsCompetitionLift {
 			t.Errorf("Expected isCompetitionLift to be false")
 		}
-		if lift.ID == "" {
+		if result.Data.ID == "" {
 			t.Errorf("Expected ID to be generated")
 		}
 	})
@@ -364,11 +392,11 @@ func TestCreateLift(t *testing.T) {
 			t.Fatalf("Expected status 201, got %d: %s", resp.StatusCode, bodyBytes)
 		}
 
-		var lift LiftResponse
-		json.NewDecoder(resp.Body).Decode(&lift)
+		var result LiftResponse
+		json.NewDecoder(resp.Body).Decode(&result)
 
-		if lift.Slug != "front-squat" {
-			t.Errorf("Expected auto-generated slug 'front-squat', got %s", lift.Slug)
+		if result.Data.Slug != "front-squat" {
+			t.Errorf("Expected auto-generated slug 'front-squat', got %s", result.Data.Slug)
 		}
 	})
 
@@ -383,11 +411,11 @@ func TestCreateLift(t *testing.T) {
 			t.Fatalf("Expected status 201, got %d: %s", resp.StatusCode, bodyBytes)
 		}
 
-		var lift LiftResponse
-		json.NewDecoder(resp.Body).Decode(&lift)
+		var result LiftResponse
+		json.NewDecoder(resp.Body).Decode(&result)
 
-		if lift.ParentLiftID == nil || *lift.ParentLiftID != squatID {
-			t.Errorf("Expected parentLiftId %s, got %v", squatID, lift.ParentLiftID)
+		if result.Data.ParentLiftID == nil || *result.Data.ParentLiftID != squatID {
+			t.Errorf("Expected parentLiftId %s, got %v", squatID, result.Data.ParentLiftID)
 		}
 	})
 
@@ -442,13 +470,13 @@ func TestUpdateLift(t *testing.T) {
 	// Create a lift to update
 	createBody := `{"name": "Test Lift", "slug": "test-lift"}`
 	createResp, _ := adminPost(ts.URL("/lifts"), createBody)
-	var createdLift LiftResponse
-	json.NewDecoder(createResp.Body).Decode(&createdLift)
+	var createdResult LiftResponse
+	json.NewDecoder(createResp.Body).Decode(&createdResult)
 	createResp.Body.Close()
 
 	t.Run("updates lift name", func(t *testing.T) {
 		body := `{"name": "Updated Lift"}`
-		resp, err := adminPut(ts.URL("/lifts/"+createdLift.ID), body)
+		resp, err := adminPut(ts.URL("/lifts/"+createdResult.Data.ID), body)
 		if err != nil {
 			t.Fatalf("Failed to make request: %v", err)
 		}
@@ -459,32 +487,32 @@ func TestUpdateLift(t *testing.T) {
 			t.Fatalf("Expected status 200, got %d: %s", resp.StatusCode, bodyBytes)
 		}
 
-		var lift LiftResponse
-		json.NewDecoder(resp.Body).Decode(&lift)
+		var result LiftResponse
+		json.NewDecoder(resp.Body).Decode(&result)
 
-		if lift.Name != "Updated Lift" {
-			t.Errorf("Expected name 'Updated Lift', got %s", lift.Name)
+		if result.Data.Name != "Updated Lift" {
+			t.Errorf("Expected name 'Updated Lift', got %s", result.Data.Name)
 		}
 		// Slug should remain unchanged
-		if lift.Slug != "test-lift" {
-			t.Errorf("Expected slug 'test-lift', got %s", lift.Slug)
+		if result.Data.Slug != "test-lift" {
+			t.Errorf("Expected slug 'test-lift', got %s", result.Data.Slug)
 		}
 	})
 
 	t.Run("updates lift slug", func(t *testing.T) {
 		body := `{"slug": "updated-slug"}`
-		resp, _ := adminPut(ts.URL("/lifts/"+createdLift.ID), body)
+		resp, _ := adminPut(ts.URL("/lifts/"+createdResult.Data.ID), body)
 		defer resp.Body.Close()
 
 		if resp.StatusCode != http.StatusOK {
 			t.Fatalf("Expected status 200, got %d", resp.StatusCode)
 		}
 
-		var lift LiftResponse
-		json.NewDecoder(resp.Body).Decode(&lift)
+		var result LiftResponse
+		json.NewDecoder(resp.Body).Decode(&result)
 
-		if lift.Slug != "updated-slug" {
-			t.Errorf("Expected slug 'updated-slug', got %s", lift.Slug)
+		if result.Data.Slug != "updated-slug" {
+			t.Errorf("Expected slug 'updated-slug', got %s", result.Data.Slug)
 		}
 	})
 
@@ -500,7 +528,7 @@ func TestUpdateLift(t *testing.T) {
 
 	t.Run("returns 409 for duplicate slug", func(t *testing.T) {
 		body := `{"slug": "squat"}`
-		resp, _ := adminPut(ts.URL("/lifts/"+createdLift.ID), body)
+		resp, _ := adminPut(ts.URL("/lifts/"+createdResult.Data.ID), body)
 		defer resp.Body.Close()
 
 		if resp.StatusCode != http.StatusConflict {
@@ -510,7 +538,7 @@ func TestUpdateLift(t *testing.T) {
 
 	t.Run("returns 400 for validation errors", func(t *testing.T) {
 		body := `{"name": ""}`
-		resp, _ := adminPut(ts.URL("/lifts/"+createdLift.ID), body)
+		resp, _ := adminPut(ts.URL("/lifts/"+createdResult.Data.ID), body)
 		defer resp.Body.Close()
 
 		if resp.StatusCode != http.StatusBadRequest {
@@ -530,12 +558,12 @@ func TestDeleteLift(t *testing.T) {
 		// Create a lift to delete
 		createBody := `{"name": "To Delete", "slug": "to-delete"}`
 		createResp, _ := adminPost(ts.URL("/lifts"), createBody)
-		var createdLift LiftResponse
-		json.NewDecoder(createResp.Body).Decode(&createdLift)
+		var createdResult LiftResponse
+		json.NewDecoder(createResp.Body).Decode(&createdResult)
 		createResp.Body.Close()
 
 		// Delete it
-		resp, err := adminDelete(ts.URL("/lifts/" + createdLift.ID))
+		resp, err := adminDelete(ts.URL("/lifts/" + createdResult.Data.ID))
 		if err != nil {
 			t.Fatalf("Failed to make request: %v", err)
 		}
@@ -547,7 +575,7 @@ func TestDeleteLift(t *testing.T) {
 		}
 
 		// Verify it's deleted
-		getResp, _ := authGet(ts.URL("/lifts/" + createdLift.ID))
+		getResp, _ := authGet(ts.URL("/lifts/" + createdResult.Data.ID))
 		defer getResp.Body.Close()
 
 		if getResp.StatusCode != http.StatusNotFound {
@@ -568,17 +596,17 @@ func TestDeleteLift(t *testing.T) {
 		// Create a parent lift
 		createParent := `{"name": "Parent Lift", "slug": "parent-lift"}`
 		parentResp, _ := adminPost(ts.URL("/lifts"), createParent)
-		var parentLift LiftResponse
-		json.NewDecoder(parentResp.Body).Decode(&parentLift)
+		var parentResult LiftResponse
+		json.NewDecoder(parentResp.Body).Decode(&parentResult)
 		parentResp.Body.Close()
 
 		// Create a child lift referencing the parent
-		createChild := fmt.Sprintf(`{"name": "Child Lift", "slug": "child-lift", "parentLiftId": "%s"}`, parentLift.ID)
+		createChild := fmt.Sprintf(`{"name": "Child Lift", "slug": "child-lift", "parentLiftId": "%s"}`, parentResult.Data.ID)
 		childResp, _ := adminPost(ts.URL("/lifts"), createChild)
 		childResp.Body.Close()
 
 		// Try to delete the parent
-		resp, _ := adminDelete(ts.URL("/lifts/" + parentLift.ID))
+		resp, _ := adminDelete(ts.URL("/lifts/" + parentResult.Data.ID))
 		defer resp.Body.Close()
 
 		if resp.StatusCode != http.StatusConflict {
@@ -597,13 +625,13 @@ func TestSelfReferenceRejection(t *testing.T) {
 	// Create a lift
 	createBody := `{"name": "Self Ref Test", "slug": "self-ref-test"}`
 	createResp, _ := adminPost(ts.URL("/lifts"), createBody)
-	var createdLift LiftResponse
-	json.NewDecoder(createResp.Body).Decode(&createdLift)
+	var createdResult LiftResponse
+	json.NewDecoder(createResp.Body).Decode(&createdResult)
 	createResp.Body.Close()
 
 	t.Run("rejects self-reference on update", func(t *testing.T) {
-		body := fmt.Sprintf(`{"parentLiftId": "%s"}`, createdLift.ID)
-		resp, _ := adminPut(ts.URL("/lifts/"+createdLift.ID), body)
+		body := fmt.Sprintf(`{"parentLiftId": "%s"}`, createdResult.Data.ID)
+		resp, _ := adminPut(ts.URL("/lifts/"+createdResult.Data.ID), body)
 		defer resp.Body.Close()
 
 		if resp.StatusCode != http.StatusBadRequest {
@@ -622,28 +650,28 @@ func TestCircularReferenceDetection(t *testing.T) {
 	// Create lift A
 	createA := `{"name": "Lift A", "slug": "lift-a"}`
 	respA, _ := adminPost(ts.URL("/lifts"), createA)
-	var liftA LiftResponse
-	json.NewDecoder(respA.Body).Decode(&liftA)
+	var liftAResult LiftResponse
+	json.NewDecoder(respA.Body).Decode(&liftAResult)
 	respA.Body.Close()
 
 	// Create lift B with parent A
-	createB := fmt.Sprintf(`{"name": "Lift B", "slug": "lift-b", "parentLiftId": "%s"}`, liftA.ID)
+	createB := fmt.Sprintf(`{"name": "Lift B", "slug": "lift-b", "parentLiftId": "%s"}`, liftAResult.Data.ID)
 	respB, _ := adminPost(ts.URL("/lifts"), createB)
-	var liftB LiftResponse
-	json.NewDecoder(respB.Body).Decode(&liftB)
+	var liftBResult LiftResponse
+	json.NewDecoder(respB.Body).Decode(&liftBResult)
 	respB.Body.Close()
 
 	// Create lift C with parent B
-	createC := fmt.Sprintf(`{"name": "Lift C", "slug": "lift-c", "parentLiftId": "%s"}`, liftB.ID)
+	createC := fmt.Sprintf(`{"name": "Lift C", "slug": "lift-c", "parentLiftId": "%s"}`, liftBResult.Data.ID)
 	respC, _ := adminPost(ts.URL("/lifts"), createC)
-	var liftC LiftResponse
-	json.NewDecoder(respC.Body).Decode(&liftC)
+	var liftCResult LiftResponse
+	json.NewDecoder(respC.Body).Decode(&liftCResult)
 	respC.Body.Close()
 
 	t.Run("rejects circular reference A->C", func(t *testing.T) {
 		// Try to set A's parent to C (would create A->C->B->A cycle)
-		body := fmt.Sprintf(`{"parentLiftId": "%s"}`, liftC.ID)
-		resp, _ := adminPut(ts.URL("/lifts/"+liftA.ID), body)
+		body := fmt.Sprintf(`{"parentLiftId": "%s"}`, liftCResult.Data.ID)
+		resp, _ := adminPut(ts.URL("/lifts/"+liftAResult.Data.ID), body)
 		defer resp.Body.Close()
 
 		if resp.StatusCode != http.StatusBadRequest {
@@ -653,15 +681,8 @@ func TestCircularReferenceDetection(t *testing.T) {
 		var errResp ErrorResponse
 		json.NewDecoder(resp.Body).Decode(&errResp)
 
-		found := false
-		for _, detail := range errResp.Details {
-			if detail == "circular reference detected: lift cannot be its own ancestor" {
-				found = true
-				break
-			}
-		}
-		if !found {
-			t.Errorf("Expected circular reference error in details, got %v", errResp.Details)
+		if !strings.Contains(errResp.Error.Message, "circular reference") {
+			t.Errorf("Expected circular reference error message, got %v", errResp.Error.Message)
 		}
 	})
 }

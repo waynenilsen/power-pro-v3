@@ -123,7 +123,7 @@ func (h *DayHandler) AddPrescription(w http.ResponseWriter, r *http.Request) {
 		CreatedAt:      newDayPrescription.CreatedAt,
 	}
 
-	writeJSON(w, http.StatusCreated, resp)
+	writeData(w, http.StatusCreated, resp)
 }
 
 // RemovePrescription handles DELETE /days/{id}/prescriptions/{prescriptionId}
@@ -256,5 +256,5 @@ func (h *DayHandler) ReorderPrescriptions(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	writeJSON(w, http.StatusOK, dayToResponseWithPrescriptions(d, updatedPrescriptions))
+	writeData(w, http.StatusOK, dayToResponseWithPrescriptions(d, updatedPrescriptions))
 }

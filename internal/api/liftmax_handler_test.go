@@ -13,8 +13,8 @@ import (
 	"github.com/waynenilsen/power-pro-v3/internal/testutil"
 )
 
-// LiftMaxResponse matches the API response format.
-type LiftMaxResponse struct {
+// LiftMaxData matches the lift max data within a response envelope.
+type LiftMaxData struct {
 	ID            string    `json:"id"`
 	UserID        string    `json:"userId"`
 	LiftID        string    `json:"liftId"`
@@ -25,19 +25,31 @@ type LiftMaxResponse struct {
 	UpdatedAt     time.Time `json:"updatedAt"`
 }
 
-// PaginatedLiftMaxesResponse is the paginated list response.
+// LiftMaxResponse is the standard envelope for single lift max responses.
+type LiftMaxResponse struct {
+	Data     LiftMaxData `json:"data"`
+	Warnings []string    `json:"warnings,omitempty"`
+}
+
+// LiftMaxPaginationMeta contains pagination metadata.
+type LiftMaxPaginationMeta struct {
+	Total   int64 `json:"total"`
+	Limit   int   `json:"limit"`
+	Offset  int   `json:"offset"`
+	HasMore bool  `json:"hasMore"`
+}
+
+// PaginatedLiftMaxesResponse is the paginated list response with standard envelope.
 type PaginatedLiftMaxesResponse struct {
-	Data       []LiftMaxResponse `json:"data"`
-	Page       int               `json:"page"`
-	PageSize   int               `json:"pageSize"`
-	TotalItems int64             `json:"totalItems"`
-	TotalPages int64             `json:"totalPages"`
+	Data []LiftMaxData          `json:"data"`
+	Meta *LiftMaxPaginationMeta `json:"meta"`
 }
 
 // LiftMaxWithWarningsResponse wraps response with warnings.
+// Deprecated: use LiftMaxResponse which already includes warnings
 type LiftMaxWithWarningsResponse struct {
-	Data     LiftMaxResponse `json:"data"`
-	Warnings []string        `json:"warnings,omitempty"`
+	Data     LiftMaxData `json:"data"`
+	Warnings []string    `json:"warnings,omitempty"`
 }
 
 // Test constants
@@ -80,8 +92,12 @@ func TestListLiftMaxes(t *testing.T) {
 		if len(result.Data) != 3 {
 			t.Errorf("Expected 3 lift maxes, got %d", len(result.Data))
 		}
-		if result.TotalItems != 3 {
-			t.Errorf("Expected totalItems 3, got %d", result.TotalItems)
+		if result.Meta == nil || result.Meta.Total != 3 {
+			total := int64(0)
+			if result.Meta != nil {
+				total = result.Meta.Total
+			}
+			t.Errorf("Expected total 3, got %d", total)
 		}
 	})
 
@@ -98,14 +114,15 @@ func TestListLiftMaxes(t *testing.T) {
 		if len(result.Data) != 2 {
 			t.Errorf("Expected 2 lift maxes on page 1, got %d", len(result.Data))
 		}
-		if result.Page != 1 {
-			t.Errorf("Expected page 1, got %d", result.Page)
+		if result.Meta == nil || result.Meta.Limit != 2 {
+			limit := 0
+			if result.Meta != nil {
+				limit = result.Meta.Limit
+			}
+			t.Errorf("Expected limit 2, got %d", limit)
 		}
-		if result.PageSize != 2 {
-			t.Errorf("Expected pageSize 2, got %d", result.PageSize)
-		}
-		if result.TotalPages != 2 {
-			t.Errorf("Expected totalPages 2, got %d", result.TotalPages)
+		if result.Meta == nil || result.Meta.HasMore != true {
+			t.Errorf("Expected hasMore to be true")
 		}
 
 		// Get page 2
@@ -261,7 +278,7 @@ func TestGetLiftMax(t *testing.T) {
 	created := createMax(t, ts, userID, testSquatID, "ONE_RM", 315.0, nil)
 
 	t.Run("returns lift max by ID", func(t *testing.T) {
-		resp, err := authGetUser(ts.URL("/lift-maxes/"+created.ID), userID)
+		resp, err := authGetUser(ts.URL("/lift-maxes/"+created.Data.ID), userID)
 		if err != nil {
 			t.Fatalf("Failed to make request: %v", err)
 		}
@@ -274,20 +291,20 @@ func TestGetLiftMax(t *testing.T) {
 		var max LiftMaxResponse
 		json.NewDecoder(resp.Body).Decode(&max)
 
-		if max.ID != created.ID {
-			t.Errorf("Expected ID %s, got %s", created.ID, max.ID)
+		if max.Data.ID != created.Data.ID {
+			t.Errorf("Expected ID %s, got %s", created.Data.ID, max.Data.ID)
 		}
-		if max.UserID != userID {
-			t.Errorf("Expected userId %s, got %s", userID, max.UserID)
+		if max.Data.UserID != userID {
+			t.Errorf("Expected userId %s, got %s", userID, max.Data.UserID)
 		}
-		if max.LiftID != testSquatID {
-			t.Errorf("Expected liftId %s, got %s", testSquatID, max.LiftID)
+		if max.Data.LiftID != testSquatID {
+			t.Errorf("Expected liftId %s, got %s", testSquatID, max.Data.LiftID)
 		}
-		if max.Type != "ONE_RM" {
-			t.Errorf("Expected type ONE_RM, got %s", max.Type)
+		if max.Data.Type != "ONE_RM" {
+			t.Errorf("Expected type ONE_RM, got %s", max.Data.Type)
 		}
-		if max.Value != 315.0 {
-			t.Errorf("Expected value 315.0, got %f", max.Value)
+		if max.Data.Value != 315.0 {
+			t.Errorf("Expected value 315.0, got %f", max.Data.Value)
 		}
 	})
 
@@ -302,8 +319,8 @@ func TestGetLiftMax(t *testing.T) {
 		var errResp ErrorResponse
 		json.NewDecoder(resp.Body).Decode(&errResp)
 
-		if !strings.Contains(errResp.Error, "lift max not found") {
-			t.Errorf("Expected error to contain 'lift max not found', got %s", errResp.Error)
+		if !strings.Contains(errResp.Error.Message, "lift max not found") {
+			t.Errorf("Expected error to contain 'lift max not found', got %s", errResp.Error.Message)
 		}
 	})
 }
@@ -332,16 +349,16 @@ func TestCreateLiftMax(t *testing.T) {
 		var max LiftMaxResponse
 		json.NewDecoder(resp.Body).Decode(&max)
 
-		if max.LiftID != testSquatID {
-			t.Errorf("Expected liftId %s, got %s", testSquatID, max.LiftID)
+		if max.Data.LiftID != testSquatID {
+			t.Errorf("Expected liftId %s, got %s", testSquatID, max.Data.LiftID)
 		}
-		if max.Type != "ONE_RM" {
-			t.Errorf("Expected type ONE_RM, got %s", max.Type)
+		if max.Data.Type != "ONE_RM" {
+			t.Errorf("Expected type ONE_RM, got %s", max.Data.Type)
 		}
-		if max.Value != 405.0 {
-			t.Errorf("Expected value 405.0, got %f", max.Value)
+		if max.Data.Value != 405.0 {
+			t.Errorf("Expected value 405.0, got %f", max.Data.Value)
 		}
-		if max.ID == "" {
+		if max.Data.ID == "" {
 			t.Errorf("Expected ID to be generated")
 		}
 	})
@@ -361,8 +378,8 @@ func TestCreateLiftMax(t *testing.T) {
 		var max LiftMaxResponse
 		json.NewDecoder(resp.Body).Decode(&max)
 
-		if max.EffectiveDate.Year() != 2024 || max.EffectiveDate.Month() != 1 || max.EffectiveDate.Day() != 15 {
-			t.Errorf("Expected effectiveDate 2024-01-15, got %s", max.EffectiveDate)
+		if max.Data.EffectiveDate.Year() != 2024 || max.Data.EffectiveDate.Month() != 1 || max.Data.EffectiveDate.Day() != 15 {
+			t.Errorf("Expected effectiveDate 2024-01-15, got %s", max.Data.EffectiveDate)
 		}
 	})
 
@@ -488,7 +505,7 @@ func TestUpdateLiftMax(t *testing.T) {
 
 	t.Run("updates lift max value", func(t *testing.T) {
 		body := `{"value": 325.0}`
-		resp, err := authPutUser(ts.URL("/lift-maxes/"+created.ID), body, userID)
+		resp, err := authPutUser(ts.URL("/lift-maxes/"+created.Data.ID), body, userID)
 		if err != nil {
 			t.Fatalf("Failed to make request: %v", err)
 		}
@@ -502,19 +519,19 @@ func TestUpdateLiftMax(t *testing.T) {
 		var max LiftMaxResponse
 		json.NewDecoder(resp.Body).Decode(&max)
 
-		if max.Value != 325.0 {
-			t.Errorf("Expected value 325.0, got %f", max.Value)
+		if max.Data.Value != 325.0 {
+			t.Errorf("Expected value 325.0, got %f", max.Data.Value)
 		}
 		// Type should remain unchanged
-		if max.Type != "ONE_RM" {
-			t.Errorf("Expected type to remain ONE_RM, got %s", max.Type)
+		if max.Data.Type != "ONE_RM" {
+			t.Errorf("Expected type to remain ONE_RM, got %s", max.Data.Type)
 		}
 	})
 
 	t.Run("updates lift max effective date", func(t *testing.T) {
 		newDate := time.Date(2024, 7, 1, 0, 0, 0, 0, time.UTC)
 		body := fmt.Sprintf(`{"effectiveDate": "%s"}`, newDate.Format(time.RFC3339))
-		resp, _ := authPutUser(ts.URL("/lift-maxes/"+created.ID), body, userID)
+		resp, _ := authPutUser(ts.URL("/lift-maxes/"+created.Data.ID), body, userID)
 		defer resp.Body.Close()
 
 		if resp.StatusCode != http.StatusOK {
@@ -524,8 +541,8 @@ func TestUpdateLiftMax(t *testing.T) {
 		var max LiftMaxResponse
 		json.NewDecoder(resp.Body).Decode(&max)
 
-		if max.EffectiveDate.Year() != 2024 || max.EffectiveDate.Month() != 7 {
-			t.Errorf("Expected effective date 2024-07, got %s", max.EffectiveDate)
+		if max.Data.EffectiveDate.Year() != 2024 || max.Data.EffectiveDate.Month() != 7 {
+			t.Errorf("Expected effective date 2024-07, got %s", max.Data.EffectiveDate)
 		}
 	})
 
@@ -541,7 +558,7 @@ func TestUpdateLiftMax(t *testing.T) {
 
 	t.Run("returns 400 for invalid value precision", func(t *testing.T) {
 		body := `{"value": 325.33}`
-		resp, _ := authPutUser(ts.URL("/lift-maxes/"+created.ID), body, userID)
+		resp, _ := authPutUser(ts.URL("/lift-maxes/"+created.Data.ID), body, userID)
 		defer resp.Body.Close()
 
 		if resp.StatusCode != http.StatusBadRequest {
@@ -563,7 +580,7 @@ func TestDeleteLiftMax(t *testing.T) {
 		created := createMax(t, ts, userID, testSquatID, "ONE_RM", 315.0, nil)
 
 		// Delete it
-		resp, err := authDeleteUser(ts.URL("/lift-maxes/"+created.ID), userID)
+		resp, err := authDeleteUser(ts.URL("/lift-maxes/"+created.Data.ID), userID)
 		if err != nil {
 			t.Fatalf("Failed to make request: %v", err)
 		}
@@ -575,7 +592,7 @@ func TestDeleteLiftMax(t *testing.T) {
 		}
 
 		// Verify it's deleted
-		getResp, _ := authGetUser(ts.URL("/lift-maxes/"+created.ID), userID)
+		getResp, _ := authGetUser(ts.URL("/lift-maxes/"+created.Data.ID), userID)
 		defer getResp.Body.Close()
 
 		if getResp.StatusCode != http.StatusNotFound {
@@ -606,7 +623,7 @@ func TestLiftMaxResponseFormat(t *testing.T) {
 	created := createMax(t, ts, userID, testSquatID, "ONE_RM", 315.0, nil)
 
 	t.Run("response has correct JSON field names", func(t *testing.T) {
-		resp, _ := authGetUser(ts.URL("/lift-maxes/"+created.ID), userID)
+		resp, _ := authGetUser(ts.URL("/lift-maxes/"+created.Data.ID), userID)
 		defer resp.Body.Close()
 
 		body, _ := io.ReadAll(resp.Body)
@@ -656,7 +673,7 @@ func TestConvertLiftMax(t *testing.T) {
 	tm := createMax(t, ts, tmUserID, testSquatID, "TRAINING_MAX", 360.0, nil)
 
 	t.Run("converts 1RM to Training Max with default percentage", func(t *testing.T) {
-		resp, err := authGetUser(ts.URL("/lift-maxes/"+oneRM.ID+"/convert?to_type=TRAINING_MAX"), oneRMUserID)
+		resp, err := authGetUser(ts.URL("/lift-maxes/"+oneRM.Data.ID+"/convert?to_type=TRAINING_MAX"), oneRMUserID)
 		if err != nil {
 			t.Fatalf("Failed to make request: %v", err)
 		}
@@ -691,7 +708,7 @@ func TestConvertLiftMax(t *testing.T) {
 	})
 
 	t.Run("converts Training Max to 1RM with default percentage", func(t *testing.T) {
-		resp, err := authGetUser(ts.URL("/lift-maxes/"+tm.ID+"/convert?to_type=ONE_RM"), tmUserID)
+		resp, err := authGetUser(ts.URL("/lift-maxes/"+tm.Data.ID+"/convert?to_type=ONE_RM"), tmUserID)
 		if err != nil {
 			t.Fatalf("Failed to make request: %v", err)
 		}
@@ -715,7 +732,7 @@ func TestConvertLiftMax(t *testing.T) {
 	})
 
 	t.Run("converts with custom percentage", func(t *testing.T) {
-		resp, _ := authGetUser(ts.URL("/lift-maxes/"+oneRM.ID+"/convert?to_type=TRAINING_MAX&percentage=85"), oneRMUserID)
+		resp, _ := authGetUser(ts.URL("/lift-maxes/"+oneRM.Data.ID+"/convert?to_type=TRAINING_MAX&percentage=85"), oneRMUserID)
 		defer resp.Body.Close()
 
 		if resp.StatusCode != http.StatusOK {
@@ -740,7 +757,7 @@ func TestConvertLiftMax(t *testing.T) {
 		oddUserID := "round-test-user"
 		oddMax := createMax(t, ts, oddUserID, testSquatID, "ONE_RM", 315.0, nil)
 
-		resp, _ := authGetUser(ts.URL("/lift-maxes/"+oddMax.ID+"/convert?to_type=TRAINING_MAX&percentage=87"), oddUserID)
+		resp, _ := authGetUser(ts.URL("/lift-maxes/"+oddMax.Data.ID+"/convert?to_type=TRAINING_MAX&percentage=87"), oddUserID)
 		defer resp.Body.Close()
 
 		var result ConversionResponse
@@ -755,7 +772,7 @@ func TestConvertLiftMax(t *testing.T) {
 	})
 
 	t.Run("returns 400 for missing to_type parameter", func(t *testing.T) {
-		resp, _ := authGetUser(ts.URL("/lift-maxes/"+oneRM.ID+"/convert"), oneRMUserID)
+		resp, _ := authGetUser(ts.URL("/lift-maxes/"+oneRM.Data.ID+"/convert"), oneRMUserID)
 		defer resp.Body.Close()
 
 		if resp.StatusCode != http.StatusBadRequest {
@@ -764,13 +781,13 @@ func TestConvertLiftMax(t *testing.T) {
 
 		var errResp ErrorResponse
 		json.NewDecoder(resp.Body).Decode(&errResp)
-		if errResp.Error != "Missing required query parameter: to_type" {
-			t.Errorf("Expected error about missing to_type, got: %s", errResp.Error)
+		if errResp.Error.Message != "Missing required query parameter: to_type" {
+			t.Errorf("Expected error about missing to_type, got: %s", errResp.Error.Message)
 		}
 	})
 
 	t.Run("returns 400 for invalid to_type", func(t *testing.T) {
-		resp, _ := authGetUser(ts.URL("/lift-maxes/"+oneRM.ID+"/convert?to_type=INVALID"), oneRMUserID)
+		resp, _ := authGetUser(ts.URL("/lift-maxes/"+oneRM.Data.ID+"/convert?to_type=INVALID"), oneRMUserID)
 		defer resp.Body.Close()
 
 		if resp.StatusCode != http.StatusBadRequest {
@@ -779,7 +796,7 @@ func TestConvertLiftMax(t *testing.T) {
 	})
 
 	t.Run("returns 400 when converting to same type", func(t *testing.T) {
-		resp, _ := authGetUser(ts.URL("/lift-maxes/"+oneRM.ID+"/convert?to_type=ONE_RM"), oneRMUserID)
+		resp, _ := authGetUser(ts.URL("/lift-maxes/"+oneRM.Data.ID+"/convert?to_type=ONE_RM"), oneRMUserID)
 		defer resp.Body.Close()
 
 		if resp.StatusCode != http.StatusBadRequest {
@@ -788,13 +805,13 @@ func TestConvertLiftMax(t *testing.T) {
 
 		var errResp ErrorResponse
 		json.NewDecoder(resp.Body).Decode(&errResp)
-		if errResp.Error != "Cannot convert to same type: lift max is already ONE_RM" {
-			t.Errorf("Expected error about same type, got: %s", errResp.Error)
+		if errResp.Error.Message != "Cannot convert to same type: lift max is already ONE_RM" {
+			t.Errorf("Expected error about same type, got: %s", errResp.Error.Message)
 		}
 	})
 
 	t.Run("returns 400 for percentage below 1", func(t *testing.T) {
-		resp, _ := authGetUser(ts.URL("/lift-maxes/"+oneRM.ID+"/convert?to_type=TRAINING_MAX&percentage=0"), oneRMUserID)
+		resp, _ := authGetUser(ts.URL("/lift-maxes/"+oneRM.Data.ID+"/convert?to_type=TRAINING_MAX&percentage=0"), oneRMUserID)
 		defer resp.Body.Close()
 
 		if resp.StatusCode != http.StatusBadRequest {
@@ -803,7 +820,7 @@ func TestConvertLiftMax(t *testing.T) {
 	})
 
 	t.Run("returns 400 for percentage above 100", func(t *testing.T) {
-		resp, _ := authGetUser(ts.URL("/lift-maxes/"+oneRM.ID+"/convert?to_type=TRAINING_MAX&percentage=101"), oneRMUserID)
+		resp, _ := authGetUser(ts.URL("/lift-maxes/"+oneRM.Data.ID+"/convert?to_type=TRAINING_MAX&percentage=101"), oneRMUserID)
 		defer resp.Body.Close()
 
 		if resp.StatusCode != http.StatusBadRequest {
@@ -812,7 +829,7 @@ func TestConvertLiftMax(t *testing.T) {
 	})
 
 	t.Run("returns 400 for non-numeric percentage", func(t *testing.T) {
-		resp, _ := authGetUser(ts.URL("/lift-maxes/"+oneRM.ID+"/convert?to_type=TRAINING_MAX&percentage=abc"), oneRMUserID)
+		resp, _ := authGetUser(ts.URL("/lift-maxes/"+oneRM.Data.ID+"/convert?to_type=TRAINING_MAX&percentage=abc"), oneRMUserID)
 		defer resp.Body.Close()
 
 		if resp.StatusCode != http.StatusBadRequest {
@@ -830,7 +847,7 @@ func TestConvertLiftMax(t *testing.T) {
 	})
 
 	t.Run("accepts lowercase to_type", func(t *testing.T) {
-		resp, _ := authGetUser(ts.URL("/lift-maxes/"+oneRM.ID+"/convert?to_type=training_max"), oneRMUserID)
+		resp, _ := authGetUser(ts.URL("/lift-maxes/"+oneRM.Data.ID+"/convert?to_type=training_max"), oneRMUserID)
 		defer resp.Body.Close()
 
 		if resp.StatusCode != http.StatusOK {
@@ -882,14 +899,14 @@ func TestGetCurrentLiftMax(t *testing.T) {
 			t.Fatalf("Failed to decode response: %v", err)
 		}
 
-		if max.ID != mostRecent.ID {
-			t.Errorf("Expected most recent max ID %s, got %s", mostRecent.ID, max.ID)
+		if max.Data.ID != mostRecent.Data.ID {
+			t.Errorf("Expected most recent max ID %s, got %s", mostRecent.Data.ID, max.Data.ID)
 		}
-		if max.Value != 320.0 {
-			t.Errorf("Expected value 320.0, got %f", max.Value)
+		if max.Data.Value != 320.0 {
+			t.Errorf("Expected value 320.0, got %f", max.Data.Value)
 		}
-		if max.Type != "ONE_RM" {
-			t.Errorf("Expected type ONE_RM, got %s", max.Type)
+		if max.Data.Type != "ONE_RM" {
+			t.Errorf("Expected type ONE_RM, got %s", max.Data.Type)
 		}
 	})
 
@@ -908,11 +925,11 @@ func TestGetCurrentLiftMax(t *testing.T) {
 		var max LiftMaxResponse
 		json.NewDecoder(resp.Body).Decode(&max)
 
-		if max.ID != mostRecentTM.ID {
-			t.Errorf("Expected most recent TM ID %s, got %s", mostRecentTM.ID, max.ID)
+		if max.Data.ID != mostRecentTM.Data.ID {
+			t.Errorf("Expected most recent TM ID %s, got %s", mostRecentTM.Data.ID, max.Data.ID)
 		}
-		if max.Value != 290.0 {
-			t.Errorf("Expected value 290.0, got %f", max.Value)
+		if max.Data.Value != 290.0 {
+			t.Errorf("Expected value 290.0, got %f", max.Data.Value)
 		}
 	})
 
@@ -928,11 +945,11 @@ func TestGetCurrentLiftMax(t *testing.T) {
 		var max LiftMaxResponse
 		json.NewDecoder(resp.Body).Decode(&max)
 
-		if max.LiftID != testBenchID {
-			t.Errorf("Expected lift %s, got %s", testBenchID, max.LiftID)
+		if max.Data.LiftID != testBenchID {
+			t.Errorf("Expected lift %s, got %s", testBenchID, max.Data.LiftID)
 		}
-		if max.Value != 225.0 {
-			t.Errorf("Expected value 225.0, got %f", max.Value)
+		if max.Data.Value != 225.0 {
+			t.Errorf("Expected value 225.0, got %f", max.Data.Value)
 		}
 	})
 
@@ -949,8 +966,8 @@ func TestGetCurrentLiftMax(t *testing.T) {
 
 		var errResp ErrorResponse
 		json.NewDecoder(resp.Body).Decode(&errResp)
-		if errResp.Error != "No lift max found for the specified user, lift, and type" {
-			t.Errorf("Expected specific error message, got: %s", errResp.Error)
+		if errResp.Error.Message != "No lift max found for the specified user, lift, and type" {
+			t.Errorf("Expected specific error message, got: %s", errResp.Error.Message)
 		}
 	})
 
@@ -976,8 +993,8 @@ func TestGetCurrentLiftMax(t *testing.T) {
 
 		var errResp ErrorResponse
 		json.NewDecoder(resp.Body).Decode(&errResp)
-		if errResp.Error != "Missing required query parameter: lift" {
-			t.Errorf("Expected error about missing lift, got: %s", errResp.Error)
+		if errResp.Error.Message != "Missing required query parameter: lift" {
+			t.Errorf("Expected error about missing lift, got: %s", errResp.Error.Message)
 		}
 	})
 
@@ -992,8 +1009,8 @@ func TestGetCurrentLiftMax(t *testing.T) {
 
 		var errResp ErrorResponse
 		json.NewDecoder(resp.Body).Decode(&errResp)
-		if errResp.Error != "Invalid lift parameter: must be a valid UUID" {
-			t.Errorf("Expected error about invalid UUID, got: %s", errResp.Error)
+		if errResp.Error.Message != "Invalid lift parameter: must be a valid UUID" {
+			t.Errorf("Expected error about invalid UUID, got: %s", errResp.Error.Message)
 		}
 	})
 
@@ -1008,8 +1025,8 @@ func TestGetCurrentLiftMax(t *testing.T) {
 
 		var errResp ErrorResponse
 		json.NewDecoder(resp.Body).Decode(&errResp)
-		if errResp.Error != "Missing required query parameter: type" {
-			t.Errorf("Expected error about missing type, got: %s", errResp.Error)
+		if errResp.Error.Message != "Missing required query parameter: type" {
+			t.Errorf("Expected error about missing type, got: %s", errResp.Error.Message)
 		}
 	})
 
@@ -1024,8 +1041,8 @@ func TestGetCurrentLiftMax(t *testing.T) {
 
 		var errResp ErrorResponse
 		json.NewDecoder(resp.Body).Decode(&errResp)
-		if errResp.Error != "Invalid type parameter: must be ONE_RM or TRAINING_MAX" {
-			t.Errorf("Expected error about invalid type, got: %s", errResp.Error)
+		if errResp.Error.Message != "Invalid type parameter: must be ONE_RM or TRAINING_MAX" {
+			t.Errorf("Expected error about invalid type, got: %s", errResp.Error.Message)
 		}
 	})
 
@@ -1055,8 +1072,8 @@ func TestGetCurrentLiftMax(t *testing.T) {
 		var max LiftMaxResponse
 		json.NewDecoder(resp.Body).Decode(&max)
 
-		if max.ID != single.ID {
-			t.Errorf("Expected max ID %s, got %s", single.ID, max.ID)
+		if max.Data.ID != single.Data.ID {
+			t.Errorf("Expected max ID %s, got %s", single.Data.ID, max.Data.ID)
 		}
 	})
 }
@@ -1089,16 +1106,9 @@ func createMax(t *testing.T, ts *testutil.TestServer, userID, liftID, maxType st
 		t.Fatalf("Failed to create lift max: status %d, body: %s", resp.StatusCode, bodyBytes)
 	}
 
-	// Check if response has warnings wrapper
+	// Decode as standard response envelope
 	bodyBytes, _ := io.ReadAll(resp.Body)
 
-	// Try to decode as response with warnings first
-	var withWarnings LiftMaxWithWarningsResponse
-	if err := json.Unmarshal(bodyBytes, &withWarnings); err == nil && withWarnings.Data.ID != "" {
-		return withWarnings.Data
-	}
-
-	// Otherwise decode as plain response
 	var max LiftMaxResponse
 	if err := json.Unmarshal(bodyBytes, &max); err != nil {
 		t.Fatalf("Failed to decode response: %v", err)

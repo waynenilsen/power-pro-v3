@@ -330,8 +330,8 @@ func TestGetPrescription(t *testing.T) {
 		var errResp ErrorResponse
 		json.NewDecoder(resp.Body).Decode(&errResp)
 
-		if !strings.Contains(errResp.Error, "prescription not found") {
-			t.Errorf("Expected error to contain 'prescription not found', got %s", errResp.Error)
+		if !strings.Contains(errResp.Error.Message, "prescription not found") {
+			t.Errorf("Expected error to contain 'prescription not found', got %s", errResp.Error.Message)
 		}
 	})
 }
@@ -1151,8 +1151,8 @@ func TestResolvePrescription(t *testing.T) {
 		var errResp ErrorResponse
 		json.NewDecoder(resp.Body).Decode(&errResp)
 
-		if !strings.Contains(errResp.Error, "max not found") && !strings.Contains(errResp.Error, "No TRAINING_MAX found") {
-			t.Errorf("Expected error about max not found, got: %s", errResp.Error)
+		if !strings.Contains(errResp.Error.Message, "max not found") && !strings.Contains(errResp.Error.Message, "No TRAINING_MAX found") {
+			t.Errorf("Expected error about max not found, got: %s", errResp.Error.Message)
 		}
 	})
 
