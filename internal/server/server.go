@@ -34,6 +34,7 @@ type Server struct {
 	cycleRepo          *repository.CycleRepository
 	weeklyLookupRepo   *repository.WeeklyLookupRepository
 	dailyLookupRepo    *repository.DailyLookupRepository
+	programRepo        *repository.ProgramRepository
 	strategyFactory    *loadstrategy.StrategyFactory
 	schemeFactory      *setscheme.SchemeFactory
 }
@@ -57,6 +58,7 @@ func New(cfg Config) *Server {
 	cycleRepo := repository.NewCycleRepository(cfg.DB)
 	weeklyLookupRepo := repository.NewWeeklyLookupRepository(cfg.DB)
 	dailyLookupRepo := repository.NewDailyLookupRepository(cfg.DB)
+	programRepo := repository.NewProgramRepository(cfg.DB)
 
 	s := &Server{
 		config:             cfg,
@@ -68,6 +70,7 @@ func New(cfg Config) *Server {
 		cycleRepo:          cycleRepo,
 		weeklyLookupRepo:   weeklyLookupRepo,
 		dailyLookupRepo:    dailyLookupRepo,
+		programRepo:        programRepo,
 		strategyFactory:    strategyFactory,
 		schemeFactory:      schemeFactory,
 	}
@@ -97,6 +100,7 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	cycleHandler := api.NewCycleHandler(s.cycleRepo)
 	weeklyLookupHandler := api.NewWeeklyLookupHandler(s.weeklyLookupRepo)
 	dailyLookupHandler := api.NewDailyLookupHandler(s.dailyLookupRepo)
+	programHandler := api.NewProgramHandler(s.programRepo, s.cycleRepo)
 
 	// Auth middleware configuration
 	authCfg := middleware.AuthConfig{
@@ -222,6 +226,15 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	mux.Handle("POST /daily-lookups", withAdmin(dailyLookupHandler.Create))
 	mux.Handle("PUT /daily-lookups/{id}", withAdmin(dailyLookupHandler.Update))
 	mux.Handle("DELETE /daily-lookups/{id}", withAdmin(dailyLookupHandler.Delete))
+
+	// Program routes:
+	// - All authenticated users can read program data
+	// - Only admins can create/update/delete programs
+	mux.Handle("GET /programs", withAuth(programHandler.List))
+	mux.Handle("GET /programs/{id}", withAuth(programHandler.Get))
+	mux.Handle("POST /programs", withAdmin(programHandler.Create))
+	mux.Handle("PUT /programs/{id}", withAdmin(programHandler.Update))
+	mux.Handle("DELETE /programs/{id}", withAdmin(programHandler.Delete))
 }
 
 // Start starts the HTTP server.
