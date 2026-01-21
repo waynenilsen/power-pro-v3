@@ -495,13 +495,26 @@ func buildTriggerEvent(event *progression.TriggerEventV2) progression.TriggerEve
 	return triggerEvent
 }
 
+// ManualTriggerResult represents the result of a manual progression trigger.
+// It may contain multiple TriggerResults if multiple lifts were affected.
+type ManualTriggerResult struct {
+	Results      []TriggerResult `json:"results"`
+	TotalApplied int             `json:"totalApplied"`
+	TotalSkipped int             `json:"totalSkipped"`
+	TotalErrors  int             `json:"totalErrors"`
+}
+
+// ErrLiftNotFound is returned when a specified lift does not exist.
+var ErrLiftNotFound = errors.New("lift not found")
+
 // ApplyProgressionManually applies a progression manually (for testing/admin override).
+// If liftID is empty, applies to all lifts configured for this progression in the user's program.
 // If force is true, bypasses idempotency check.
 func (s *ProgressionService) ApplyProgressionManually(
 	ctx context.Context,
 	userID, progressionID, liftID string,
 	force bool,
-) (*TriggerResult, error) {
+) (*ManualTriggerResult, error) {
 	// Get the progression definition
 	progressionDef, err := s.queries.GetProgression(ctx, progressionID)
 	if err != nil {
@@ -517,37 +530,6 @@ func (s *ProgressionService) ApplyProgressionManually(
 		return nil, fmt.Errorf("failed to parse progression: %w", err)
 	}
 
-	// Build a synthetic trigger event
-	now := time.Now()
-	event := &progression.TriggerEventV2{
-		Type:      prog.TriggerType(),
-		UserID:    userID,
-		Timestamp: now,
-	}
-
-	// Create appropriate context based on trigger type
-	switch prog.TriggerType() {
-	case progression.TriggerAfterSession:
-		event.Context = progression.SessionTriggerContext{
-			SessionID:      "manual-trigger",
-			DaySlug:        "manual",
-			WeekNumber:     1,
-			LiftsPerformed: []string{liftID},
-		}
-	case progression.TriggerAfterWeek:
-		event.Context = progression.WeekTriggerContext{
-			PreviousWeek:   1,
-			NewWeek:        2,
-			CycleIteration: 1,
-		}
-	case progression.TriggerAfterCycle:
-		event.Context = progression.CycleTriggerContext{
-			CompletedCycle: 1,
-			NewCycle:       2,
-			TotalWeeks:     4,
-		}
-	}
-
 	// Get user enrollment to find program
 	enrollment, err := s.queries.GetUserProgramStateByUserID(ctx, userID)
 	if err != nil {
@@ -557,23 +539,322 @@ func (s *ProgressionService) ApplyProgressionManually(
 		return nil, fmt.Errorf("failed to get user enrollment: %w", err)
 	}
 
+	// Determine which lifts to apply the progression to
+	var liftIDs []string
+	if liftID != "" {
+		// Verify the lift exists
+		_, err := s.queries.GetLift(ctx, liftID)
+		if err != nil {
+			if err == sql.ErrNoRows {
+				return nil, ErrLiftNotFound
+			}
+			return nil, fmt.Errorf("failed to get lift: %w", err)
+		}
+		liftIDs = []string{liftID}
+	} else {
+		// Get all lifts configured for this progression in the user's program
+		programProgressions, err := s.queries.ListEnabledProgramProgressionsByProgramAndProgression(ctx, db.ListEnabledProgramProgressionsByProgramAndProgressionParams{
+			ProgramID:     enrollment.ProgramID,
+			ProgressionID: progressionID,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to get program progressions: %w", err)
+		}
+
+		if len(programProgressions) == 0 {
+			return nil, ErrNoApplicableProgressions
+		}
+
+		// Collect unique lift IDs (only those that are lift-specific)
+		seen := make(map[string]bool)
+		for _, pp := range programProgressions {
+			if pp.LiftID.Valid && !seen[pp.LiftID.String] {
+				liftIDs = append(liftIDs, pp.LiftID.String)
+				seen[pp.LiftID.String] = true
+			}
+		}
+
+		if len(liftIDs) == 0 {
+			return nil, fmt.Errorf("%w: progression has no lift-specific configurations", ErrNoApplicableProgressions)
+		}
+	}
+
+	// Build the results
+	result := &ManualTriggerResult{
+		Results: make([]TriggerResult, 0, len(liftIDs)),
+	}
+
+	// Apply progression to each lift
+	for _, lid := range liftIDs {
+		triggerResult := s.applyManualProgressionToLift(ctx, userID, progressionID, lid, enrollment.ProgramID, prog, force)
+		result.Results = append(result.Results, triggerResult)
+
+		if triggerResult.Applied {
+			result.TotalApplied++
+		} else if triggerResult.Skipped {
+			result.TotalSkipped++
+		} else if triggerResult.Error != "" {
+			result.TotalErrors++
+		}
+	}
+
+	return result, nil
+}
+
+// applyManualProgressionToLift applies a manual progression to a specific lift.
+func (s *ProgressionService) applyManualProgressionToLift(
+	ctx context.Context,
+	userID, progressionID, liftID, programID string,
+	prog progression.Progression,
+	force bool,
+) TriggerResult {
+	// Build a synthetic trigger event with ManualTriggerContext
+	now := time.Now()
+
+	// Create underlying context based on trigger type
+	var underlyingContext progression.TriggerContext
+	switch prog.TriggerType() {
+	case progression.TriggerAfterSession:
+		underlyingContext = progression.SessionTriggerContext{
+			SessionID:      "manual-trigger",
+			DaySlug:        "manual",
+			WeekNumber:     1,
+			LiftsPerformed: []string{liftID},
+		}
+	case progression.TriggerAfterWeek:
+		underlyingContext = progression.WeekTriggerContext{
+			PreviousWeek:   1,
+			NewWeek:        2,
+			CycleIteration: 1,
+		}
+	case progression.TriggerAfterCycle:
+		underlyingContext = progression.CycleTriggerContext{
+			CompletedCycle: 1,
+			NewCycle:       2,
+			TotalWeeks:     4,
+		}
+	}
+
+	// Wrap with ManualTriggerContext for audit purposes
+	manualContext := progression.NewManualTriggerContext(underlyingContext, liftID, force)
+
+	event := &progression.TriggerEventV2{
+		Type:      prog.TriggerType(),
+		UserID:    userID,
+		Timestamp: now,
+		Context:   manualContext,
+	}
+
 	// Build a synthetic program progression entry
 	pp := db.ProgramProgression{
 		ID:            "manual",
-		ProgramID:     enrollment.ProgramID,
+		ProgramID:     programID,
 		ProgressionID: progressionID,
 		LiftID:        sql.NullString{String: liftID, Valid: true},
 		Priority:      0,
 		Enabled:       1,
 	}
 
-	// If force is true, modify the timestamp to ensure it's unique
+	// If force is true, use applyProgressionWithTransactionForce which bypasses idempotency
 	if force {
-		event.Timestamp = now.Add(time.Nanosecond * time.Duration(now.UnixNano()%1000000))
+		return s.applyProgressionWithTransactionForce(ctx, event, pp, prog)
 	}
 
-	result := s.applyProgressionWithTransaction(ctx, event, pp, prog)
-	return &result, nil
+	return s.applyProgressionWithTransaction(ctx, event, pp, prog)
+}
+
+// applyProgressionWithTransactionForce applies a progression bypassing idempotency checks.
+// It is identical to applyProgressionWithTransaction except it skips the idempotency check.
+// This is used for manual force=true triggers.
+func (s *ProgressionService) applyProgressionWithTransactionForce(
+	ctx context.Context,
+	event *progression.TriggerEventV2,
+	pp db.ProgramProgression,
+	prog progression.Progression,
+) TriggerResult {
+	liftID := pp.LiftID.String
+
+	// Begin transaction
+	tx, err := s.sqlDB.BeginTx(ctx, nil)
+	if err != nil {
+		return TriggerResult{
+			ProgressionID: pp.ProgressionID,
+			LiftID:        liftID,
+			Applied:       false,
+			Error:         fmt.Sprintf("failed to begin transaction: %v", err),
+		}
+	}
+	defer func() {
+		if err != nil {
+			tx.Rollback()
+		}
+	}()
+
+	txQueries := db.New(tx)
+
+	// SKIP idempotency check for force mode
+
+	// Determine max type based on progression
+	var maxType progression.MaxType
+	switch p := prog.(type) {
+	case *progression.LinearProgression:
+		maxType = p.MaxTypeValue
+	case *progression.CycleProgression:
+		maxType = p.MaxTypeValue
+	default:
+		return TriggerResult{
+			ProgressionID: pp.ProgressionID,
+			LiftID:        liftID,
+			Applied:       false,
+			Error:         "unknown progression type",
+		}
+	}
+
+	currentMax, err := txQueries.GetCurrentMax(ctx, db.GetCurrentMaxParams{
+		UserID: event.UserID,
+		LiftID: liftID,
+		Type:   string(maxType),
+	})
+	if err != nil {
+		if err == sql.ErrNoRows {
+			tx.Rollback()
+			return TriggerResult{
+				ProgressionID: pp.ProgressionID,
+				LiftID:        liftID,
+				Applied:       false,
+				Skipped:       true,
+				SkipReason:    fmt.Sprintf("no current %s found for lift", maxType),
+			}
+		}
+		return TriggerResult{
+			ProgressionID: pp.ProgressionID,
+			LiftID:        liftID,
+			Applied:       false,
+			Error:         fmt.Sprintf("failed to get current max: %v", err),
+		}
+	}
+
+	// Build progression context
+	triggerEvent := buildTriggerEvent(event)
+
+	progressionCtx := progression.ProgressionContext{
+		UserID:       event.UserID,
+		LiftID:       liftID,
+		MaxType:      maxType,
+		CurrentValue: currentMax.Value,
+		TriggerEvent: triggerEvent,
+	}
+
+	// Apply the progression
+	var progressionResult progression.ProgressionResult
+
+	// Handle override increment for CycleProgression
+	if cp, ok := prog.(*progression.CycleProgression); ok && pp.OverrideIncrement.Valid {
+		override := pp.OverrideIncrement.Float64
+		progressionResult, err = cp.ApplyWithOverride(ctx, progressionCtx, &override)
+	} else {
+		progressionResult, err = prog.Apply(ctx, progressionCtx)
+	}
+
+	if err != nil {
+		return TriggerResult{
+			ProgressionID: pp.ProgressionID,
+			LiftID:        liftID,
+			Applied:       false,
+			Error:         fmt.Sprintf("failed to apply progression: %v", err),
+		}
+	}
+
+	if !progressionResult.Applied {
+		tx.Rollback()
+		return TriggerResult{
+			ProgressionID: pp.ProgressionID,
+			LiftID:        liftID,
+			Applied:       false,
+			Skipped:       true,
+			SkipReason:    progressionResult.Reason,
+			Result:        &progressionResult,
+		}
+	}
+
+	// Create new LiftMax entry with a unique timestamp to avoid conflicts
+	// Use nanoseconds to ensure uniqueness for force mode
+	newMaxID := uuid.New().String()
+	now := time.Now()
+	nowStr := now.Format(time.RFC3339Nano) // Use RFC3339Nano for uniqueness
+	effectiveDateStr := now.Format(time.RFC3339Nano)
+
+	err = txQueries.CreateLiftMax(ctx, db.CreateLiftMaxParams{
+		ID:            newMaxID,
+		UserID:        event.UserID,
+		LiftID:        liftID,
+		Type:          string(maxType),
+		Value:         progressionResult.NewValue,
+		EffectiveDate: effectiveDateStr,
+		CreatedAt:     nowStr,
+		UpdatedAt:     nowStr,
+	})
+	if err != nil {
+		return TriggerResult{
+			ProgressionID: pp.ProgressionID,
+			LiftID:        liftID,
+			Applied:       false,
+			Error:         fmt.Sprintf("failed to create new lift max: %v", err),
+		}
+	}
+
+	// Create progression log entry with ManualTriggerContext
+	triggerContextJSON, err := json.Marshal(event.Context)
+	if err != nil {
+		return TriggerResult{
+			ProgressionID: pp.ProgressionID,
+			LiftID:        liftID,
+			Applied:       false,
+			Error:         fmt.Sprintf("failed to serialize trigger context: %v", err),
+		}
+	}
+
+	// Use unique timestamp for idempotency (for force mode logs)
+	appliedAtStr := now.Format(time.RFC3339Nano)
+
+	logID := uuid.New().String()
+	err = txQueries.CreateProgressionLog(ctx, db.CreateProgressionLogParams{
+		ID:             logID,
+		UserID:         event.UserID,
+		ProgressionID:  pp.ProgressionID,
+		LiftID:         liftID,
+		PreviousValue:  progressionResult.PreviousValue,
+		NewValue:       progressionResult.NewValue,
+		Delta:          progressionResult.Delta,
+		TriggerType:    string(event.Type),
+		TriggerContext: string(triggerContextJSON),
+		AppliedAt:      appliedAtStr,
+	})
+	if err != nil {
+		return TriggerResult{
+			ProgressionID: pp.ProgressionID,
+			LiftID:        liftID,
+			Applied:       false,
+			Error:         fmt.Sprintf("failed to create progression log: %v", err),
+		}
+	}
+
+	// Commit transaction
+	if err = tx.Commit(); err != nil {
+		return TriggerResult{
+			ProgressionID: pp.ProgressionID,
+			LiftID:        liftID,
+			Applied:       false,
+			Error:         fmt.Sprintf("failed to commit transaction: %v", err),
+		}
+	}
+
+	return TriggerResult{
+		ProgressionID: pp.ProgressionID,
+		LiftID:        liftID,
+		Applied:       true,
+		Result:        &progressionResult,
+	}
 }
 
 // GetDefaultFactory returns a factory with all built-in progression types registered.

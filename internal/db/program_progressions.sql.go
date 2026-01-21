@@ -174,6 +174,51 @@ func (q *Queries) ListEnabledProgramProgressionsByProgram(ctx context.Context, p
 	return items, nil
 }
 
+const listEnabledProgramProgressionsByProgramAndProgression = `-- name: ListEnabledProgramProgressionsByProgramAndProgression :many
+SELECT id, program_id, progression_id, lift_id, priority, enabled, override_increment, created_at, updated_at
+FROM program_progressions
+WHERE program_id = ? AND progression_id = ? AND enabled = 1
+ORDER BY priority ASC
+`
+
+type ListEnabledProgramProgressionsByProgramAndProgressionParams struct {
+	ProgramID     string `json:"program_id"`
+	ProgressionID string `json:"progression_id"`
+}
+
+func (q *Queries) ListEnabledProgramProgressionsByProgramAndProgression(ctx context.Context, arg ListEnabledProgramProgressionsByProgramAndProgressionParams) ([]ProgramProgression, error) {
+	rows, err := q.db.QueryContext(ctx, listEnabledProgramProgressionsByProgramAndProgression, arg.ProgramID, arg.ProgressionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ProgramProgression{}
+	for rows.Next() {
+		var i ProgramProgression
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProgramID,
+			&i.ProgressionID,
+			&i.LiftID,
+			&i.Priority,
+			&i.Enabled,
+			&i.OverrideIncrement,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listProgramProgressionsByProgram = `-- name: ListProgramProgressionsByProgram :many
 SELECT id, program_id, progression_id, lift_id, priority, enabled, override_increment, created_at, updated_at
 FROM program_progressions

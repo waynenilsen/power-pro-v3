@@ -3,6 +3,7 @@ package testutil
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"net/http"
 	"os"
@@ -20,6 +21,7 @@ type TestServer struct {
 	BaseURL  string
 	port     int
 	dbPath   string
+	db       *sql.DB
 	cleanups []func()
 }
 
@@ -84,6 +86,7 @@ func NewTestServer() (*TestServer, error) {
 		BaseURL: baseURL,
 		port:    port,
 		dbPath:  dbPath,
+		db:      db,
 		cleanups: []func(){
 			func() { srv.Stop(context.Background()) },
 			func() { db.Close() },
@@ -104,6 +107,11 @@ func (ts *TestServer) Close() {
 // URL returns a full URL for the given path.
 func (ts *TestServer) URL(path string) string {
 	return ts.BaseURL + path
+}
+
+// DB returns the underlying database connection for direct access in tests.
+func (ts *TestServer) DB() *sql.DB {
+	return ts.db
 }
 
 // AuthHeaders returns HTTP headers for an authenticated user.

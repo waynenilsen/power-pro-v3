@@ -173,11 +173,18 @@ func (h *ProgressionHandler) Create(w http.ResponseWriter, r *http.Request) {
 	id := uuid.New().String()
 	now := time.Now()
 
+	// Inject ID and Name into the parameters for domain validation
+	enrichedParams, err := enrichProgressionParams(id, req.Name, req.Parameters)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "Failed to process parameters")
+		return
+	}
+
 	entity := &repository.ProgressionEntity{
 		ID:         id,
 		Name:       req.Name,
 		Type:       progression.ProgressionType(req.Type),
-		Parameters: req.Parameters,
+		Parameters: enrichedParams,
 		CreatedAt:  now,
 		UpdatedAt:  now,
 	}
@@ -189,6 +196,21 @@ func (h *ProgressionHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusCreated, progressionEntityToResponse(entity))
+}
+
+// enrichProgressionParams injects id and name into progression parameters.
+// This is needed because the domain Progression types require id and name
+// in the parameters JSON for validation and instantiation.
+func enrichProgressionParams(id, name string, params json.RawMessage) (json.RawMessage, error) {
+	var paramsMap map[string]interface{}
+	if err := json.Unmarshal(params, &paramsMap); err != nil {
+		return nil, err
+	}
+
+	paramsMap["id"] = id
+	paramsMap["name"] = name
+
+	return json.Marshal(paramsMap)
 }
 
 // Update handles PUT /progressions/{id}
@@ -239,10 +261,17 @@ func (h *ProgressionHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Inject ID and Name into the parameters
+	enrichedParams, err := enrichProgressionParams(id, name, params)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "Failed to process parameters")
+		return
+	}
+
 	// Update entity
 	existing.Name = name
 	existing.Type = progression.ProgressionType(progType)
-	existing.Parameters = params
+	existing.Parameters = enrichedParams
 	existing.UpdatedAt = time.Now()
 
 	// Persist

@@ -146,6 +146,7 @@ type Querier interface {
 	ListDaysFilteredByProgramByNameAsc(ctx context.Context, arg ListDaysFilteredByProgramByNameAscParams) ([]Day, error)
 	ListDaysFilteredByProgramByNameDesc(ctx context.Context, arg ListDaysFilteredByProgramByNameDescParams) ([]Day, error)
 	ListEnabledProgramProgressionsByProgram(ctx context.Context, programID string) ([]ProgramProgression, error)
+	ListEnabledProgramProgressionsByProgramAndProgression(ctx context.Context, arg ListEnabledProgramProgressionsByProgramAndProgressionParams) ([]ProgramProgression, error)
 	ListLiftMaxesByUserByEffectiveDateAsc(ctx context.Context, arg ListLiftMaxesByUserByEffectiveDateAscParams) ([]LiftMax, error)
 	ListLiftMaxesByUserByEffectiveDateDesc(ctx context.Context, arg ListLiftMaxesByUserByEffectiveDateDescParams) ([]LiftMax, error)
 	ListLiftMaxesByUserFilterLiftAndTypeByEffectiveDateAsc(ctx context.Context, arg ListLiftMaxesByUserFilterLiftAndTypeByEffectiveDateAscParams) ([]LiftMax, error)

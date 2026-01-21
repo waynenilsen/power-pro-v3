@@ -14,6 +14,7 @@ import (
 	"github.com/waynenilsen/power-pro-v3/internal/domain/setscheme"
 	"github.com/waynenilsen/power-pro-v3/internal/middleware"
 	"github.com/waynenilsen/power-pro-v3/internal/repository"
+	"github.com/waynenilsen/power-pro-v3/internal/service"
 )
 
 // Config holds server configuration.
@@ -40,6 +41,7 @@ type Server struct {
 	progressionRepo            *repository.ProgressionRepository
 	programProgressionRepo     *repository.ProgramProgressionRepository
 	progressionHistoryRepo     *repository.ProgressionHistoryRepository
+	progressionService         *service.ProgressionService
 	strategyFactory            *loadstrategy.StrategyFactory
 	schemeFactory              *setscheme.SchemeFactory
 }
@@ -69,6 +71,8 @@ func New(cfg Config) *Server {
 	progressionRepo := repository.NewProgressionRepository(cfg.DB)
 	programProgressionRepo := repository.NewProgramProgressionRepository(cfg.DB)
 	progressionHistoryRepo := repository.NewProgressionHistoryRepository(cfg.DB)
+	progressionFactory := service.GetDefaultFactory()
+	progressionService := service.NewProgressionService(cfg.DB, progressionFactory)
 
 	s := &Server{
 		config:               cfg,
@@ -86,6 +90,7 @@ func New(cfg Config) *Server {
 		progressionRepo:            progressionRepo,
 		programProgressionRepo:     programProgressionRepo,
 		progressionHistoryRepo:     progressionHistoryRepo,
+		progressionService:         progressionService,
 		strategyFactory:            strategyFactory,
 		schemeFactory:              schemeFactory,
 	}
@@ -298,6 +303,13 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	// - Handler performs its own authorization check
 	progressionHistoryHandler := api.NewProgressionHistoryHandler(s.progressionHistoryRepo)
 	mux.Handle("GET /users/{userId}/progression-history", withAuth(progressionHistoryHandler.List))
+
+	// Manual Progression Trigger routes:
+	// - Users can trigger their own progressions
+	// - Admins can trigger progressions for any user
+	// - Handler performs its own authorization check
+	manualTriggerHandler := api.NewManualTriggerHandler(s.progressionService)
+	mux.Handle("POST /users/{userId}/progressions/trigger", withAuth(manualTriggerHandler.Trigger))
 }
 
 // Start starts the HTTP server.

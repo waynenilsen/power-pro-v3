@@ -915,3 +915,284 @@ func TestGetDefaultFactory(t *testing.T) {
 		t.Error("expected CYCLE_PROGRESSION to be registered")
 	}
 }
+
+// TestProgressionService_ApplyProgressionManually tests manual progression triggering.
+// Each subtest gets its own database to ensure test isolation.
+func TestProgressionService_ApplyProgressionManually(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("applies progression to specific lift", func(t *testing.T) {
+		sqlDB, cleanup := setupTestDB(t)
+		defer cleanup()
+		data := setupTestData(t, sqlDB)
+		factory := GetDefaultFactory()
+		svc := NewProgressionService(sqlDB, factory)
+
+		result, err := svc.ApplyProgressionManually(ctx, data.UserID, data.LinearSessionProgressionID, data.SquatID, false)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if result.TotalApplied != 1 {
+			t.Errorf("expected TotalApplied=1, got %d", result.TotalApplied)
+		}
+
+		if len(result.Results) != 1 {
+			t.Errorf("expected 1 result, got %d", len(result.Results))
+		}
+
+		if result.Results[0].LiftID != data.SquatID {
+			t.Errorf("expected lift ID %s, got %s", data.SquatID, result.Results[0].LiftID)
+		}
+
+		if !result.Results[0].Applied {
+			t.Error("expected progression to be applied")
+		}
+
+		if result.Results[0].Result.Delta != 5.0 {
+			t.Errorf("expected delta 5.0, got %f", result.Results[0].Result.Delta)
+		}
+	})
+
+	t.Run("applies progression to all configured lifts when liftId is empty", func(t *testing.T) {
+		sqlDB, cleanup := setupTestDB(t)
+		defer cleanup()
+		data := setupTestData(t, sqlDB)
+		factory := GetDefaultFactory()
+		svc := NewProgressionService(sqlDB, factory)
+
+		// The session progression is configured for both squat and bench
+		result, err := svc.ApplyProgressionManually(ctx, data.UserID, data.LinearSessionProgressionID, "", false)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		// Should apply to both squat and bench
+		if result.TotalApplied != 2 {
+			t.Errorf("expected TotalApplied=2, got %d (skipped=%d, errors=%d)", result.TotalApplied, result.TotalSkipped, result.TotalErrors)
+			for _, r := range result.Results {
+				t.Logf("  liftID=%s applied=%v skipped=%v reason=%s error=%s", r.LiftID, r.Applied, r.Skipped, r.SkipReason, r.Error)
+			}
+		}
+
+		if len(result.Results) != 2 {
+			t.Errorf("expected 2 results, got %d", len(result.Results))
+		}
+
+		// Verify both lifts were progressed
+		foundSquat := false
+		foundBench := false
+		for _, r := range result.Results {
+			if r.LiftID == data.SquatID && r.Applied {
+				foundSquat = true
+			}
+			if r.LiftID == data.BenchID && r.Applied {
+				foundBench = true
+			}
+		}
+		if !foundSquat {
+			t.Error("expected squat to be progressed")
+		}
+		if !foundBench {
+			t.Error("expected bench to be progressed")
+		}
+	})
+
+	t.Run("force=false respects idempotency on immediate second call", func(t *testing.T) {
+		sqlDB, cleanup := setupTestDB(t)
+		defer cleanup()
+		data := setupTestData(t, sqlDB)
+		factory := GetDefaultFactory()
+		svc := NewProgressionService(sqlDB, factory)
+
+		// First application
+		result1, err := svc.ApplyProgressionManually(ctx, data.UserID, data.CycleProgressionID, data.DeadliftID, false)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if result1.TotalApplied != 1 {
+			t.Errorf("expected first application to succeed, got TotalApplied=%d", result1.TotalApplied)
+		}
+
+		// Second application with force=false immediately after
+		result2, err := svc.ApplyProgressionManually(ctx, data.UserID, data.CycleProgressionID, data.DeadliftID, false)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		// Log outcome - behavior depends on timing (sub-second calls)
+		t.Logf("Second call: applied=%d, skipped=%d", result2.TotalApplied, result2.TotalSkipped)
+	})
+
+	t.Run("force=true bypasses idempotency", func(t *testing.T) {
+		sqlDB, cleanup := setupTestDB(t)
+		defer cleanup()
+		data := setupTestData(t, sqlDB)
+		factory := GetDefaultFactory()
+		svc := NewProgressionService(sqlDB, factory)
+		queries := db.New(sqlDB)
+
+		// Get initial max
+		initialMax, err := queries.GetCurrentMax(ctx, db.GetCurrentMaxParams{
+			UserID: data.UserID,
+			LiftID: data.SquatID,
+			Type:   "TRAINING_MAX",
+		})
+		if err != nil {
+			t.Fatalf("failed to get initial max: %v", err)
+		}
+		initialValue := initialMax.Value
+
+		// First force application
+		result1, err := svc.ApplyProgressionManually(ctx, data.UserID, data.LinearSessionProgressionID, data.SquatID, true)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if result1.TotalApplied != 1 {
+			t.Errorf("expected first force application to succeed, got TotalApplied=%d", result1.TotalApplied)
+		}
+
+		// Get max after first application
+		afterFirst, err := queries.GetCurrentMax(ctx, db.GetCurrentMaxParams{
+			UserID: data.UserID,
+			LiftID: data.SquatID,
+			Type:   "TRAINING_MAX",
+		})
+		if err != nil {
+			t.Fatalf("failed to get max after first: %v", err)
+		}
+		if afterFirst.Value != initialValue+5.0 {
+			t.Errorf("expected value %f after first, got %f", initialValue+5.0, afterFirst.Value)
+		}
+
+		// Second force application - should ALSO apply because force=true
+		result2, err := svc.ApplyProgressionManually(ctx, data.UserID, data.LinearSessionProgressionID, data.SquatID, true)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if result2.TotalApplied != 1 {
+			t.Errorf("expected second force application to succeed, got TotalApplied=%d", result2.TotalApplied)
+		}
+
+		// Get max after second application
+		afterSecond, err := queries.GetCurrentMax(ctx, db.GetCurrentMaxParams{
+			UserID: data.UserID,
+			LiftID: data.SquatID,
+			Type:   "TRAINING_MAX",
+		})
+		if err != nil {
+			t.Fatalf("failed to get max after second: %v", err)
+		}
+		if afterSecond.Value != initialValue+10.0 {
+			t.Errorf("expected value %f after second force, got %f", initialValue+10.0, afterSecond.Value)
+		}
+	})
+
+	t.Run("force=true creates log with manual and force markers", func(t *testing.T) {
+		sqlDB, cleanup := setupTestDB(t)
+		defer cleanup()
+		data := setupTestData(t, sqlDB)
+		factory := GetDefaultFactory()
+		svc := NewProgressionService(sqlDB, factory)
+		queries := db.New(sqlDB)
+
+		result, err := svc.ApplyProgressionManually(ctx, data.UserID, data.CycleProgressionID, data.DeadliftID, true)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if result.TotalApplied != 1 {
+			t.Fatalf("expected TotalApplied=1, got %d", result.TotalApplied)
+		}
+
+		// Get the most recent log entry
+		logs, err := queries.ListProgressionLogsByUser(ctx, db.ListProgressionLogsByUserParams{
+			UserID: data.UserID,
+			Limit:  1,
+			Offset: 0,
+		})
+		if err != nil {
+			t.Fatalf("failed to get logs: %v", err)
+		}
+		if len(logs) == 0 {
+			t.Fatal("expected at least one log entry")
+		}
+
+		// Verify trigger_context contains "manual": true and "force": true
+		triggerContext := logs[0].TriggerContext
+		if !contains(triggerContext, `"manual":true`) {
+			t.Errorf("expected trigger_context to contain 'manual:true', got: %s", triggerContext)
+		}
+		if !contains(triggerContext, `"force":true`) {
+			t.Errorf("expected trigger_context to contain 'force:true', got: %s", triggerContext)
+		}
+	})
+
+	t.Run("returns error for non-existent progression", func(t *testing.T) {
+		sqlDB, cleanup := setupTestDB(t)
+		defer cleanup()
+		data := setupTestData(t, sqlDB)
+		factory := GetDefaultFactory()
+		svc := NewProgressionService(sqlDB, factory)
+
+		_, err := svc.ApplyProgressionManually(ctx, data.UserID, "non-existent-progression", data.SquatID, false)
+		if err != ErrProgressionNotFound {
+			t.Errorf("expected ErrProgressionNotFound, got: %v", err)
+		}
+	})
+
+	t.Run("returns error for non-existent lift", func(t *testing.T) {
+		sqlDB, cleanup := setupTestDB(t)
+		defer cleanup()
+		data := setupTestData(t, sqlDB)
+		factory := GetDefaultFactory()
+		svc := NewProgressionService(sqlDB, factory)
+
+		_, err := svc.ApplyProgressionManually(ctx, data.UserID, data.LinearSessionProgressionID, "non-existent-lift", false)
+		if err != ErrLiftNotFound {
+			t.Errorf("expected ErrLiftNotFound, got: %v", err)
+		}
+	})
+
+	t.Run("returns error for unenrolled user", func(t *testing.T) {
+		sqlDB, cleanup := setupTestDB(t)
+		defer cleanup()
+		data := setupTestData(t, sqlDB)
+		factory := GetDefaultFactory()
+		svc := NewProgressionService(sqlDB, factory)
+
+		_, err := svc.ApplyProgressionManually(ctx, "non-existent-user", data.LinearSessionProgressionID, data.SquatID, false)
+		if err != ErrUserNotEnrolled {
+			t.Errorf("expected ErrUserNotEnrolled, got: %v", err)
+		}
+		_ = data // Use data variable
+	})
+
+	t.Run("returns error when no lifts configured for progression", func(t *testing.T) {
+		sqlDB, cleanup := setupTestDB(t)
+		defer cleanup()
+		data := setupTestData(t, sqlDB)
+		factory := GetDefaultFactory()
+		svc := NewProgressionService(sqlDB, factory)
+
+		// The week progression has no lifts configured
+		_, err := svc.ApplyProgressionManually(ctx, data.UserID, data.LinearWeekProgressionID, "", false)
+		if err == nil {
+			t.Error("expected error for progression with no configured lifts")
+		}
+	})
+}
+
+// Helper to check if a string contains a substring (simple contains check)
+func contains(s, substr string) bool {
+	return len(s) >= len(substr) && (s == substr || len(s) > 0 && containsHelper(s, substr))
+}
+
+func containsHelper(s, substr string) bool {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
+}

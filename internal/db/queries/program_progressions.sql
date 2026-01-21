@@ -65,3 +65,9 @@ FROM program_progressions pp
 JOIN progressions p ON pp.progression_id = p.id
 WHERE pp.program_id = ?
 ORDER BY pp.priority ASC;
+
+-- name: ListEnabledProgramProgressionsByProgramAndProgression :many
+SELECT id, program_id, progression_id, lift_id, priority, enabled, override_increment, created_at, updated_at
+FROM program_progressions
+WHERE program_id = ? AND progression_id = ? AND enabled = 1
+ORDER BY priority ASC;

@@ -303,3 +303,61 @@ func UnmarshalTriggerContextEnvelope(data []byte) (TriggerContext, error) {
 	}
 	return UnmarshalTriggerContext(envelope.Type, envelope.Data)
 }
+
+// ManualTriggerContext wraps another TriggerContext and adds manual trigger metadata.
+// This is used when progressions are triggered manually via the API.
+type ManualTriggerContext struct {
+	// Manual indicates this was a manual trigger (always true for this type).
+	Manual bool `json:"manual"`
+	// Force indicates the idempotency check was bypassed.
+	Force bool `json:"force"`
+	// LiftID is the specific lift targeted, if any.
+	LiftID string `json:"liftId,omitempty"`
+	// UnderlyingContext contains the synthetic trigger context.
+	UnderlyingContext TriggerContext `json:"-"`
+	// InnerContext holds the serialized underlying context.
+	InnerContext json.RawMessage `json:"context,omitempty"`
+	// InnerTriggerType indicates what type of trigger was synthesized.
+	InnerTriggerType TriggerType `json:"triggerType"`
+}
+
+// TriggerType implements TriggerContext.
+// Returns the underlying trigger type for compatibility with progression logic.
+func (c ManualTriggerContext) TriggerType() TriggerType {
+	return c.InnerTriggerType
+}
+
+// Validate implements TriggerContext.
+func (c ManualTriggerContext) Validate() error {
+	// ManualTriggerContext is always valid since it's synthesized by the system
+	return nil
+}
+
+// MarshalJSON implements json.Marshaler for ManualTriggerContext.
+func (c ManualTriggerContext) MarshalJSON() ([]byte, error) {
+	type Alias ManualTriggerContext
+	alias := Alias(c)
+
+	// Marshal the underlying context
+	if c.UnderlyingContext != nil {
+		contextData, err := json.Marshal(c.UnderlyingContext)
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal underlying context: %w", err)
+		}
+		alias.InnerContext = contextData
+		alias.InnerTriggerType = c.UnderlyingContext.TriggerType()
+	}
+
+	return json.Marshal(alias)
+}
+
+// NewManualTriggerContext creates a new ManualTriggerContext wrapping the given context.
+func NewManualTriggerContext(underlyingContext TriggerContext, liftID string, force bool) *ManualTriggerContext {
+	return &ManualTriggerContext{
+		Manual:            true,
+		Force:             force,
+		LiftID:            liftID,
+		UnderlyingContext: underlyingContext,
+		InnerTriggerType:  underlyingContext.TriggerType(),
+	}
+}
