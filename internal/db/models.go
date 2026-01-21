@@ -89,6 +89,40 @@ type Program struct {
 	UpdatedAt       string          `json:"updated_at"`
 }
 
+type ProgramProgression struct {
+	ID                string          `json:"id"`
+	ProgramID         string          `json:"program_id"`
+	ProgressionID     string          `json:"progression_id"`
+	LiftID            sql.NullString  `json:"lift_id"`
+	Priority          int64           `json:"priority"`
+	Enabled           int64           `json:"enabled"`
+	OverrideIncrement sql.NullFloat64 `json:"override_increment"`
+	CreatedAt         string          `json:"created_at"`
+	UpdatedAt         string          `json:"updated_at"`
+}
+
+type Progression struct {
+	ID         string `json:"id"`
+	Name       string `json:"name"`
+	Type       string `json:"type"`
+	Parameters string `json:"parameters"`
+	CreatedAt  string `json:"created_at"`
+	UpdatedAt  string `json:"updated_at"`
+}
+
+type ProgressionLog struct {
+	ID             string  `json:"id"`
+	UserID         string  `json:"user_id"`
+	ProgressionID  string  `json:"progression_id"`
+	LiftID         string  `json:"lift_id"`
+	PreviousValue  float64 `json:"previous_value"`
+	NewValue       float64 `json:"new_value"`
+	Delta          float64 `json:"delta"`
+	TriggerType    string  `json:"trigger_type"`
+	TriggerContext string  `json:"trigger_context"`
+	AppliedAt      string  `json:"applied_at"`
+}
+
 type User struct {
 	ID        string `json:"id"`
 	CreatedAt string `json:"created_at"`

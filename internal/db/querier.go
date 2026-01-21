@@ -10,6 +10,7 @@ import (
 )
 
 type Querier interface {
+	CheckIdempotency(ctx context.Context, arg CheckIdempotencyParams) (int64, error)
 	CountCycles(ctx context.Context) (int64, error)
 	CountDailyLookups(ctx context.Context) (int64, error)
 	CountDayPrescriptions(ctx context.Context, dayID string) (int64, error)
@@ -25,7 +26,12 @@ type Querier interface {
 	CountLiftsFilteredByCompetition(ctx context.Context, isCompetitionLift int64) (int64, error)
 	CountPrescriptions(ctx context.Context) (int64, error)
 	CountPrescriptionsFilterLift(ctx context.Context, liftID string) (int64, error)
+	CountProgramProgressionsByProgram(ctx context.Context, programID string) (int64, error)
 	CountPrograms(ctx context.Context) (int64, error)
+	CountProgressionLogsByUser(ctx context.Context, userID string) (int64, error)
+	CountProgressionLogsByUserAndLift(ctx context.Context, arg CountProgressionLogsByUserAndLiftParams) (int64, error)
+	CountProgressions(ctx context.Context) (int64, error)
+	CountProgressionsByType(ctx context.Context, type_ string) (int64, error)
 	CountWeekDays(ctx context.Context, weekID string) (int64, error)
 	CountWeeklyLookups(ctx context.Context) (int64, error)
 	CountWeeks(ctx context.Context) (int64, error)
@@ -39,6 +45,9 @@ type Querier interface {
 	CreateLiftMax(ctx context.Context, arg CreateLiftMaxParams) error
 	CreatePrescription(ctx context.Context, arg CreatePrescriptionParams) error
 	CreateProgram(ctx context.Context, arg CreateProgramParams) error
+	CreateProgramProgression(ctx context.Context, arg CreateProgramProgressionParams) error
+	CreateProgression(ctx context.Context, arg CreateProgressionParams) error
+	CreateProgressionLog(ctx context.Context, arg CreateProgressionLogParams) error
 	CreateUser(ctx context.Context, arg CreateUserParams) error
 	CreateUserProgramState(ctx context.Context, arg CreateUserProgramStateParams) error
 	CreateWeek(ctx context.Context, arg CreateWeekParams) error
@@ -60,6 +69,10 @@ type Querier interface {
 	DeleteLiftMax(ctx context.Context, id string) error
 	DeletePrescription(ctx context.Context, id string) error
 	DeleteProgram(ctx context.Context, id string) error
+	DeleteProgramProgression(ctx context.Context, id string) error
+	DeleteProgramProgressionsByProgram(ctx context.Context, programID string) error
+	DeleteProgression(ctx context.Context, id string) error
+	DeleteProgressionLog(ctx context.Context, id string) error
 	DeleteUserProgramStateByUserID(ctx context.Context, userID string) error
 	DeleteWeek(ctx context.Context, id string) error
 	DeleteWeekDay(ctx context.Context, id string) error
@@ -90,7 +103,10 @@ type Querier interface {
 	GetPrescriptionsForDay(ctx context.Context, dayID string) ([]Prescription, error)
 	GetProgram(ctx context.Context, id string) (Program, error)
 	GetProgramBySlug(ctx context.Context, slug string) (Program, error)
+	GetProgramProgression(ctx context.Context, id string) (ProgramProgression, error)
 	GetProgramWithCycle(ctx context.Context, id string) (GetProgramWithCycleRow, error)
+	GetProgression(ctx context.Context, id string) (Progression, error)
+	GetProgressionLog(ctx context.Context, id string) (ProgressionLog, error)
 	GetStateAdvancementContext(ctx context.Context, userID string) (GetStateAdvancementContextRow, error)
 	GetUser(ctx context.Context, id string) (User, error)
 	GetUserProgramStateByID(ctx context.Context, id string) (UserProgramState, error)
@@ -126,6 +142,7 @@ type Querier interface {
 	ListDaysFilteredByProgramByCreatedAtDesc(ctx context.Context, arg ListDaysFilteredByProgramByCreatedAtDescParams) ([]Day, error)
 	ListDaysFilteredByProgramByNameAsc(ctx context.Context, arg ListDaysFilteredByProgramByNameAscParams) ([]Day, error)
 	ListDaysFilteredByProgramByNameDesc(ctx context.Context, arg ListDaysFilteredByProgramByNameDescParams) ([]Day, error)
+	ListEnabledProgramProgressionsByProgram(ctx context.Context, programID string) ([]ProgramProgression, error)
 	ListLiftMaxesByUserByEffectiveDateAsc(ctx context.Context, arg ListLiftMaxesByUserByEffectiveDateAscParams) ([]LiftMax, error)
 	ListLiftMaxesByUserByEffectiveDateDesc(ctx context.Context, arg ListLiftMaxesByUserByEffectiveDateDescParams) ([]LiftMax, error)
 	ListLiftMaxesByUserFilterLiftAndTypeByEffectiveDateAsc(ctx context.Context, arg ListLiftMaxesByUserFilterLiftAndTypeByEffectiveDateAscParams) ([]LiftMax, error)
@@ -150,10 +167,16 @@ type Querier interface {
 	ListPrescriptionsFilterLiftByCreatedAtDesc(ctx context.Context, arg ListPrescriptionsFilterLiftByCreatedAtDescParams) ([]Prescription, error)
 	ListPrescriptionsFilterLiftByOrderAsc(ctx context.Context, arg ListPrescriptionsFilterLiftByOrderAscParams) ([]Prescription, error)
 	ListPrescriptionsFilterLiftByOrderDesc(ctx context.Context, arg ListPrescriptionsFilterLiftByOrderDescParams) ([]Prescription, error)
+	ListProgramProgressionsByProgram(ctx context.Context, programID string) ([]ProgramProgression, error)
+	ListProgramProgressionsByProgramAndLift(ctx context.Context, arg ListProgramProgressionsByProgramAndLiftParams) ([]ProgramProgression, error)
 	ListProgramsByCreatedAtAsc(ctx context.Context, arg ListProgramsByCreatedAtAscParams) ([]Program, error)
 	ListProgramsByCreatedAtDesc(ctx context.Context, arg ListProgramsByCreatedAtDescParams) ([]Program, error)
 	ListProgramsByNameAsc(ctx context.Context, arg ListProgramsByNameAscParams) ([]Program, error)
 	ListProgramsByNameDesc(ctx context.Context, arg ListProgramsByNameDescParams) ([]Program, error)
+	ListProgressionLogsByUser(ctx context.Context, arg ListProgressionLogsByUserParams) ([]ProgressionLog, error)
+	ListProgressionLogsByUserAndLift(ctx context.Context, arg ListProgressionLogsByUserAndLiftParams) ([]ProgressionLog, error)
+	ListProgressions(ctx context.Context, arg ListProgressionsParams) ([]Progression, error)
+	ListProgressionsByType(ctx context.Context, arg ListProgressionsByTypeParams) ([]Progression, error)
 	ListWeekDays(ctx context.Context, weekID string) ([]WeekDay, error)
 	ListWeeklyLookupsByCreatedAtAsc(ctx context.Context, arg ListWeeklyLookupsByCreatedAtAscParams) ([]WeeklyLookup, error)
 	ListWeeklyLookupsByCreatedAtDesc(ctx context.Context, arg ListWeeklyLookupsByCreatedAtDescParams) ([]WeeklyLookup, error)
@@ -183,6 +206,8 @@ type Querier interface {
 	UpdateLiftMax(ctx context.Context, arg UpdateLiftMaxParams) error
 	UpdatePrescription(ctx context.Context, arg UpdatePrescriptionParams) error
 	UpdateProgram(ctx context.Context, arg UpdateProgramParams) error
+	UpdateProgramProgression(ctx context.Context, arg UpdateProgramProgressionParams) error
+	UpdateProgression(ctx context.Context, arg UpdateProgressionParams) error
 	UpdateUserProgramState(ctx context.Context, arg UpdateUserProgramStateParams) error
 	UpdateWeek(ctx context.Context, arg UpdateWeekParams) error
 	UpdateWeeklyLookup(ctx context.Context, arg UpdateWeeklyLookupParams) error
