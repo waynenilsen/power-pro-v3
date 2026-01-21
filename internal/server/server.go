@@ -250,6 +250,12 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /users/{userId}/program", withAuth(enrollmentHandler.Get))
 	mux.Handle("DELETE /users/{userId}/program", withAuth(enrollmentHandler.Unenroll))
 
+	// State Advancement routes:
+	// - Users can advance their own program state
+	// - Admins can advance any user's program state
+	stateAdvancementHandler := api.NewStateAdvancementHandler(s.userProgramStateRepo, s.config.DB)
+	mux.Handle("POST /users/{userId}/program-state/advance", withAuth(stateAdvancementHandler.Advance))
+
 	// Workout Generation routes:
 	// - Users can generate/preview their own workouts
 	// - Admins can generate/preview any user's workouts

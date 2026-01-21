@@ -43,3 +43,26 @@ FROM user_program_states ups
 JOIN programs p ON ups.program_id = p.id
 JOIN cycles c ON p.cycle_id = c.id
 WHERE ups.user_id = ?;
+
+-- name: GetStateAdvancementContext :one
+SELECT
+    ups.id,
+    ups.user_id,
+    ups.program_id,
+    ups.current_week,
+    ups.current_cycle_iteration,
+    ups.current_day_index,
+    ups.enrolled_at,
+    ups.updated_at,
+    c.id AS cycle_id,
+    c.length_weeks AS cycle_length_weeks,
+    (
+        SELECT COUNT(*)
+        FROM week_days wd
+        JOIN weeks w ON wd.week_id = w.id
+        WHERE w.cycle_id = c.id AND w.week_number = ups.current_week
+    ) AS days_in_current_week
+FROM user_program_states ups
+JOIN programs p ON ups.program_id = p.id
+JOIN cycles c ON p.cycle_id = c.id
+WHERE ups.user_id = ?;

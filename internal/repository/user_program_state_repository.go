@@ -161,5 +161,46 @@ func dbUserProgramStateToDomain(dbState db.UserProgramState) *userprogramstate.U
 	}
 }
 
+// StateAdvancementContext contains the context needed to advance a user's state.
+type StateAdvancementContext struct {
+	State             *userprogramstate.UserProgramState
+	CycleID           string
+	CycleLengthWeeks  int
+	DaysInCurrentWeek int
+}
+
+// GetStateAdvancementContext retrieves the user's state along with advancement context.
+func (r *UserProgramStateRepository) GetStateAdvancementContext(userID string) (*StateAdvancementContext, error) {
+	ctx := context.Background()
+	row, err := r.queries.GetStateAdvancementContext(ctx, userID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to get state advancement context: %w", err)
+	}
+
+	enrolledAt, _ := time.Parse(time.RFC3339, row.EnrolledAt)
+	updatedAt, _ := time.Parse(time.RFC3339, row.UpdatedAt)
+
+	state := &userprogramstate.UserProgramState{
+		ID:                    row.ID,
+		UserID:                row.UserID,
+		ProgramID:             row.ProgramID,
+		CurrentWeek:           int(row.CurrentWeek),
+		CurrentCycleIteration: int(row.CurrentCycleIteration),
+		CurrentDayIndex:       nullInt64ToIntPtr(row.CurrentDayIndex),
+		EnrolledAt:            enrolledAt,
+		UpdatedAt:             updatedAt,
+	}
+
+	return &StateAdvancementContext{
+		State:             state,
+		CycleID:           row.CycleID,
+		CycleLengthWeeks:  int(row.CycleLengthWeeks),
+		DaysInCurrentWeek: int(row.DaysInCurrentWeek),
+	}, nil
+}
+
 // Note: intPtrToNullInt64, nullInt64ToIntPtr, stringPtrToNullString, and nullStringToStringPtr
 // are shared across repositories and defined in prescription_repository.go and lift_repository.go.

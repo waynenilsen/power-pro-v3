@@ -54,7 +54,11 @@ INSERT INTO users (id, created_at, updated_at) VALUES
     ('workout-error-test-user-3', datetime('now'), datetime('now')),
     ('workout-preview-test-user', datetime('now'), datetime('now')),
     ('workout-auth-test-user', datetime('now'), datetime('now')),
-    ('workout-format-test-user', datetime('now'), datetime('now'));
+    ('workout-format-test-user', datetime('now'), datetime('now')),
+    -- State advancement test users
+    ('auth-test-user-adv', datetime('now'), datetime('now')),
+    ('format-test-user-adv', datetime('now'), datetime('now')),
+    ('no-days-user', datetime('now'), datetime('now'));
 -- +goose StatementEnd
 
 -- +goose Down

@@ -679,6 +679,324 @@ func TestValidationResult_Error_Invalid(t *testing.T) {
 	}
 }
 
+// ==================== AdvanceState Tests ====================
+
+func TestAdvanceState_FirstAdvancement(t *testing.T) {
+	// First advancement from nil day index
+	state := &UserProgramState{
+		ID:                    "state-id",
+		UserID:                "user-1",
+		ProgramID:             "program-1",
+		CurrentWeek:           1,
+		CurrentCycleIteration: 1,
+		CurrentDayIndex:       nil, // nil = not yet started
+	}
+
+	ctx := AdvancementContext{
+		DaysInCurrentWeek: 3,
+		CycleLengthWeeks:  4,
+	}
+
+	result, validation := AdvanceState(state, ctx)
+
+	if !validation.Valid {
+		t.Fatalf("AdvanceState returned invalid result: %v", validation.Errors)
+	}
+	if result == nil {
+		t.Fatal("AdvanceState returned nil result")
+	}
+	if result.NewState.CurrentDayIndex == nil || *result.NewState.CurrentDayIndex != 1 {
+		t.Errorf("CurrentDayIndex = %v, want 1", result.NewState.CurrentDayIndex)
+	}
+	if result.NewState.CurrentWeek != 1 {
+		t.Errorf("CurrentWeek = %d, want 1", result.NewState.CurrentWeek)
+	}
+	if result.CycleCompleted {
+		t.Error("CycleCompleted should be false for first advancement")
+	}
+}
+
+func TestAdvanceState_AdvanceWithinWeek(t *testing.T) {
+	dayIdx := 0
+	state := &UserProgramState{
+		ID:                    "state-id",
+		UserID:                "user-1",
+		ProgramID:             "program-1",
+		CurrentWeek:           1,
+		CurrentCycleIteration: 1,
+		CurrentDayIndex:       &dayIdx,
+	}
+
+	ctx := AdvancementContext{
+		DaysInCurrentWeek: 3,
+		CycleLengthWeeks:  4,
+	}
+
+	result, validation := AdvanceState(state, ctx)
+
+	if !validation.Valid {
+		t.Fatalf("AdvanceState returned invalid result: %v", validation.Errors)
+	}
+	if result.NewState.CurrentDayIndex == nil || *result.NewState.CurrentDayIndex != 1 {
+		t.Errorf("CurrentDayIndex = %v, want 1", result.NewState.CurrentDayIndex)
+	}
+	if result.NewState.CurrentWeek != 1 {
+		t.Errorf("CurrentWeek = %d, want 1 (should stay same)", result.NewState.CurrentWeek)
+	}
+	if result.CycleCompleted {
+		t.Error("CycleCompleted should be false when advancing within week")
+	}
+}
+
+func TestAdvanceState_AdvanceToNextWeek(t *testing.T) {
+	// Day index is at 2 (last day of 3-day week), should advance to next week
+	dayIdx := 2
+	state := &UserProgramState{
+		ID:                    "state-id",
+		UserID:                "user-1",
+		ProgramID:             "program-1",
+		CurrentWeek:           1,
+		CurrentCycleIteration: 1,
+		CurrentDayIndex:       &dayIdx, // Last day of 3-day week
+	}
+
+	ctx := AdvancementContext{
+		DaysInCurrentWeek: 3,
+		CycleLengthWeeks:  4,
+	}
+
+	result, validation := AdvanceState(state, ctx)
+
+	if !validation.Valid {
+		t.Fatalf("AdvanceState returned invalid result: %v", validation.Errors)
+	}
+	// After incrementing day index becomes 3, which >= 3 days, so it wraps
+	if result.NewState.CurrentDayIndex == nil || *result.NewState.CurrentDayIndex != 0 {
+		t.Errorf("CurrentDayIndex = %v, want 0 (reset for new week)", result.NewState.CurrentDayIndex)
+	}
+	if result.NewState.CurrentWeek != 2 {
+		t.Errorf("CurrentWeek = %d, want 2 (advanced to next week)", result.NewState.CurrentWeek)
+	}
+	if result.CycleCompleted {
+		t.Error("CycleCompleted should be false when advancing to next week")
+	}
+}
+
+func TestAdvanceState_CycleCompletion(t *testing.T) {
+	// Last day of last week of 4-week cycle
+	dayIdx := 2
+	state := &UserProgramState{
+		ID:                    "state-id",
+		UserID:                "user-1",
+		ProgramID:             "program-1",
+		CurrentWeek:           4, // Last week
+		CurrentCycleIteration: 1,
+		CurrentDayIndex:       &dayIdx, // Last day
+	}
+
+	ctx := AdvancementContext{
+		DaysInCurrentWeek: 3, // 3-day week
+		CycleLengthWeeks:  4,
+	}
+
+	result, validation := AdvanceState(state, ctx)
+
+	if !validation.Valid {
+		t.Fatalf("AdvanceState returned invalid result: %v", validation.Errors)
+	}
+	// After incrementing: day index becomes 3 >= 3, wraps to 0
+	// Week increments to 5 > 4, wraps to 1
+	// Cycle iteration increments to 2
+	if result.NewState.CurrentDayIndex == nil || *result.NewState.CurrentDayIndex != 0 {
+		t.Errorf("CurrentDayIndex = %v, want 0 (reset for new cycle)", result.NewState.CurrentDayIndex)
+	}
+	if result.NewState.CurrentWeek != 1 {
+		t.Errorf("CurrentWeek = %d, want 1 (reset for new cycle)", result.NewState.CurrentWeek)
+	}
+	if result.NewState.CurrentCycleIteration != 2 {
+		t.Errorf("CurrentCycleIteration = %d, want 2 (incremented)", result.NewState.CurrentCycleIteration)
+	}
+	if !result.CycleCompleted {
+		t.Error("CycleCompleted should be true when completing cycle")
+	}
+}
+
+func TestAdvanceState_MultipleAdvancementsThroughCycle(t *testing.T) {
+	// Simulate advancing through an entire 2-week cycle with 2 days per week
+	state := &UserProgramState{
+		ID:                    "state-id",
+		UserID:                "user-1",
+		ProgramID:             "program-1",
+		CurrentWeek:           1,
+		CurrentCycleIteration: 1,
+		CurrentDayIndex:       nil, // Starting fresh
+	}
+
+	ctx := AdvancementContext{
+		DaysInCurrentWeek: 2,
+		CycleLengthWeeks:  2,
+	}
+
+	// Advancement 1: nil -> day 1
+	result, _ := AdvanceState(state, ctx)
+	if *result.NewState.CurrentDayIndex != 1 || result.NewState.CurrentWeek != 1 {
+		t.Errorf("Advancement 1: day=%v week=%d, want day=1 week=1",
+			*result.NewState.CurrentDayIndex, result.NewState.CurrentWeek)
+	}
+	if result.CycleCompleted {
+		t.Error("Advancement 1: unexpected cycle completion")
+	}
+
+	// Advancement 2: day 1 -> day 0, week 2
+	result, _ = AdvanceState(result.NewState, ctx)
+	if *result.NewState.CurrentDayIndex != 0 || result.NewState.CurrentWeek != 2 {
+		t.Errorf("Advancement 2: day=%v week=%d, want day=0 week=2",
+			*result.NewState.CurrentDayIndex, result.NewState.CurrentWeek)
+	}
+	if result.CycleCompleted {
+		t.Error("Advancement 2: unexpected cycle completion")
+	}
+
+	// Advancement 3: day 0, week 2 -> day 1, week 2
+	result, _ = AdvanceState(result.NewState, ctx)
+	if *result.NewState.CurrentDayIndex != 1 || result.NewState.CurrentWeek != 2 {
+		t.Errorf("Advancement 3: day=%v week=%d, want day=1 week=2",
+			*result.NewState.CurrentDayIndex, result.NewState.CurrentWeek)
+	}
+	if result.CycleCompleted {
+		t.Error("Advancement 3: unexpected cycle completion")
+	}
+
+	// Advancement 4: day 1, week 2 -> day 0, week 1, cycle 2 (CYCLE COMPLETE!)
+	result, _ = AdvanceState(result.NewState, ctx)
+	if *result.NewState.CurrentDayIndex != 0 || result.NewState.CurrentWeek != 1 {
+		t.Errorf("Advancement 4: day=%v week=%d, want day=0 week=1",
+			*result.NewState.CurrentDayIndex, result.NewState.CurrentWeek)
+	}
+	if result.NewState.CurrentCycleIteration != 2 {
+		t.Errorf("Advancement 4: cycle=%d, want 2", result.NewState.CurrentCycleIteration)
+	}
+	if !result.CycleCompleted {
+		t.Error("Advancement 4: expected cycle completion")
+	}
+}
+
+func TestAdvanceState_SingleDaySingleWeekCycle(t *testing.T) {
+	// Edge case: 1 day per week, 1 week cycle
+	state := &UserProgramState{
+		ID:                    "state-id",
+		UserID:                "user-1",
+		ProgramID:             "program-1",
+		CurrentWeek:           1,
+		CurrentCycleIteration: 1,
+		CurrentDayIndex:       ptrInt(0),
+	}
+
+	ctx := AdvancementContext{
+		DaysInCurrentWeek: 1,
+		CycleLengthWeeks:  1,
+	}
+
+	result, validation := AdvanceState(state, ctx)
+
+	if !validation.Valid {
+		t.Fatalf("AdvanceState returned invalid result: %v", validation.Errors)
+	}
+	// Should complete cycle every advancement
+	if !result.CycleCompleted {
+		t.Error("CycleCompleted should be true for 1-day, 1-week cycle")
+	}
+	if result.NewState.CurrentCycleIteration != 2 {
+		t.Errorf("CurrentCycleIteration = %d, want 2", result.NewState.CurrentCycleIteration)
+	}
+	if result.NewState.CurrentWeek != 1 {
+		t.Errorf("CurrentWeek = %d, want 1", result.NewState.CurrentWeek)
+	}
+	if *result.NewState.CurrentDayIndex != 0 {
+		t.Errorf("CurrentDayIndex = %d, want 0", *result.NewState.CurrentDayIndex)
+	}
+}
+
+func TestAdvanceState_DoesNotMutateOriginal(t *testing.T) {
+	dayIdx := 0
+	state := &UserProgramState{
+		ID:                    "state-id",
+		UserID:                "user-1",
+		ProgramID:             "program-1",
+		CurrentWeek:           1,
+		CurrentCycleIteration: 1,
+		CurrentDayIndex:       &dayIdx,
+	}
+
+	ctx := AdvancementContext{
+		DaysInCurrentWeek: 3,
+		CycleLengthWeeks:  4,
+	}
+
+	_, _ = AdvanceState(state, ctx)
+
+	// Original state should be unchanged
+	if state.CurrentWeek != 1 {
+		t.Errorf("Original state.CurrentWeek was mutated: %d", state.CurrentWeek)
+	}
+	if state.CurrentCycleIteration != 1 {
+		t.Errorf("Original state.CurrentCycleIteration was mutated: %d", state.CurrentCycleIteration)
+	}
+	if *state.CurrentDayIndex != 0 {
+		t.Errorf("Original state.CurrentDayIndex was mutated: %d", *state.CurrentDayIndex)
+	}
+}
+
+func TestAdvanceState_InvalidContext_ZeroDays(t *testing.T) {
+	state := &UserProgramState{
+		ID:                    "state-id",
+		UserID:                "user-1",
+		ProgramID:             "program-1",
+		CurrentWeek:           1,
+		CurrentCycleIteration: 1,
+		CurrentDayIndex:       ptrInt(0),
+	}
+
+	ctx := AdvancementContext{
+		DaysInCurrentWeek: 0, // Invalid
+		CycleLengthWeeks:  4,
+	}
+
+	result, validation := AdvanceState(state, ctx)
+
+	if validation.Valid {
+		t.Error("AdvanceState should fail with 0 days in week")
+	}
+	if result != nil {
+		t.Error("AdvanceState should return nil result on validation failure")
+	}
+}
+
+func TestAdvanceState_InvalidContext_ZeroWeeks(t *testing.T) {
+	state := &UserProgramState{
+		ID:                    "state-id",
+		UserID:                "user-1",
+		ProgramID:             "program-1",
+		CurrentWeek:           1,
+		CurrentCycleIteration: 1,
+		CurrentDayIndex:       ptrInt(0),
+	}
+
+	ctx := AdvancementContext{
+		DaysInCurrentWeek: 3,
+		CycleLengthWeeks:  0, // Invalid
+	}
+
+	result, validation := AdvanceState(state, ctx)
+
+	if validation.Valid {
+		t.Error("AdvanceState should fail with 0 weeks in cycle")
+	}
+	if result != nil {
+		t.Error("AdvanceState should return nil result on validation failure")
+	}
+}
+
 // ==================== Helper Functions for Tests ====================
 
 func ptrInt(i int) *int {

@@ -216,3 +216,95 @@ func (s *UserProgramState) Validate() *ValidationResult {
 
 	return result
 }
+
+// AdvancementContext contains the context needed for state advancement.
+type AdvancementContext struct {
+	DaysInCurrentWeek int // Number of training days in the current week
+	CycleLengthWeeks  int // Total number of weeks in the cycle
+}
+
+// AdvancementResult contains the result of a state advancement operation.
+type AdvancementResult struct {
+	NewState       *UserProgramState
+	CycleCompleted bool
+}
+
+// AdvanceState advances the user's position in the program.
+// Logic:
+// 1. Increment day index
+// 2. If day index >= days in week, reset day index to 0, increment week
+// 3. If week > cycle length, reset week to 1, increment cycle iteration (cycle completed)
+func AdvanceState(state *UserProgramState, ctx AdvancementContext) (*AdvancementResult, *ValidationResult) {
+	result := NewValidationResult()
+
+	// Validate context
+	if ctx.DaysInCurrentWeek < 1 {
+		result.AddError(errors.New("days_in_current_week must be at least 1"))
+		return nil, result
+	}
+	if ctx.CycleLengthWeeks < 1 {
+		result.AddError(errors.New("cycle_length_weeks must be at least 1"))
+		return nil, result
+	}
+
+	// Copy state to avoid mutating original
+	newState := &UserProgramState{
+		ID:                    state.ID,
+		UserID:                state.UserID,
+		ProgramID:             state.ProgramID,
+		CurrentWeek:           state.CurrentWeek,
+		CurrentCycleIteration: state.CurrentCycleIteration,
+		CurrentDayIndex:       copyIntPtr(state.CurrentDayIndex),
+		EnrolledAt:            state.EnrolledAt,
+		UpdatedAt:             time.Now(),
+	}
+
+	cycleCompleted := false
+
+	// Initialize day index if nil (first advancement)
+	currentDayIndex := 0
+	if newState.CurrentDayIndex != nil {
+		currentDayIndex = *newState.CurrentDayIndex
+	}
+
+	// Increment day index
+	currentDayIndex++
+
+	// Check if we've exceeded days in the week
+	if currentDayIndex >= ctx.DaysInCurrentWeek {
+		// Reset day index to 0
+		currentDayIndex = 0
+
+		// Increment week
+		newState.CurrentWeek++
+
+		// Check if we've exceeded the cycle length
+		if newState.CurrentWeek > ctx.CycleLengthWeeks {
+			// Reset to week 1
+			newState.CurrentWeek = 1
+
+			// Increment cycle iteration
+			newState.CurrentCycleIteration++
+
+			// Mark cycle as completed
+			cycleCompleted = true
+		}
+	}
+
+	// Set the new day index
+	newState.CurrentDayIndex = &currentDayIndex
+
+	return &AdvancementResult{
+		NewState:       newState,
+		CycleCompleted: cycleCompleted,
+	}, result
+}
+
+// copyIntPtr creates a copy of an int pointer.
+func copyIntPtr(p *int) *int {
+	if p == nil {
+		return nil
+	}
+	v := *p
+	return &v
+}

@@ -91,6 +91,7 @@ type Querier interface {
 	GetProgram(ctx context.Context, id string) (Program, error)
 	GetProgramBySlug(ctx context.Context, slug string) (Program, error)
 	GetProgramWithCycle(ctx context.Context, id string) (GetProgramWithCycleRow, error)
+	GetStateAdvancementContext(ctx context.Context, userID string) (GetStateAdvancementContextRow, error)
 	GetUser(ctx context.Context, id string) (User, error)
 	GetUserProgramStateByID(ctx context.Context, id string) (UserProgramState, error)
 	GetUserProgramStateByUserID(ctx context.Context, userID string) (UserProgramState, error)

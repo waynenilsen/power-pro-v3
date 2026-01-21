@@ -104,6 +104,63 @@ func (q *Queries) GetEnrollmentWithProgram(ctx context.Context, userID string) (
 	return i, err
 }
 
+const getStateAdvancementContext = `-- name: GetStateAdvancementContext :one
+SELECT
+    ups.id,
+    ups.user_id,
+    ups.program_id,
+    ups.current_week,
+    ups.current_cycle_iteration,
+    ups.current_day_index,
+    ups.enrolled_at,
+    ups.updated_at,
+    c.id AS cycle_id,
+    c.length_weeks AS cycle_length_weeks,
+    (
+        SELECT COUNT(*)
+        FROM week_days wd
+        JOIN weeks w ON wd.week_id = w.id
+        WHERE w.cycle_id = c.id AND w.week_number = ups.current_week
+    ) AS days_in_current_week
+FROM user_program_states ups
+JOIN programs p ON ups.program_id = p.id
+JOIN cycles c ON p.cycle_id = c.id
+WHERE ups.user_id = ?
+`
+
+type GetStateAdvancementContextRow struct {
+	ID                    string        `json:"id"`
+	UserID                string        `json:"user_id"`
+	ProgramID             string        `json:"program_id"`
+	CurrentWeek           int64         `json:"current_week"`
+	CurrentCycleIteration int64         `json:"current_cycle_iteration"`
+	CurrentDayIndex       sql.NullInt64 `json:"current_day_index"`
+	EnrolledAt            string        `json:"enrolled_at"`
+	UpdatedAt             string        `json:"updated_at"`
+	CycleID               string        `json:"cycle_id"`
+	CycleLengthWeeks      int64         `json:"cycle_length_weeks"`
+	DaysInCurrentWeek     int64         `json:"days_in_current_week"`
+}
+
+func (q *Queries) GetStateAdvancementContext(ctx context.Context, userID string) (GetStateAdvancementContextRow, error) {
+	row := q.db.QueryRowContext(ctx, getStateAdvancementContext, userID)
+	var i GetStateAdvancementContextRow
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.ProgramID,
+		&i.CurrentWeek,
+		&i.CurrentCycleIteration,
+		&i.CurrentDayIndex,
+		&i.EnrolledAt,
+		&i.UpdatedAt,
+		&i.CycleID,
+		&i.CycleLengthWeeks,
+		&i.DaysInCurrentWeek,
+	)
+	return i, err
+}
+
 const getUserProgramStateByID = `-- name: GetUserProgramStateByID :one
 SELECT id, user_id, program_id, current_week, current_cycle_iteration, current_day_index, enrolled_at, updated_at
 FROM user_program_states
