@@ -37,9 +37,10 @@ type Server struct {
 	programRepo          *repository.ProgramRepository
 	userProgramStateRepo *repository.UserProgramStateRepository
 	workoutRepo          *repository.WorkoutRepository
-	progressionRepo      *repository.ProgressionRepository
-	strategyFactory      *loadstrategy.StrategyFactory
-	schemeFactory        *setscheme.SchemeFactory
+	progressionRepo        *repository.ProgressionRepository
+	programProgressionRepo *repository.ProgramProgressionRepository
+	strategyFactory        *loadstrategy.StrategyFactory
+	schemeFactory          *setscheme.SchemeFactory
 }
 
 // New creates a new Server instance.
@@ -65,6 +66,7 @@ func New(cfg Config) *Server {
 	userProgramStateRepo := repository.NewUserProgramStateRepository(cfg.DB)
 	workoutRepo := repository.NewWorkoutRepository(cfg.DB, strategyFactory, schemeFactory)
 	progressionRepo := repository.NewProgressionRepository(cfg.DB)
+	programProgressionRepo := repository.NewProgramProgressionRepository(cfg.DB)
 
 	s := &Server{
 		config:               cfg,
@@ -78,10 +80,11 @@ func New(cfg Config) *Server {
 		dailyLookupRepo:      dailyLookupRepo,
 		programRepo:          programRepo,
 		userProgramStateRepo: userProgramStateRepo,
-		workoutRepo:          workoutRepo,
-		progressionRepo:      progressionRepo,
-		strategyFactory:      strategyFactory,
-		schemeFactory:        schemeFactory,
+		workoutRepo:            workoutRepo,
+		progressionRepo:        progressionRepo,
+		programProgressionRepo: programProgressionRepo,
+		strategyFactory:        strategyFactory,
+		schemeFactory:          schemeFactory,
 	}
 
 	mux := http.NewServeMux()
@@ -254,6 +257,16 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	mux.Handle("POST /progressions", withAdmin(progressionHandler.Create))
 	mux.Handle("PUT /progressions/{id}", withAdmin(progressionHandler.Update))
 	mux.Handle("DELETE /progressions/{id}", withAdmin(progressionHandler.Delete))
+
+	// Program Progression Configuration routes:
+	// - All authenticated users can read program progression configurations
+	// - Only admins can create/update/delete program progression configurations
+	programProgressionHandler := api.NewProgramProgressionHandler(s.programProgressionRepo, s.programRepo, s.progressionRepo, s.liftRepo)
+	mux.Handle("GET /programs/{programId}/progressions", withAuth(programProgressionHandler.List))
+	mux.Handle("GET /programs/{programId}/progressions/{configId}", withAuth(programProgressionHandler.Get))
+	mux.Handle("POST /programs/{programId}/progressions", withAdmin(programProgressionHandler.Create))
+	mux.Handle("PUT /programs/{programId}/progressions/{configId}", withAdmin(programProgressionHandler.Update))
+	mux.Handle("DELETE /programs/{programId}/progressions/{configId}", withAdmin(programProgressionHandler.Delete))
 
 	// User Program Enrollment routes:
 	// - Users can manage their own enrollment (enroll, view, unenroll)

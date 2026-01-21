@@ -105,6 +105,35 @@ func (q *Queries) GetProgramProgression(ctx context.Context, id string) (Program
 	return i, err
 }
 
+const getProgramProgressionByProgramProgressionLift = `-- name: GetProgramProgressionByProgramProgressionLift :one
+SELECT id, program_id, progression_id, lift_id, priority, enabled, override_increment, created_at, updated_at
+FROM program_progressions
+WHERE program_id = ? AND progression_id = ? AND COALESCE(lift_id, '00000000-0000-0000-0000-000000000000') = COALESCE(?, '00000000-0000-0000-0000-000000000000')
+`
+
+type GetProgramProgressionByProgramProgressionLiftParams struct {
+	ProgramID     string         `json:"program_id"`
+	ProgressionID string         `json:"progression_id"`
+	LiftID        sql.NullString `json:"lift_id"`
+}
+
+func (q *Queries) GetProgramProgressionByProgramProgressionLift(ctx context.Context, arg GetProgramProgressionByProgramProgressionLiftParams) (ProgramProgression, error) {
+	row := q.db.QueryRowContext(ctx, getProgramProgressionByProgramProgressionLift, arg.ProgramID, arg.ProgressionID, arg.LiftID)
+	var i ProgramProgression
+	err := row.Scan(
+		&i.ID,
+		&i.ProgramID,
+		&i.ProgressionID,
+		&i.LiftID,
+		&i.Priority,
+		&i.Enabled,
+		&i.OverrideIncrement,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const listEnabledProgramProgressionsByProgram = `-- name: ListEnabledProgramProgressionsByProgram :many
 SELECT id, program_id, progression_id, lift_id, priority, enabled, override_increment, created_at, updated_at
 FROM program_progressions
@@ -216,6 +245,77 @@ func (q *Queries) ListProgramProgressionsByProgramAndLift(ctx context.Context, a
 			&i.OverrideIncrement,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listProgramProgressionsWithDetailsByProgram = `-- name: ListProgramProgressionsWithDetailsByProgram :many
+SELECT
+    pp.id,
+    pp.program_id,
+    pp.progression_id,
+    pp.lift_id,
+    pp.priority,
+    pp.enabled,
+    pp.override_increment,
+    pp.created_at,
+    pp.updated_at,
+    p.name as progression_name,
+    p.type as progression_type,
+    p.parameters as progression_parameters
+FROM program_progressions pp
+JOIN progressions p ON pp.progression_id = p.id
+WHERE pp.program_id = ?
+ORDER BY pp.priority ASC
+`
+
+type ListProgramProgressionsWithDetailsByProgramRow struct {
+	ID                    string          `json:"id"`
+	ProgramID             string          `json:"program_id"`
+	ProgressionID         string          `json:"progression_id"`
+	LiftID                sql.NullString  `json:"lift_id"`
+	Priority              int64           `json:"priority"`
+	Enabled               int64           `json:"enabled"`
+	OverrideIncrement     sql.NullFloat64 `json:"override_increment"`
+	CreatedAt             string          `json:"created_at"`
+	UpdatedAt             string          `json:"updated_at"`
+	ProgressionName       string          `json:"progression_name"`
+	ProgressionType       string          `json:"progression_type"`
+	ProgressionParameters string          `json:"progression_parameters"`
+}
+
+func (q *Queries) ListProgramProgressionsWithDetailsByProgram(ctx context.Context, programID string) ([]ListProgramProgressionsWithDetailsByProgramRow, error) {
+	rows, err := q.db.QueryContext(ctx, listProgramProgressionsWithDetailsByProgram, programID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListProgramProgressionsWithDetailsByProgramRow{}
+	for rows.Next() {
+		var i ListProgramProgressionsWithDetailsByProgramRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProgramID,
+			&i.ProgressionID,
+			&i.LiftID,
+			&i.Priority,
+			&i.Enabled,
+			&i.OverrideIncrement,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.ProgressionName,
+			&i.ProgressionType,
+			&i.ProgressionParameters,
 		); err != nil {
 			return nil, err
 		}
