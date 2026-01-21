@@ -39,7 +39,14 @@ INSERT INTO users (id, created_at, updated_at) VALUES
     ('current-user-a', datetime('now'), datetime('now')),
     ('current-user-b', datetime('now'), datetime('now')),
     ('convert-user-a', datetime('now'), datetime('now')),
-    ('convert-user-b', datetime('now'), datetime('now'));
+    ('convert-user-b', datetime('now'), datetime('now')),
+    -- Enrollment test users
+    ('auth-test-user', datetime('now'), datetime('now')),
+    ('other-user', datetime('now'), datetime('now')),
+    ('admin-enrolled-user', datetime('now'), datetime('now')),
+    ('format-test-user', datetime('now'), datetime('now')),
+    ('non-enrolled-user', datetime('now'), datetime('now')),
+    ('non-enrolled-user-delete', datetime('now'), datetime('now'));
 -- +goose StatementEnd
 
 -- +goose Down

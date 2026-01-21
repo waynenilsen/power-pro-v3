@@ -39,6 +39,7 @@ type Querier interface {
 	CreatePrescription(ctx context.Context, arg CreatePrescriptionParams) error
 	CreateProgram(ctx context.Context, arg CreateProgramParams) error
 	CreateUser(ctx context.Context, arg CreateUserParams) error
+	CreateUserProgramState(ctx context.Context, arg CreateUserProgramStateParams) error
 	CreateWeek(ctx context.Context, arg CreateWeekParams) error
 	CreateWeekDay(ctx context.Context, arg CreateWeekDayParams) error
 	CreateWeeklyLookup(ctx context.Context, arg CreateWeeklyLookupParams) error
@@ -58,6 +59,7 @@ type Querier interface {
 	DeleteLiftMax(ctx context.Context, id string) error
 	DeletePrescription(ctx context.Context, id string) error
 	DeleteProgram(ctx context.Context, id string) error
+	DeleteUserProgramStateByUserID(ctx context.Context, userID string) error
 	DeleteWeek(ctx context.Context, id string) error
 	DeleteWeekDay(ctx context.Context, id string) error
 	DeleteWeekDayByWeekAndDay(ctx context.Context, arg DeleteWeekDayByWeekAndDayParams) error
@@ -74,6 +76,7 @@ type Querier interface {
 	// Day Prescriptions queries
 	GetDayPrescription(ctx context.Context, id string) (DayPrescription, error)
 	GetDayPrescriptionByDayAndPrescription(ctx context.Context, arg GetDayPrescriptionByDayAndPrescriptionParams) (DayPrescription, error)
+	GetEnrollmentWithProgram(ctx context.Context, userID string) (GetEnrollmentWithProgramRow, error)
 	GetLift(ctx context.Context, id string) (Lift, error)
 	GetLiftBySlug(ctx context.Context, slug string) (Lift, error)
 	GetLiftMax(ctx context.Context, id string) (LiftMax, error)
@@ -82,6 +85,8 @@ type Querier interface {
 	GetProgram(ctx context.Context, id string) (Program, error)
 	GetProgramBySlug(ctx context.Context, slug string) (Program, error)
 	GetUser(ctx context.Context, id string) (User, error)
+	GetUserProgramStateByID(ctx context.Context, id string) (UserProgramState, error)
+	GetUserProgramStateByUserID(ctx context.Context, userID string) (UserProgramState, error)
 	GetWeek(ctx context.Context, id string) (Week, error)
 	// Week Days queries
 	GetWeekDay(ctx context.Context, id string) (WeekDay, error)
@@ -167,8 +172,10 @@ type Querier interface {
 	UpdateLiftMax(ctx context.Context, arg UpdateLiftMaxParams) error
 	UpdatePrescription(ctx context.Context, arg UpdatePrescriptionParams) error
 	UpdateProgram(ctx context.Context, arg UpdateProgramParams) error
+	UpdateUserProgramState(ctx context.Context, arg UpdateUserProgramStateParams) error
 	UpdateWeek(ctx context.Context, arg UpdateWeekParams) error
 	UpdateWeeklyLookup(ctx context.Context, arg UpdateWeeklyLookupParams) error
+	UserIsEnrolled(ctx context.Context, userID string) (int64, error)
 	WeekIsUsedInActiveCycle(ctx context.Context, id string) (int64, error)
 	WeekNumberExistsInCycle(ctx context.Context, arg WeekNumberExistsInCycleParams) (int64, error)
 	WeekNumberExistsInCycleForNew(ctx context.Context, arg WeekNumberExistsInCycleForNewParams) (int64, error)

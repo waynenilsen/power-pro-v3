@@ -24,19 +24,20 @@ type Config struct {
 
 // Server represents the HTTP server.
 type Server struct {
-	config             Config
-	httpServer         *http.Server
-	liftRepo           *repository.LiftRepository
-	liftMaxRepo        *repository.LiftMaxRepository
-	prescriptionRepo   *repository.PrescriptionRepository
-	dayRepo            *repository.DayRepository
-	weekRepo           *repository.WeekRepository
-	cycleRepo          *repository.CycleRepository
-	weeklyLookupRepo   *repository.WeeklyLookupRepository
-	dailyLookupRepo    *repository.DailyLookupRepository
-	programRepo        *repository.ProgramRepository
-	strategyFactory    *loadstrategy.StrategyFactory
-	schemeFactory      *setscheme.SchemeFactory
+	config               Config
+	httpServer           *http.Server
+	liftRepo             *repository.LiftRepository
+	liftMaxRepo          *repository.LiftMaxRepository
+	prescriptionRepo     *repository.PrescriptionRepository
+	dayRepo              *repository.DayRepository
+	weekRepo             *repository.WeekRepository
+	cycleRepo            *repository.CycleRepository
+	weeklyLookupRepo     *repository.WeeklyLookupRepository
+	dailyLookupRepo      *repository.DailyLookupRepository
+	programRepo          *repository.ProgramRepository
+	userProgramStateRepo *repository.UserProgramStateRepository
+	strategyFactory      *loadstrategy.StrategyFactory
+	schemeFactory        *setscheme.SchemeFactory
 }
 
 // New creates a new Server instance.
@@ -59,20 +60,22 @@ func New(cfg Config) *Server {
 	weeklyLookupRepo := repository.NewWeeklyLookupRepository(cfg.DB)
 	dailyLookupRepo := repository.NewDailyLookupRepository(cfg.DB)
 	programRepo := repository.NewProgramRepository(cfg.DB)
+	userProgramStateRepo := repository.NewUserProgramStateRepository(cfg.DB)
 
 	s := &Server{
-		config:             cfg,
-		liftRepo:           liftRepo,
-		liftMaxRepo:        liftMaxRepo,
-		prescriptionRepo:   prescriptionRepo,
-		dayRepo:            dayRepo,
-		weekRepo:           weekRepo,
-		cycleRepo:          cycleRepo,
-		weeklyLookupRepo:   weeklyLookupRepo,
-		dailyLookupRepo:    dailyLookupRepo,
-		programRepo:        programRepo,
-		strategyFactory:    strategyFactory,
-		schemeFactory:      schemeFactory,
+		config:               cfg,
+		liftRepo:             liftRepo,
+		liftMaxRepo:          liftMaxRepo,
+		prescriptionRepo:     prescriptionRepo,
+		dayRepo:              dayRepo,
+		weekRepo:             weekRepo,
+		cycleRepo:            cycleRepo,
+		weeklyLookupRepo:     weeklyLookupRepo,
+		dailyLookupRepo:      dailyLookupRepo,
+		programRepo:          programRepo,
+		userProgramStateRepo: userProgramStateRepo,
+		strategyFactory:      strategyFactory,
+		schemeFactory:        schemeFactory,
 	}
 
 	mux := http.NewServeMux()
@@ -235,6 +238,14 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	mux.Handle("POST /programs", withAdmin(programHandler.Create))
 	mux.Handle("PUT /programs/{id}", withAdmin(programHandler.Update))
 	mux.Handle("DELETE /programs/{id}", withAdmin(programHandler.Delete))
+
+	// User Program Enrollment routes:
+	// - Users can manage their own enrollment (enroll, view, unenroll)
+	// - Admins can manage any user's enrollment
+	enrollmentHandler := api.NewEnrollmentHandler(s.userProgramStateRepo, s.programRepo)
+	mux.Handle("POST /users/{userId}/program", withAuth(enrollmentHandler.Enroll))
+	mux.Handle("GET /users/{userId}/program", withAuth(enrollmentHandler.Get))
+	mux.Handle("DELETE /users/{userId}/program", withAuth(enrollmentHandler.Unenroll))
 }
 
 // Start starts the HTTP server.
