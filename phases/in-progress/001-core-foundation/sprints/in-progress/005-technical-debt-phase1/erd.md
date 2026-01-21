@@ -172,4 +172,11 @@ No changes to external interfaces. This is internal cleanup only.
 - **Recklessness**: Prudent (addressed at scheduled interval)
 
 ### Forward Links (to Tickets)
-- To be created after ERD approval
+- 001-file-size-audit-refactor: Implements REQ-DEBT-001
+- 002-code-duplication-review: Implements REQ-DEBT-002
+- 003-error-handling-consistency: Implements REQ-DEBT-003
+- 004-unit-test-coverage-audit: Implements REQ-DEBT-004
+- 005-integration-test-review: Implements REQ-DEBT-005
+- 006-flaky-test-resolution: Implements REQ-DEBT-006
+- 007-code-comment-review: Implements REQ-DEBT-007
+- 008-api-documentation-sync: Implements REQ-DEBT-008
