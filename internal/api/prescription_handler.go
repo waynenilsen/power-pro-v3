@@ -127,10 +127,7 @@ func (h *PrescriptionHandler) List(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Filter by lift_id
-	var filterLiftID *string
-	if liftID := query.Get("lift_id"); liftID != "" {
-		filterLiftID = &liftID
-	}
+	filterLiftID := ParseFilterString(query, "lift_id")
 
 	params := repository.PrescriptionListParams{
 		Limit:        int64(pg.Limit),

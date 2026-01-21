@@ -87,21 +87,14 @@ func (h *LiftMaxHandler) List(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Filters
-	var filterLiftID *string
-	var filterType *string
+	// Filter by lift_id
+	filterLiftID := ParseFilterString(query, "lift_id")
 
-	if liftID := query.Get("lift_id"); liftID != "" {
-		filterLiftID = &liftID
-	}
-	if maxType := query.Get("type"); maxType != "" {
-		// Validate type value
-		upperType := strings.ToUpper(maxType)
-		if upperType != string(liftmax.OneRM) && upperType != string(liftmax.TrainingMax) {
-			writeDomainError(w, apperrors.NewValidation("type", "must be ONE_RM or TRAINING_MAX"))
-			return
-		}
-		filterType = &upperType
+	// Filter by type (enum validation)
+	filterType, err := ParseFilterEnum(query, "type", []string{string(liftmax.OneRM), string(liftmax.TrainingMax)})
+	if err != nil {
+		writeDomainError(w, err)
+		return
 	}
 
 	params := repository.LiftMaxListParams{

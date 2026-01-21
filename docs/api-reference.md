@@ -175,6 +175,70 @@ GET /lifts?limit=10&offset=20
 
 ---
 
+## Filtering
+
+All list endpoints support consistent filtering through query parameters. This section documents the filtering conventions used across the API.
+
+### Filter Parameter Naming
+
+Filter parameters use **snake_case** naming convention to match query parameter conventions:
+
+| Pattern | Description | Example |
+|---------|-------------|---------|
+| Simple filters | Use field names directly | `?lift_id=123&user_id=456` |
+| Boolean filters | Use "true"/"false" or "1"/"0" | `?is_competition_lift=true` |
+| Date ranges | Use `_after`/`_before` suffixes | `?start_date=2024-01-01&end_date=2024-12-31` |
+| Numeric ranges | Use `_gte`/`_lte` suffixes | `?weight_gte=100&weight_lte=200` |
+| Enum filters | Provide the enum value (case-insensitive) | `?type=TRAINING_MAX` |
+
+### Filter Behavior
+
+- **AND logic**: Multiple filters are combined with AND logic. For example, `?lift_id=123&type=TRAINING_MAX` returns only items matching both conditions.
+- **Unknown parameters**: Unknown filter parameters are silently ignored.
+- **Invalid values**: Invalid filter values return a `400 Bad Request` with a validation error.
+- **Empty values**: Empty filter values (e.g., `?lift_id=`) are treated as if the parameter was not provided.
+
+### Date Format
+
+Date filters accept ISO 8601 formats:
+- Full datetime: `2024-01-15T10:30:00Z` (RFC3339)
+- Date only: `2024-01-15` (interpreted as start of day for "after" filters, end of day for "before" filters)
+
+### Filter Examples
+
+```bash
+# Filter lifts by competition status
+GET /lifts?is_competition_lift=true
+
+# Filter lift maxes by lift and type
+GET /users/{userId}/lift-maxes?lift_id=abc123&type=TRAINING_MAX
+
+# Filter prescriptions by lift
+GET /prescriptions?lift_id=abc123
+
+# Filter days by program
+GET /days?program_id=abc123
+
+# Filter progression history by date range
+GET /users/{userId}/progression-history?start_date=2024-01-01&end_date=2024-03-31
+
+# Filter progression history by lift and type
+GET /users/{userId}/progression-history?lift_id=abc123&progression_type=LINEAR_PROGRESSION
+```
+
+### Available Filters by Endpoint
+
+| Endpoint | Available Filters |
+|----------|-------------------|
+| `GET /lifts` | `is_competition_lift` (bool) |
+| `GET /users/{userId}/lift-maxes` | `lift_id` (string), `type` (enum: ONE_RM, TRAINING_MAX) |
+| `GET /prescriptions` | `lift_id` (string) |
+| `GET /days` | `program_id` (string) |
+| `GET /users/{userId}/progression-history` | `lift_id` (string), `progression_type` (enum), `trigger_type` (enum), `start_date` (date), `end_date` (date) |
+| `GET /progressions` | `type` (enum: LINEAR, CYCLE) |
+
+---
+
 ## HTTP Status Codes
 
 | Code | Description |
@@ -1676,7 +1740,10 @@ List progression history entries for a user.
 | `limit` | int | Number of items to return (default: 20, max: 100) |
 | `offset` | int | Number of items to skip (default: 0) |
 | `lift_id` | string | Filter by lift ID |
-| `progression_id` | string | Filter by progression ID |
+| `progression_type` | string | Filter by progression type: "LINEAR_PROGRESSION" or "CYCLE_PROGRESSION" |
+| `trigger_type` | string | Filter by trigger type: "AFTER_SESSION", "AFTER_WEEK", or "AFTER_CYCLE" |
+| `start_date` | date | Filter entries on or after this date (ISO 8601) |
+| `end_date` | date | Filter entries on or before this date (ISO 8601) |
 
 **Response** `200 OK`:
 ```json
@@ -1684,16 +1751,17 @@ List progression history entries for a user.
   "data": [
     {
       "id": "history-uuid",
-      "userId": "user-uuid",
-      "liftId": "lift-uuid",
       "progressionId": "progression-uuid",
+      "progressionName": "Linear +5lb",
+      "progressionType": "LINEAR_PROGRESSION",
+      "liftId": "lift-uuid",
+      "liftName": "Squat",
       "previousValue": 315.0,
       "newValue": 320.0,
       "delta": 5.0,
-      "appliedAt": "2024-01-15T10:30:00Z",
-      "triggeredBy": "AFTER_SESSION",
-      "cycleIteration": 1,
-      "weekNumber": 1
+      "triggerType": "AFTER_SESSION",
+      "triggerContext": {},
+      "appliedAt": "2024-01-15T10:30:00Z"
     }
   ],
   "meta": {

@@ -6,6 +6,8 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"strings"
+	"time"
 
 	apperrors "github.com/waynenilsen/power-pro-v3/internal/errors"
 )
@@ -97,6 +99,144 @@ func ParsePagination(query QueryGetter) Pagination {
 // This allows ParsePagination to work with url.Values or any similar type.
 type QueryGetter interface {
 	Get(key string) string
+}
+
+// ===== Filtering Utilities =====
+//
+// All list endpoints use consistent filter parameter naming:
+//   - Simple filters: field names in snake_case (e.g., ?lift_id=123&user_id=456)
+//   - Boolean filters: use "true"/"false" or "1"/"0" (e.g., ?is_competition_lift=true)
+//   - Date ranges: use _after/_before suffixes (e.g., ?created_after=2024-01-01&created_before=2024-12-31)
+//   - Numeric ranges: use _gte/_lte suffixes (e.g., ?weight_gte=100&weight_lte=200)
+//
+// Filter behavior:
+//   - Multiple filters are combined with AND logic
+//   - Unknown filter parameters are ignored
+//   - Invalid filter values return validation errors
+
+// FilterError represents a validation error for a filter parameter.
+type FilterError struct {
+	Field   string `json:"field"`
+	Message string `json:"message"`
+}
+
+// ParseFilterString extracts a string filter value from query parameters.
+// Returns nil if the parameter is not present or empty.
+func ParseFilterString(query QueryGetter, key string) *string {
+	if v := query.Get(key); v != "" {
+		return &v
+	}
+	return nil
+}
+
+// ParseFilterBool extracts a boolean filter value from query parameters.
+// Accepts "true", "false", "1", "0" (case-insensitive).
+// Returns nil if the parameter is not present or empty.
+// Returns an error if the value is invalid.
+func ParseFilterBool(query QueryGetter, key string) (*bool, error) {
+	v := query.Get(key)
+	if v == "" {
+		return nil, nil
+	}
+	switch strings.ToLower(v) {
+	case "true", "1":
+		b := true
+		return &b, nil
+	case "false", "0":
+		b := false
+		return &b, nil
+	default:
+		return nil, apperrors.NewValidation(key, "must be true, false, 1, or 0")
+	}
+}
+
+// ParseFilterDate extracts a date filter value from query parameters.
+// Accepts ISO 8601 formats: RFC3339 (2024-01-15T10:00:00Z) or date-only (2024-01-15).
+// Returns nil if the parameter is not present or empty.
+// Returns an error if the value is invalid.
+func ParseFilterDate(query QueryGetter, key string) (*time.Time, error) {
+	v := query.Get(key)
+	if v == "" {
+		return nil, nil
+	}
+	// Try RFC3339 first
+	if t, err := time.Parse(time.RFC3339, v); err == nil {
+		return &t, nil
+	}
+	// Try date-only format
+	if t, err := time.Parse("2006-01-02", v); err == nil {
+		return &t, nil
+	}
+	return nil, apperrors.NewValidation(key, "invalid format; use ISO 8601 format (e.g., 2024-01-15 or 2024-01-15T10:00:00Z)")
+}
+
+// ParseFilterDateEndOfDay extracts a date filter value and sets time to end of day for date-only format.
+// This is useful for "before" or "until" date filters where you want to include the entire day.
+// Returns nil if the parameter is not present or empty.
+// Returns an error if the value is invalid.
+func ParseFilterDateEndOfDay(query QueryGetter, key string) (*time.Time, error) {
+	v := query.Get(key)
+	if v == "" {
+		return nil, nil
+	}
+	// Try RFC3339 first
+	if t, err := time.Parse(time.RFC3339, v); err == nil {
+		return &t, nil
+	}
+	// Try date-only format and set to end of day
+	if t, err := time.Parse("2006-01-02", v); err == nil {
+		t = t.Add(24*time.Hour - time.Second)
+		return &t, nil
+	}
+	return nil, apperrors.NewValidation(key, "invalid format; use ISO 8601 format (e.g., 2024-01-15 or 2024-01-15T10:00:00Z)")
+}
+
+// ParseFilterInt extracts an integer filter value from query parameters.
+// Returns nil if the parameter is not present or empty.
+// Returns an error if the value is invalid.
+func ParseFilterInt(query QueryGetter, key string) (*int, error) {
+	v := query.Get(key)
+	if v == "" {
+		return nil, nil
+	}
+	parsed, err := strconv.Atoi(v)
+	if err != nil {
+		return nil, apperrors.NewValidation(key, "must be a valid integer")
+	}
+	return &parsed, nil
+}
+
+// ParseFilterFloat extracts a float filter value from query parameters.
+// Returns nil if the parameter is not present or empty.
+// Returns an error if the value is invalid.
+func ParseFilterFloat(query QueryGetter, key string) (*float64, error) {
+	v := query.Get(key)
+	if v == "" {
+		return nil, nil
+	}
+	parsed, err := strconv.ParseFloat(v, 64)
+	if err != nil {
+		return nil, apperrors.NewValidation(key, "must be a valid number")
+	}
+	return &parsed, nil
+}
+
+// ParseFilterEnum extracts a string filter value and validates it against allowed values.
+// The value is normalized to uppercase before validation.
+// Returns nil if the parameter is not present or empty.
+// Returns an error if the value is not in the allowed list.
+func ParseFilterEnum(query QueryGetter, key string, allowedValues []string) (*string, error) {
+	v := query.Get(key)
+	if v == "" {
+		return nil, nil
+	}
+	normalized := strings.ToUpper(v)
+	for _, allowed := range allowedValues {
+		if normalized == allowed {
+			return &normalized, nil
+		}
+	}
+	return nil, apperrors.NewValidation(key, "invalid value; valid values: "+strings.Join(allowedValues, ", "))
 }
 
 // ===== Legacy Response Types (deprecated, use standard envelope) =====

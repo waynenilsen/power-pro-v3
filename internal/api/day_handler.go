@@ -139,10 +139,7 @@ func (h *DayHandler) List(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Filter by program_id
-	var filterProgramID *string
-	if programID := query.Get("program_id"); programID != "" {
-		filterProgramID = &programID
-	}
+	filterProgramID := ParseFilterString(query, "program_id")
 
 	params := repository.DayListParams{
 		Limit:           int64(pg.Limit),

@@ -3,7 +3,6 @@ package api
 import (
 	"encoding/json"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/waynenilsen/power-pro-v3/internal/domain/progression"
@@ -68,64 +67,48 @@ func (h *ProgressionHistoryHandler) List(w http.ResponseWriter, r *http.Request)
 		Offset: int64(pg.Offset),
 	}
 
-	// Filter by liftId
-	if liftID := query.Get("liftId"); liftID != "" {
-		filter.LiftID = &liftID
-	}
+	// Filter by lift_id
+	filter.LiftID = ParseFilterString(query, "lift_id")
 
-	// Filter by progressionType
-	if pt := query.Get("progressionType"); pt != "" {
-		// Normalize to uppercase
-		normalizedPT := strings.ToUpper(pt)
-		// Validate progression type
-		if progression.ValidProgressionTypes[progression.ProgressionType(normalizedPT)] {
-			filter.ProgressionType = &normalizedPT
-		} else {
-			writeDomainError(w, apperrors.NewValidation("progressionType", "invalid value; valid values: LINEAR_PROGRESSION, CYCLE_PROGRESSION"))
-			return
-		}
+	// Filter by progression_type (enum validation)
+	progressionTypes := make([]string, 0, len(progression.ValidProgressionTypes))
+	for pt := range progression.ValidProgressionTypes {
+		progressionTypes = append(progressionTypes, string(pt))
 	}
+	progressionType, err := ParseFilterEnum(query, "progression_type", progressionTypes)
+	if err != nil {
+		writeDomainError(w, err)
+		return
+	}
+	filter.ProgressionType = progressionType
 
-	// Filter by triggerType
-	if tt := query.Get("triggerType"); tt != "" {
-		// Normalize to uppercase
-		normalizedTT := strings.ToUpper(tt)
-		// Validate trigger type
-		if progression.ValidTriggerTypes[progression.TriggerType(normalizedTT)] {
-			filter.TriggerType = &normalizedTT
-		} else {
-			writeDomainError(w, apperrors.NewValidation("triggerType", "invalid value; valid values: AFTER_SESSION, AFTER_WEEK, AFTER_CYCLE"))
-			return
-		}
+	// Filter by trigger_type (enum validation)
+	triggerTypes := make([]string, 0, len(progression.ValidTriggerTypes))
+	for tt := range progression.ValidTriggerTypes {
+		triggerTypes = append(triggerTypes, string(tt))
 	}
+	triggerType, err := ParseFilterEnum(query, "trigger_type", triggerTypes)
+	if err != nil {
+		writeDomainError(w, err)
+		return
+	}
+	filter.TriggerType = triggerType
 
-	// Filter by startDate (ISO 8601)
-	if sd := query.Get("startDate"); sd != "" {
-		// Try parsing as RFC3339 first, then as date-only
-		if t, err := time.Parse(time.RFC3339, sd); err == nil {
-			filter.StartDate = &t
-		} else if t, err := time.Parse("2006-01-02", sd); err == nil {
-			filter.StartDate = &t
-		} else {
-			writeDomainError(w, apperrors.NewValidation("startDate", "invalid format; use ISO 8601 format (e.g., 2024-01-15 or 2024-01-15T10:00:00Z)"))
-			return
-		}
+	// Filter by start_date (ISO 8601)
+	startDate, err := ParseFilterDate(query, "start_date")
+	if err != nil {
+		writeDomainError(w, err)
+		return
 	}
+	filter.StartDate = startDate
 
-	// Filter by endDate (ISO 8601)
-	if ed := query.Get("endDate"); ed != "" {
-		// Try parsing as RFC3339 first, then as date-only
-		if t, err := time.Parse(time.RFC3339, ed); err == nil {
-			filter.EndDate = &t
-		} else if t, err := time.Parse("2006-01-02", ed); err == nil {
-			// Set to end of day for date-only format
-			t = t.Add(24*time.Hour - time.Second)
-			filter.EndDate = &t
-		} else {
-			writeDomainError(w, apperrors.NewValidation("endDate", "invalid format; use ISO 8601 format (e.g., 2024-01-15 or 2024-01-15T10:00:00Z)"))
-			return
-		}
+	// Filter by end_date (ISO 8601, end of day for date-only format)
+	endDate, err := ParseFilterDateEndOfDay(query, "end_date")
+	if err != nil {
+		writeDomainError(w, err)
+		return
 	}
+	filter.EndDate = endDate
 
 	// Fetch data
 	entries, total, err := h.repo.List(r.Context(), filter)

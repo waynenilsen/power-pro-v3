@@ -89,11 +89,11 @@ func (h *LiftHandler) List(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Filter
-	var filterCompetition *bool
-	if f := query.Get("is_competition_lift"); f != "" {
-		val := strings.ToLower(f) == "true" || f == "1"
-		filterCompetition = &val
+	// Filter by is_competition_lift
+	filterCompetition, err := ParseFilterBool(query, "is_competition_lift")
+	if err != nil {
+		writeDomainError(w, err)
+		return
 	}
 
 	params := repository.ListParams{
