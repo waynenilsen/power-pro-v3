@@ -1,0 +1,3811 @@
+openapi: 3.0.3
+info:
+  title: PowerPro API
+  description: |
+    PowerPro is a headless API for powerlifting program management.
+
+    ## Authentication
+
+    All endpoints (except `/health`) require authentication via HTTP headers:
+
+    | Header | Description |
+    |--------|-------------|
+    | `Authorization` | Bearer token format: `Bearer {userId}` |
+    | `X-User-ID` | Alternative: User ID directly (for development/testing) |
+    | `X-Admin` | Set to `"true"` for admin privileges |
+
+    ### Authentication Levels
+
+    - **Public**: No authentication required
+    - **Authenticated**: Any authenticated user
+    - **Admin**: Requires `X-Admin: true`
+    - **Owner/Admin**: User must own the resource or be admin
+  version: 1.0.0
+  contact:
+    name: PowerPro API Support
+  license:
+    name: MIT
+
+servers:
+  - url: http://localhost:{port}
+    description: Local development server
+    variables:
+      port:
+        default: "8080"
+
+tags:
+  - name: Health
+    description: Health check endpoints
+  - name: Lifts
+    description: Manage exercises (lifts) in the system
+  - name: Lift Maxes
+    description: Manage user's personal records (1RM, training max)
+  - name: Prescriptions
+    description: Manage exercise prescriptions (what to do for a single exercise slot)
+  - name: Days
+    description: Manage training days
+  - name: Weeks
+    description: Manage training weeks
+  - name: Cycles
+    description: Manage training cycles
+  - name: Weekly Lookups
+    description: Manage weekly lookup tables (varying parameters by week)
+  - name: Daily Lookups
+    description: Manage daily lookup tables (varying parameters by day)
+  - name: Programs
+    description: Manage training programs
+  - name: Progressions
+    description: Manage progression rules (how to increase weights over time)
+  - name: Program Progressions
+    description: Configure which progressions apply to which programs/lifts
+  - name: Enrollment
+    description: Manage user enrollment in programs
+  - name: State Advancement
+    description: Advance a user's program state (move to next day/week)
+  - name: Workouts
+    description: Generate workouts based on user's program and state
+  - name: Progression History
+    description: Query a user's progression history
+  - name: Manual Progression
+    description: Manually trigger a progression for a user
+
+paths:
+  /health:
+    get:
+      summary: Health check
+      description: Check API health status
+      tags:
+        - Health
+      responses:
+        "200":
+          description: API is healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+
+  /lifts:
+    get:
+      summary: List all lifts
+      description: List all lifts with pagination
+      tags:
+        - Lifts
+      security:
+        - bearerAuth: []
+        - userIdHeader: []
+      parameters:
+        - $ref: "#/components/parameters/page"
+        - $ref: "#/components/parameters/pageSize"
+        - name: sortBy
+          in: query
+          schema:
+            type: string
+            enum: [name, created_at]
+        - name: sortOrder
+          in: query
+          schema:
+            type: string
+            enum: [asc, desc]
+        - name: is_competition_lift
+          in: query
+          schema:
+            type: boolean
+          description: Filter by competition lift status
+      responses:
+        "200":
+          description: Paginated list of lifts
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginatedLifts"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    post:
+      summary: Create a lift
+      description: Create a new lift (admin only)
+      tags:
+        - Lifts
+      security:
+        - bearerAuth: []
+        - userIdHeader: []
+      parameters:
+        - $ref: "#/components/parameters/adminHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateLiftRequest"
+      responses:
+        "201":
+          description: Lift created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Lift"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /lifts/{id}:
+    get:
+      summary: Get a lift by ID
+      tags:
+        - Lifts
+      security:
+        - bearerAuth: []
+        - userIdHeader: []
+      parameters:
+        - $ref: "#/components/parameters/liftId"
+      responses:
+        "200":
+          description: Lift found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Lift"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      summary: Update a lift
+      description: Update an existing lift (admin only)
+      tags:
+        - Lifts
+      security:
+        - bearerAuth: []
+        - userIdHeader: []
+      parameters:
+        - $ref: "#/components/parameters/liftId"
+        - $ref: "#/components/parameters/adminHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateLiftRequest"
+      responses:
+        "200":
+          description: Lift updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Lift"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+    delete:
+      summary: Delete a lift
+      description: Delete a lift (admin only)
+      tags:
+        - Lifts
+      security:
+        - bearerAuth: []
+        - userIdHeader: []
+      parameters:
+        - $ref: "#/components/parameters/liftId"
+        - $ref: "#/components/parameters/adminHeader"
+      responses:
+        "204":
+          description: Lift deleted
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Lift is referenced by child lifts or other records
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /lifts/by-slug/{slug}:
+    get:
+      summary: Get a lift by slug
+      tags:
+        - Lifts
+      security:
+        - bearerAuth: []
+        - userIdHeader: []
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Lift slug
+      responses:
+        "200":
+          description: Lift found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Lift"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /users/{userId}/lift-maxes:
+    get:
+      summary: List lift maxes for a user
+      description: List all lift maxes for a user (owner/admin only)
+      tags:
+        - Lift Maxes
+      security:
+        - bearerAuth: []
+        - userIdHeader: []
+      parameters:
+        - $ref: "#/components/parameters/userId"
+        - $ref: "#/components/parameters/page"
+        - $ref: "#/components/parameters/pageSize"
+        - name: sortOrder
+          in: query
+          schema:
+            type: string
+            enum: [asc, desc]
+          description: Sort order (default desc by effective_date)
+        - name: lift_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+          description: Filter by lift ID
+        - name: type
+          in: query
+          schema:
+            type: string
+            enum: [ONE_RM, TRAINING_MAX]
+          description: Filter by max type
+      responses:
+        "200":
+          description: Paginated list of lift maxes
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginatedLiftMaxes"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      summary: Create a lift max
+      description: Create a new lift max for a user (owner/admin only)
+      tags:
+        - Lift Maxes
+      security:
+        - bearerAuth: []
+        - userIdHeader: []
+      parameters:
+        - $ref: "#/components/parameters/userId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateLiftMaxRequest"
+      responses:
+        "201":
+          description: Lift max created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LiftMaxWithWarnings"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /users/{userId}/lift-maxes/current:
+    get:
+      summary: Get current lift max
+      description: Get the most recent lift max for a user, lift, and type (owner/admin only)
+      tags:
+        - Lift Maxes
+      security:
+        - bearerAuth: []
+        - userIdHeader: []
+      parameters:
+        - $ref: "#/components/parameters/userId"
+        - name: lift
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Lift ID
+        - name: type
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [ONE_RM, TRAINING_MAX]
+          description: Max type
+      responses:
+        "200":
+          description: Current lift max
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LiftMax"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /lift-maxes/{id}:
+    get:
+      summary: Get a lift max by ID
+      tags:
+        - Lift Maxes
+      security:
+        - bearerAuth: []
+        - userIdHeader: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Lift max ID
+      responses:
+        "200":
+          description: Lift max found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LiftMax"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      summary: Update a lift max
+      tags:
+        - Lift Maxes
+      security:
+        - bearerAuth: []
+        - userIdHeader: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Lift max ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateLiftMaxRequest"
+      responses:
+        "200":
+          description: Lift max updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LiftMaxWithWarnings"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      summary: Delete a lift max
+      tags:
+        - Lift Maxes
+      security:
+        - bearerAuth: []
+        - userIdHeader: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Lift max ID
+      responses:
+        "204":
+          description: Lift max deleted
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /lift-maxes/{id}/convert:
+    get:
+      summary: Convert a lift max
+      description: Convert a lift max between 1RM and Training Max
+      tags:
+        - Lift Maxes
+      security:
+        - bearerAuth: []
+        - userIdHeader: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Lift max ID
+        - name: to_type
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [ONE_RM, TRAINING_MAX]
+          description: Target type
+        - name: percentage
+          in: query
+          schema:
+            type: number
+            default: 90
+          description: Conversion percentage
+      responses:
+        "200":
+          description: Conversion result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConversionResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /prescriptions:
+    get:
+      summary: List all prescriptions
+      tags:
+        - Prescriptions
+      security:
+        - bearerAuth: []
+        - userIdHeader: []
+      parameters:
+        - $ref: "#/components/parameters/page"
+        - $ref: "#/components/parameters/pageSize"
+        - name: sortBy
+          in: query
+          schema:
+            type: string
+            enum: [order, created_at]
+        - name: sortOrder
+          in: query
+          schema:
+            type: string
+            enum: [asc, desc]
+        - name: lift_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+          description: Filter by lift ID
+      responses:
+        "200":
+          description: Paginated list of prescriptions
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginatedPrescriptions"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    post:
+      summary: Create a prescription
+      description: Create a new prescription (admin only)
+      tags:
+        - Prescriptions
+      security:
+        - bearerAuth: []
+        - userIdHeader: []
+      parameters:
+        - $ref: "#/components/parameters/adminHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreatePrescriptionRequest"
+      responses:
+        "201":
+          description: Prescription created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Prescription"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /prescriptions/{id}:
+    get:
+      summary: Get a prescription by ID
+      tags:
+        - Prescriptions
+      security:
+        - bearerAuth: []
+        - userIdHeader: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Prescription ID
+      responses:
+        "200":
+          description: Prescription found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Prescription"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      summary: Update a prescription
+      description: Update a prescription (admin only)
+      tags:
+        - Prescriptions
+      security:
+        - bearerAuth: []
+        - userIdHeader: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Prescription ID
+        - $ref: "#/components/parameters/adminHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdatePrescriptionRequest"
+      responses:
+        "200":
+          description: Prescription updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Prescription"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      summary: Delete a prescription
+      description: Delete a prescription (admin only)
+      tags:
+        - Prescriptions
+      security:
+        - bearerAuth: []
+        - userIdHeader: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Prescription ID
+        - $ref: "#/components/parameters/adminHeader"
+      responses:
+        "204":
+          description: Prescription deleted
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /prescriptions/{id}/resolve:
+    post:
+      summary: Resolve a prescription
+      description: Resolve a prescription to concrete sets/reps/weights for a user
+      tags:
+        - Prescriptions
+      security:
+        - bearerAuth: []
+        - userIdHeader: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Prescription ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ResolvePrescriptionRequest"
+      responses:
+        "200":
+          description: Resolved prescription
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResolvedPrescription"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          description: Missing lift max for the user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /prescriptions/resolve-batch:
+    post:
+      summary: Resolve multiple prescriptions
+      description: Resolve multiple prescriptions at once
+      tags:
+        - Prescriptions
+      security:
+        - bearerAuth: []
+        - userIdHeader: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ResolveBatchRequest"
+      responses:
+        "200":
+          description: Batch resolution results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResolveBatchResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /days:
+    get:
+      summary: List all days
+      tags:
+        - Days
+      security:
+        - bearerAuth: []
+        - userIdHeader: []
+      parameters:
+        - $ref: "#/components/parameters/page"
+        - $ref: "#/components/parameters/pageSize"
+        - name: sortBy
+          in: query
+          schema:
+            type: string
+            enum: [name, created_at]
+        - name: sortOrder
+          in: query
+          schema:
+            type: string
+            enum: [asc, desc]
+        - name: program_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+          description: Filter by program ID
+      responses:
+        "200":
+          description: Paginated list of days
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginatedDays"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    post:
+      summary: Create a day
+      description: Create a new day (admin only)
+      tags:
+        - Days
+      security:
+        - bearerAuth: []
+        - userIdHeader: []
+      parameters:
+        - $ref: "#/components/parameters/adminHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateDayRequest"
+      responses:
+        "201":
+          description: Day created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Day"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /days/{id}:
+    get:
+      summary: Get a day by ID
+      description: Get a day by ID with its prescriptions
+      tags:
+        - Days
+      security:
+        - bearerAuth: []
+        - userIdHeader: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Day ID
+      responses:
+        "200":
+          description: Day found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DayWithPrescriptions"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      summary: Update a day
+      description: Update a day (admin only)
+      tags:
+        - Days
+      security:
+        - bearerAuth: []
+        - userIdHeader: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Day ID
+        - $ref: "#/components/parameters/adminHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateDayRequest"
+      responses:
+        "200":
+          description: Day updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Day"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      summary: Delete a day
+      description: Delete a day (admin only)
+      tags:
+        - Days
+      security:
+        - bearerAuth: []
+        - userIdHeader: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Day ID
+        - $ref: "#/components/parameters/adminHeader"
+      responses:
+        "204":
+          description: Day deleted
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Day is used in one or more weeks
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /days/by-slug/{slug}:
+    get:
+      summary: Get a day by slug
+      tags:
+        - Days
+      security:
+        - bearerAuth: []
+        - userIdHeader: []
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Day slug
+        - name: program_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+          description: Optional program ID to scope the search
+      responses:
+        "200":
+          description: Day found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DayWithPrescriptions"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /days/{id}/prescriptions:
+    post:
+      summary: Add prescription to day
+      description: Add a prescription to a day (admin only)
+      tags:
+        - Days
+      security:
+        - bearerAuth: []
+        - userIdHeader: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Day ID
+        - $ref: "#/components/parameters/adminHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AddPrescriptionToDayRequest"
+      responses:
+        "201":
+          description: Prescription added to day
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DayWithPrescriptions"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /days/{id}/prescriptions/{prescriptionId}:
+    delete:
+      summary: Remove prescription from day
+      description: Remove a prescription from a day (admin only)
+      tags:
+        - Days
+      security:
+        - bearerAuth: []
+        - userIdHeader: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Day ID
+        - name: prescriptionId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Prescription ID
+        - $ref: "#/components/parameters/adminHeader"
+      responses:
+        "204":
+          description: Prescription removed from day
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /days/{id}/prescriptions/reorder:
+    put:
+      summary: Reorder prescriptions in day
+      description: Reorder prescriptions within a day (admin only)
+      tags:
+        - Days
+      security:
+        - bearerAuth: []
+        - userIdHeader: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Day ID
+        - $ref: "#/components/parameters/adminHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReorderPrescriptionsRequest"
+      responses:
+        "200":
+          description: Prescriptions reordered
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DayWithPrescriptions"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /weeks:
+    get:
+      summary: List all weeks
+      tags:
+        - Weeks
+      security:
+        - bearerAuth: []
+        - userIdHeader: []
+      parameters:
+        - $ref: "#/components/parameters/page"
+        - $ref: "#/components/parameters/pageSize"
+        - name: sortBy
+          in: query
+          schema:
+            type: string
+            enum: [week_number, created_at]
+        - name: sortOrder
+          in: query
+          schema:
+            type: string
+            enum: [asc, desc]
+      responses:
+        "200":
+          description: Paginated list of weeks
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginatedWeeks"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    post:
+      summary: Create a week
+      description: Create a new week (admin only)
+      tags:
+        - Weeks
+      security:
+        - bearerAuth: []
+        - userIdHeader: []
+      parameters:
+        - $ref: "#/components/parameters/adminHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateWeekRequest"
+      responses:
+        "201":
+          description: Week created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Week"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /weeks/{id}:
+    get:
+      summary: Get a week by ID
+      tags:
+        - Weeks
+      security:
+        - bearerAuth: []
+        - userIdHeader: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Week ID
+      responses:
+        "200":
+          description: Week found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WeekWithDays"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      summary: Update a week
+      description: Update a week (admin only)
+      tags:
+        - Weeks
+      security:
+        - bearerAuth: []
+        - userIdHeader: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Week ID
+        - $ref: "#/components/parameters/adminHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateWeekRequest"
+      responses:
+        "200":
+          description: Week updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Week"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      summary: Delete a week
+      description: Delete a week (admin only)
+      tags:
+        - Weeks
+      security:
+        - bearerAuth: []
+        - userIdHeader: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Week ID
+        - $ref: "#/components/parameters/adminHeader"
+      responses:
+        "204":
+          description: Week deleted
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /weeks/{id}/days:
+    post:
+      summary: Add day to week
+      description: Add a day to a week (admin only)
+      tags:
+        - Weeks
+      security:
+        - bearerAuth: []
+        - userIdHeader: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Week ID
+        - $ref: "#/components/parameters/adminHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AddDayToWeekRequest"
+      responses:
+        "201":
+          description: Day added to week
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WeekWithDays"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /weeks/{id}/days/{dayId}:
+    delete:
+      summary: Remove day from week
+      description: Remove a day from a week (admin only)
+      tags:
+        - Weeks
+      security:
+        - bearerAuth: []
+        - userIdHeader: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Week ID
+        - name: dayId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Day ID
+        - $ref: "#/components/parameters/adminHeader"
+      responses:
+        "204":
+          description: Day removed from week
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /cycles:
+    get:
+      summary: List all cycles
+      tags:
+        - Cycles
+      security:
+        - bearerAuth: []
+        - userIdHeader: []
+      parameters:
+        - $ref: "#/components/parameters/page"
+        - $ref: "#/components/parameters/pageSize"
+      responses:
+        "200":
+          description: Paginated list of cycles
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginatedCycles"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    post:
+      summary: Create a cycle
+      description: Create a new cycle (admin only)
+      tags:
+        - Cycles
+      security:
+        - bearerAuth: []
+        - userIdHeader: []
+      parameters:
+        - $ref: "#/components/parameters/adminHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateCycleRequest"
+      responses:
+        "201":
+          description: Cycle created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Cycle"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /cycles/{id}:
+    get:
+      summary: Get a cycle by ID
+      tags:
+        - Cycles
+      security:
+        - bearerAuth: []
+        - userIdHeader: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Cycle ID
+      responses:
+        "200":
+          description: Cycle found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Cycle"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      summary: Update a cycle
+      description: Update a cycle (admin only)
+      tags:
+        - Cycles
+      security:
+        - bearerAuth: []
+        - userIdHeader: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Cycle ID
+        - $ref: "#/components/parameters/adminHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateCycleRequest"
+      responses:
+        "200":
+          description: Cycle updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Cycle"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      summary: Delete a cycle
+      description: Delete a cycle (admin only)
+      tags:
+        - Cycles
+      security:
+        - bearerAuth: []
+        - userIdHeader: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Cycle ID
+        - $ref: "#/components/parameters/adminHeader"
+      responses:
+        "204":
+          description: Cycle deleted
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /weekly-lookups:
+    get:
+      summary: List all weekly lookups
+      tags:
+        - Weekly Lookups
+      security:
+        - bearerAuth: []
+        - userIdHeader: []
+      parameters:
+        - $ref: "#/components/parameters/page"
+        - $ref: "#/components/parameters/pageSize"
+      responses:
+        "200":
+          description: Paginated list of weekly lookups
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginatedWeeklyLookups"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    post:
+      summary: Create a weekly lookup
+      description: Create a new weekly lookup (admin only)
+      tags:
+        - Weekly Lookups
+      security:
+        - bearerAuth: []
+        - userIdHeader: []
+      parameters:
+        - $ref: "#/components/parameters/adminHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateWeeklyLookupRequest"
+      responses:
+        "201":
+          description: Weekly lookup created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WeeklyLookup"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /weekly-lookups/{id}:
+    get:
+      summary: Get a weekly lookup by ID
+      tags:
+        - Weekly Lookups
+      security:
+        - bearerAuth: []
+        - userIdHeader: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Weekly lookup ID
+      responses:
+        "200":
+          description: Weekly lookup found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WeeklyLookup"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      summary: Update a weekly lookup
+      description: Update a weekly lookup (admin only)
+      tags:
+        - Weekly Lookups
+      security:
+        - bearerAuth: []
+        - userIdHeader: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Weekly lookup ID
+        - $ref: "#/components/parameters/adminHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateWeeklyLookupRequest"
+      responses:
+        "200":
+          description: Weekly lookup updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WeeklyLookup"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      summary: Delete a weekly lookup
+      description: Delete a weekly lookup (admin only)
+      tags:
+        - Weekly Lookups
+      security:
+        - bearerAuth: []
+        - userIdHeader: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Weekly lookup ID
+        - $ref: "#/components/parameters/adminHeader"
+      responses:
+        "204":
+          description: Weekly lookup deleted
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /daily-lookups:
+    get:
+      summary: List all daily lookups
+      tags:
+        - Daily Lookups
+      security:
+        - bearerAuth: []
+        - userIdHeader: []
+      parameters:
+        - $ref: "#/components/parameters/page"
+        - $ref: "#/components/parameters/pageSize"
+      responses:
+        "200":
+          description: Paginated list of daily lookups
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginatedDailyLookups"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    post:
+      summary: Create a daily lookup
+      description: Create a new daily lookup (admin only)
+      tags:
+        - Daily Lookups
+      security:
+        - bearerAuth: []
+        - userIdHeader: []
+      parameters:
+        - $ref: "#/components/parameters/adminHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateDailyLookupRequest"
+      responses:
+        "201":
+          description: Daily lookup created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DailyLookup"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /daily-lookups/{id}:
+    get:
+      summary: Get a daily lookup by ID
+      tags:
+        - Daily Lookups
+      security:
+        - bearerAuth: []
+        - userIdHeader: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Daily lookup ID
+      responses:
+        "200":
+          description: Daily lookup found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DailyLookup"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      summary: Update a daily lookup
+      description: Update a daily lookup (admin only)
+      tags:
+        - Daily Lookups
+      security:
+        - bearerAuth: []
+        - userIdHeader: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Daily lookup ID
+        - $ref: "#/components/parameters/adminHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateDailyLookupRequest"
+      responses:
+        "200":
+          description: Daily lookup updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DailyLookup"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      summary: Delete a daily lookup
+      description: Delete a daily lookup (admin only)
+      tags:
+        - Daily Lookups
+      security:
+        - bearerAuth: []
+        - userIdHeader: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Daily lookup ID
+        - $ref: "#/components/parameters/adminHeader"
+      responses:
+        "204":
+          description: Daily lookup deleted
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /programs:
+    get:
+      summary: List all programs
+      tags:
+        - Programs
+      security:
+        - bearerAuth: []
+        - userIdHeader: []
+      parameters:
+        - $ref: "#/components/parameters/page"
+        - $ref: "#/components/parameters/pageSize"
+        - name: sortBy
+          in: query
+          schema:
+            type: string
+            enum: [name, created_at]
+        - name: sortOrder
+          in: query
+          schema:
+            type: string
+            enum: [asc, desc]
+      responses:
+        "200":
+          description: Paginated list of programs
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginatedPrograms"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    post:
+      summary: Create a program
+      description: Create a new program (admin only)
+      tags:
+        - Programs
+      security:
+        - bearerAuth: []
+        - userIdHeader: []
+      parameters:
+        - $ref: "#/components/parameters/adminHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateProgramRequest"
+      responses:
+        "201":
+          description: Program created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProgramListItem"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /programs/{id}:
+    get:
+      summary: Get a program by ID
+      description: Get a program by ID with embedded cycle details
+      tags:
+        - Programs
+      security:
+        - bearerAuth: []
+        - userIdHeader: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Program ID
+      responses:
+        "200":
+          description: Program found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProgramDetail"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      summary: Update a program
+      description: Update a program (admin only)
+      tags:
+        - Programs
+      security:
+        - bearerAuth: []
+        - userIdHeader: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Program ID
+        - $ref: "#/components/parameters/adminHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateProgramRequest"
+      responses:
+        "200":
+          description: Program updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProgramListItem"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      summary: Delete a program
+      description: Delete a program (admin only)
+      tags:
+        - Programs
+      security:
+        - bearerAuth: []
+        - userIdHeader: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Program ID
+        - $ref: "#/components/parameters/adminHeader"
+      responses:
+        "204":
+          description: Program deleted
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Users are enrolled in this program
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /progressions:
+    get:
+      summary: List all progressions
+      tags:
+        - Progressions
+      security:
+        - bearerAuth: []
+        - userIdHeader: []
+      parameters:
+        - $ref: "#/components/parameters/page"
+        - $ref: "#/components/parameters/pageSize"
+        - name: type
+          in: query
+          schema:
+            type: string
+            enum: [LINEAR, CYCLE]
+          description: Filter by progression type
+      responses:
+        "200":
+          description: Paginated list of progressions
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginatedProgressions"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    post:
+      summary: Create a progression
+      description: Create a new progression (admin only)
+      tags:
+        - Progressions
+      security:
+        - bearerAuth: []
+        - userIdHeader: []
+      parameters:
+        - $ref: "#/components/parameters/adminHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateProgressionRequest"
+      responses:
+        "201":
+          description: Progression created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Progression"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /progressions/{id}:
+    get:
+      summary: Get a progression by ID
+      tags:
+        - Progressions
+      security:
+        - bearerAuth: []
+        - userIdHeader: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Progression ID
+      responses:
+        "200":
+          description: Progression found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Progression"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      summary: Update a progression
+      description: Update a progression (admin only)
+      tags:
+        - Progressions
+      security:
+        - bearerAuth: []
+        - userIdHeader: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Progression ID
+        - $ref: "#/components/parameters/adminHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateProgressionRequest"
+      responses:
+        "200":
+          description: Progression updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Progression"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      summary: Delete a progression
+      description: Delete a progression (admin only)
+      tags:
+        - Progressions
+      security:
+        - bearerAuth: []
+        - userIdHeader: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Progression ID
+        - $ref: "#/components/parameters/adminHeader"
+      responses:
+        "204":
+          description: Progression deleted
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Progression is referenced by program progressions
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /programs/{programId}/progressions:
+    get:
+      summary: List progression configurations for a program
+      tags:
+        - Program Progressions
+      security:
+        - bearerAuth: []
+        - userIdHeader: []
+      parameters:
+        - name: programId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Program ID
+      responses:
+        "200":
+          description: List of program progression configurations
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ProgramProgression"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      summary: Create a progression configuration
+      description: Create a new progression configuration for a program (admin only)
+      tags:
+        - Program Progressions
+      security:
+        - bearerAuth: []
+        - userIdHeader: []
+      parameters:
+        - name: programId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Program ID
+        - $ref: "#/components/parameters/adminHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateProgramProgressionRequest"
+      responses:
+        "201":
+          description: Program progression created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProgramProgression"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /programs/{programId}/progressions/{configId}:
+    get:
+      summary: Get a progression configuration
+      tags:
+        - Program Progressions
+      security:
+        - bearerAuth: []
+        - userIdHeader: []
+      parameters:
+        - name: programId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Program ID
+        - name: configId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Configuration ID
+      responses:
+        "200":
+          description: Program progression found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProgramProgression"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      summary: Update a progression configuration
+      description: Update a progression configuration (admin only)
+      tags:
+        - Program Progressions
+      security:
+        - bearerAuth: []
+        - userIdHeader: []
+      parameters:
+        - name: programId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Program ID
+        - name: configId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Configuration ID
+        - $ref: "#/components/parameters/adminHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateProgramProgressionRequest"
+      responses:
+        "200":
+          description: Program progression updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProgramProgression"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      summary: Delete a progression configuration
+      description: Delete a progression configuration (admin only)
+      tags:
+        - Program Progressions
+      security:
+        - bearerAuth: []
+        - userIdHeader: []
+      parameters:
+        - name: programId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Program ID
+        - name: configId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Configuration ID
+        - $ref: "#/components/parameters/adminHeader"
+      responses:
+        "204":
+          description: Program progression deleted
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /users/{userId}/program:
+    get:
+      summary: Get user's current program enrollment
+      description: Get a user's current program enrollment (owner/admin only)
+      tags:
+        - Enrollment
+      security:
+        - bearerAuth: []
+        - userIdHeader: []
+      parameters:
+        - $ref: "#/components/parameters/userId"
+      responses:
+        "200":
+          description: User enrollment found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Enrollment"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: User is not enrolled in any program
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    post:
+      summary: Enroll user in program
+      description: Enroll a user in a program (owner/admin only). If already enrolled, replaces the existing enrollment.
+      tags:
+        - Enrollment
+      security:
+        - bearerAuth: []
+        - userIdHeader: []
+      parameters:
+        - $ref: "#/components/parameters/userId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EnrollRequest"
+      responses:
+        "201":
+          description: User enrolled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Enrollment"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      summary: Unenroll user from program
+      description: Unenroll a user from their current program (owner/admin only)
+      tags:
+        - Enrollment
+      security:
+        - bearerAuth: []
+        - userIdHeader: []
+      parameters:
+        - $ref: "#/components/parameters/userId"
+      responses:
+        "204":
+          description: User unenrolled
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /users/{userId}/program-state/advance:
+    post:
+      summary: Advance user's program state
+      description: Advance the user's program state (owner/admin only)
+      tags:
+        - State Advancement
+      security:
+        - bearerAuth: []
+        - userIdHeader: []
+      parameters:
+        - $ref: "#/components/parameters/userId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdvanceStateRequest"
+      responses:
+        "200":
+          description: State advanced
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Enrollment"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /users/{userId}/workout:
+    get:
+      summary: Generate current workout
+      description: Generate the current workout for a user (owner/admin only)
+      tags:
+        - Workouts
+      security:
+        - bearerAuth: []
+        - userIdHeader: []
+      parameters:
+        - $ref: "#/components/parameters/userId"
+        - name: date
+          in: query
+          schema:
+            type: string
+            format: date
+          description: Override workout date (YYYY-MM-DD)
+        - name: weekNumber
+          in: query
+          schema:
+            type: integer
+          description: Override week number
+        - name: daySlug
+          in: query
+          schema:
+            type: string
+          description: Override day slug
+      responses:
+        "200":
+          description: Generated workout
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Workout"
+        "400":
+          description: Missing lift max (set up training maxes first)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: User not enrolled in a program
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /users/{userId}/workout/preview:
+    get:
+      summary: Preview a workout
+      description: Preview a workout for a specific week/day without state advancement (owner/admin only)
+      tags:
+        - Workouts
+      security:
+        - bearerAuth: []
+        - userIdHeader: []
+      parameters:
+        - $ref: "#/components/parameters/userId"
+        - name: week
+          in: query
+          required: true
+          schema:
+            type: integer
+          description: Week number to preview
+        - name: day
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Day slug to preview
+      responses:
+        "200":
+          description: Preview workout
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Workout"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /users/{userId}/progression-history:
+    get:
+      summary: List progression history
+      description: List progression history entries for a user (owner/admin only)
+      tags:
+        - Progression History
+      security:
+        - bearerAuth: []
+        - userIdHeader: []
+      parameters:
+        - $ref: "#/components/parameters/userId"
+        - $ref: "#/components/parameters/page"
+        - $ref: "#/components/parameters/pageSize"
+        - name: lift_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+          description: Filter by lift ID
+        - name: progression_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+          description: Filter by progression ID
+      responses:
+        "200":
+          description: Paginated progression history
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginatedProgressionHistory"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /users/{userId}/progressions/trigger:
+    post:
+      summary: Manually trigger progression
+      description: Manually apply a progression for a user (owner/admin only)
+      tags:
+        - Manual Progression
+      security:
+        - bearerAuth: []
+        - userIdHeader: []
+      parameters:
+        - $ref: "#/components/parameters/userId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ManualTriggerRequest"
+      responses:
+        "200":
+          description: Progression triggered
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ManualTriggerResponse"
+        "400":
+          description: User not enrolled / no applicable progressions
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: Progression or lift not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: Bearer token format - Bearer {userId}
+    userIdHeader:
+      type: apiKey
+      in: header
+      name: X-User-ID
+      description: User ID directly (for development/testing)
+
+  parameters:
+    page:
+      name: page
+      in: query
+      schema:
+        type: integer
+        default: 1
+        minimum: 1
+      description: Page number (1-indexed)
+    pageSize:
+      name: pageSize
+      in: query
+      schema:
+        type: integer
+        default: 20
+        maximum: 100
+      description: Items per page (max 100)
+    liftId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: Lift ID
+    userId:
+      name: userId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: User ID
+    adminHeader:
+      name: X-Admin
+      in: header
+      schema:
+        type: string
+        enum: ["true"]
+      description: Set to "true" for admin privileges
+
+  responses:
+    BadRequest:
+      description: Bad request (validation error, malformed request)
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Unauthorized:
+      description: Unauthorized (missing authentication)
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Forbidden:
+      description: Forbidden (insufficient permissions)
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    NotFound:
+      description: Not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Conflict:
+      description: Conflict (duplicate slug, FK constraint)
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+
+  schemas:
+    ErrorResponse:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: string
+          description: Error message
+        details:
+          type: array
+          items:
+            type: string
+          description: Additional error details
+
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          example: ok
+
+    PaginationMeta:
+      type: object
+      properties:
+        page:
+          type: integer
+          example: 1
+        pageSize:
+          type: integer
+          example: 20
+        totalItems:
+          type: integer
+          format: int64
+          example: 100
+        totalPages:
+          type: integer
+          format: int64
+          example: 5
+
+    Lift:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          example: Squat
+        slug:
+          type: string
+          example: squat
+        isCompetitionLift:
+          type: boolean
+        parentLiftId:
+          type: string
+          format: uuid
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    CreateLiftRequest:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+          description: Lift name
+        slug:
+          type: string
+          description: URL-friendly identifier (auto-generated from name if omitted)
+        isCompetitionLift:
+          type: boolean
+          description: Whether this is a competition lift
+        parentLiftId:
+          type: string
+          format: uuid
+          description: Parent lift ID for variations
+
+    UpdateLiftRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        slug:
+          type: string
+        isCompetitionLift:
+          type: boolean
+        parentLiftId:
+          type: string
+          format: uuid
+        clearParentLift:
+          type: boolean
+          description: Set to true to remove parent lift
+
+    PaginatedLifts:
+      allOf:
+        - $ref: "#/components/schemas/PaginationMeta"
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: "#/components/schemas/Lift"
+
+    LiftMax:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        liftId:
+          type: string
+          format: uuid
+        type:
+          type: string
+          enum: [ONE_RM, TRAINING_MAX]
+        value:
+          type: number
+          format: float
+          example: 315.0
+        effectiveDate:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    LiftMaxWithWarnings:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/LiftMax"
+        warnings:
+          type: array
+          items:
+            type: string
+
+    CreateLiftMaxRequest:
+      type: object
+      required:
+        - liftId
+        - type
+        - value
+      properties:
+        liftId:
+          type: string
+          format: uuid
+        type:
+          type: string
+          enum: [ONE_RM, TRAINING_MAX]
+        value:
+          type: number
+          format: float
+          description: Weight value (must be positive)
+        effectiveDate:
+          type: string
+          format: date-time
+          description: Date when this max became effective
+
+    UpdateLiftMaxRequest:
+      type: object
+      properties:
+        value:
+          type: number
+          format: float
+        effectiveDate:
+          type: string
+          format: date-time
+
+    ConversionResult:
+      type: object
+      properties:
+        originalValue:
+          type: number
+          format: float
+        originalType:
+          type: string
+          enum: [ONE_RM, TRAINING_MAX]
+        convertedValue:
+          type: number
+          format: float
+        convertedType:
+          type: string
+          enum: [ONE_RM, TRAINING_MAX]
+        percentage:
+          type: number
+          format: float
+
+    PaginatedLiftMaxes:
+      allOf:
+        - $ref: "#/components/schemas/PaginationMeta"
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: "#/components/schemas/LiftMax"
+
+    LoadStrategy:
+      type: object
+      description: |
+        Load calculation strategy. Currently supports PERCENT_OF type.
+      properties:
+        type:
+          type: string
+          enum: [PERCENT_OF]
+        maxType:
+          type: string
+          enum: [ONE_RM, TRAINING_MAX]
+        percentage:
+          type: number
+          format: float
+          example: 85.0
+        lookupKey:
+          type: string
+          description: Optional lookup key for dynamic percentages
+        roundTo:
+          type: number
+          format: float
+          description: Optional rounding (e.g., 5.0 for 5lb plates)
+
+    SetScheme:
+      type: object
+      description: |
+        Set scheme for generating sets. Supports FIXED and RAMP types.
+      oneOf:
+        - $ref: "#/components/schemas/FixedSetScheme"
+        - $ref: "#/components/schemas/RampSetScheme"
+
+    FixedSetScheme:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [FIXED]
+        sets:
+          type: integer
+          example: 5
+        reps:
+          type: integer
+          example: 5
+        isAmrap:
+          type: boolean
+          default: false
+
+    RampSetScheme:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [RAMP]
+        sets:
+          type: array
+          items:
+            type: object
+            properties:
+              percentage:
+                type: number
+              reps:
+                type: integer
+
+    Prescription:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        liftId:
+          type: string
+          format: uuid
+        loadStrategy:
+          $ref: "#/components/schemas/LoadStrategy"
+        setScheme:
+          $ref: "#/components/schemas/SetScheme"
+        order:
+          type: integer
+        notes:
+          type: string
+        restSeconds:
+          type: integer
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    CreatePrescriptionRequest:
+      type: object
+      required:
+        - liftId
+        - loadStrategy
+        - setScheme
+      properties:
+        liftId:
+          type: string
+          format: uuid
+        loadStrategy:
+          $ref: "#/components/schemas/LoadStrategy"
+        setScheme:
+          $ref: "#/components/schemas/SetScheme"
+        order:
+          type: integer
+          default: 0
+        notes:
+          type: string
+        restSeconds:
+          type: integer
+
+    UpdatePrescriptionRequest:
+      type: object
+      properties:
+        liftId:
+          type: string
+          format: uuid
+        loadStrategy:
+          $ref: "#/components/schemas/LoadStrategy"
+        setScheme:
+          $ref: "#/components/schemas/SetScheme"
+        order:
+          type: integer
+        notes:
+          type: string
+        restSeconds:
+          type: integer
+        clearRestSeconds:
+          type: boolean
+
+    ResolvePrescriptionRequest:
+      type: object
+      required:
+        - userId
+      properties:
+        userId:
+          type: string
+          format: uuid
+
+    ResolvedPrescription:
+      type: object
+      properties:
+        prescriptionId:
+          type: string
+          format: uuid
+        lift:
+          type: object
+          properties:
+            id:
+              type: string
+              format: uuid
+            name:
+              type: string
+            slug:
+              type: string
+        sets:
+          type: array
+          items:
+            $ref: "#/components/schemas/GeneratedSet"
+        notes:
+          type: string
+        restSeconds:
+          type: integer
+
+    GeneratedSet:
+      type: object
+      properties:
+        setNumber:
+          type: integer
+        weight:
+          type: number
+          format: float
+        targetReps:
+          type: integer
+        isWorkSet:
+          type: boolean
+
+    ResolveBatchRequest:
+      type: object
+      required:
+        - prescriptionIds
+        - userId
+      properties:
+        prescriptionIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+        userId:
+          type: string
+          format: uuid
+
+    ResolveBatchResponse:
+      type: object
+      properties:
+        results:
+          type: array
+          items:
+            type: object
+            properties:
+              prescriptionId:
+                type: string
+                format: uuid
+              status:
+                type: string
+                enum: [success, error]
+              resolved:
+                $ref: "#/components/schemas/ResolvedPrescription"
+              error:
+                type: string
+
+    PaginatedPrescriptions:
+      allOf:
+        - $ref: "#/components/schemas/PaginationMeta"
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: "#/components/schemas/Prescription"
+
+    Day:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        slug:
+          type: string
+        metadata:
+          type: object
+          additionalProperties: true
+        programId:
+          type: string
+          format: uuid
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    DayWithPrescriptions:
+      allOf:
+        - $ref: "#/components/schemas/Day"
+        - type: object
+          properties:
+            prescriptions:
+              type: array
+              items:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    format: uuid
+                  prescriptionId:
+                    type: string
+                    format: uuid
+                  order:
+                    type: integer
+                  createdAt:
+                    type: string
+                    format: date-time
+
+    CreateDayRequest:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+        slug:
+          type: string
+        metadata:
+          type: object
+        programId:
+          type: string
+          format: uuid
+
+    UpdateDayRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        slug:
+          type: string
+        metadata:
+          type: object
+        clearMetadata:
+          type: boolean
+        programId:
+          type: string
+          format: uuid
+        clearProgramId:
+          type: boolean
+
+    AddPrescriptionToDayRequest:
+      type: object
+      required:
+        - prescriptionId
+      properties:
+        prescriptionId:
+          type: string
+          format: uuid
+        order:
+          type: integer
+
+    ReorderPrescriptionsRequest:
+      type: object
+      required:
+        - prescriptionIds
+      properties:
+        prescriptionIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+
+    PaginatedDays:
+      allOf:
+        - $ref: "#/components/schemas/PaginationMeta"
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: "#/components/schemas/Day"
+
+    Week:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        cycleId:
+          type: string
+          format: uuid
+        weekNumber:
+          type: integer
+        name:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    WeekWithDays:
+      allOf:
+        - $ref: "#/components/schemas/Week"
+        - type: object
+          properties:
+            days:
+              type: array
+              items:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    format: uuid
+                  dayId:
+                    type: string
+                    format: uuid
+                  position:
+                    type: integer
+
+    CreateWeekRequest:
+      type: object
+      required:
+        - cycleId
+        - weekNumber
+      properties:
+        cycleId:
+          type: string
+          format: uuid
+        weekNumber:
+          type: integer
+        name:
+          type: string
+
+    UpdateWeekRequest:
+      type: object
+      properties:
+        weekNumber:
+          type: integer
+        name:
+          type: string
+
+    AddDayToWeekRequest:
+      type: object
+      required:
+        - dayId
+      properties:
+        dayId:
+          type: string
+          format: uuid
+        position:
+          type: integer
+
+    PaginatedWeeks:
+      allOf:
+        - $ref: "#/components/schemas/PaginationMeta"
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: "#/components/schemas/Week"
+
+    Cycle:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        lengthWeeks:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    CreateCycleRequest:
+      type: object
+      required:
+        - name
+        - lengthWeeks
+      properties:
+        name:
+          type: string
+        lengthWeeks:
+          type: integer
+
+    UpdateCycleRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        lengthWeeks:
+          type: integer
+
+    PaginatedCycles:
+      allOf:
+        - $ref: "#/components/schemas/PaginationMeta"
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: "#/components/schemas/Cycle"
+
+    WeeklyLookup:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        entries:
+          type: object
+          additionalProperties:
+            type: number
+          example:
+            "1": 65
+            "2": 70
+            "3": 75
+            "4": 40
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    CreateWeeklyLookupRequest:
+      type: object
+      required:
+        - name
+        - entries
+      properties:
+        name:
+          type: string
+        entries:
+          type: object
+          additionalProperties:
+            type: number
+
+    UpdateWeeklyLookupRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        entries:
+          type: object
+          additionalProperties:
+            type: number
+
+    PaginatedWeeklyLookups:
+      allOf:
+        - $ref: "#/components/schemas/PaginationMeta"
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: "#/components/schemas/WeeklyLookup"
+
+    DailyLookup:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        entries:
+          type: object
+          additionalProperties:
+            type: number
+          example:
+            monday: 100
+            wednesday: 80
+            friday: 90
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    CreateDailyLookupRequest:
+      type: object
+      required:
+        - name
+        - entries
+      properties:
+        name:
+          type: string
+        entries:
+          type: object
+          additionalProperties:
+            type: number
+
+    UpdateDailyLookupRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        entries:
+          type: object
+          additionalProperties:
+            type: number
+
+    PaginatedDailyLookups:
+      allOf:
+        - $ref: "#/components/schemas/PaginationMeta"
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: "#/components/schemas/DailyLookup"
+
+    ProgramListItem:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        slug:
+          type: string
+        description:
+          type: string
+        cycleId:
+          type: string
+          format: uuid
+        weeklyLookupId:
+          type: string
+          format: uuid
+          nullable: true
+        dailyLookupId:
+          type: string
+          format: uuid
+          nullable: true
+        defaultRounding:
+          type: number
+          format: float
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    ProgramDetail:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        slug:
+          type: string
+        description:
+          type: string
+        cycle:
+          type: object
+          properties:
+            id:
+              type: string
+              format: uuid
+            name:
+              type: string
+            lengthWeeks:
+              type: integer
+            weeks:
+              type: array
+              items:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    format: uuid
+                  weekNumber:
+                    type: integer
+        weeklyLookup:
+          type: object
+          nullable: true
+          properties:
+            id:
+              type: string
+              format: uuid
+            name:
+              type: string
+        dailyLookup:
+          type: object
+          nullable: true
+          properties:
+            id:
+              type: string
+              format: uuid
+            name:
+              type: string
+        defaultRounding:
+          type: number
+          format: float
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    CreateProgramRequest:
+      type: object
+      required:
+        - name
+        - slug
+        - cycleId
+      properties:
+        name:
+          type: string
+        slug:
+          type: string
+          description: URL-friendly identifier (must be unique)
+        description:
+          type: string
+        cycleId:
+          type: string
+          format: uuid
+        weeklyLookupId:
+          type: string
+          format: uuid
+        dailyLookupId:
+          type: string
+          format: uuid
+        defaultRounding:
+          type: number
+          format: float
+          description: Default weight rounding (e.g., 5.0 for 5lb plates)
+
+    UpdateProgramRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        slug:
+          type: string
+        description:
+          type: string
+        cycleId:
+          type: string
+          format: uuid
+        weeklyLookupId:
+          type: string
+          format: uuid
+        dailyLookupId:
+          type: string
+          format: uuid
+        defaultRounding:
+          type: number
+          format: float
+
+    PaginatedPrograms:
+      allOf:
+        - $ref: "#/components/schemas/PaginationMeta"
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: "#/components/schemas/ProgramListItem"
+
+    Progression:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        type:
+          type: string
+          enum: [LINEAR, CYCLE]
+        parameters:
+          type: object
+          additionalProperties: true
+          description: |
+            For LINEAR: { increment, maxType, triggerType }
+            For CYCLE: { increment, maxType }
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    CreateProgressionRequest:
+      type: object
+      required:
+        - name
+        - type
+        - parameters
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+          enum: [LINEAR, CYCLE]
+        parameters:
+          type: object
+          additionalProperties: true
+
+    UpdateProgressionRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+          enum: [LINEAR, CYCLE]
+        parameters:
+          type: object
+          additionalProperties: true
+
+    PaginatedProgressions:
+      allOf:
+        - $ref: "#/components/schemas/PaginationMeta"
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: "#/components/schemas/Progression"
+
+    ProgramProgression:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        programId:
+          type: string
+          format: uuid
+        progressionId:
+          type: string
+          format: uuid
+        liftId:
+          type: string
+          format: uuid
+          nullable: true
+        priority:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    CreateProgramProgressionRequest:
+      type: object
+      required:
+        - progressionId
+      properties:
+        progressionId:
+          type: string
+          format: uuid
+        liftId:
+          type: string
+          format: uuid
+          description: Specific lift (null = all lifts)
+        priority:
+          type: integer
+          description: Priority when multiple progressions apply
+
+    UpdateProgramProgressionRequest:
+      type: object
+      properties:
+        progressionId:
+          type: string
+          format: uuid
+        liftId:
+          type: string
+          format: uuid
+        priority:
+          type: integer
+
+    Enrollment:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        program:
+          type: object
+          properties:
+            id:
+              type: string
+              format: uuid
+            name:
+              type: string
+            slug:
+              type: string
+            description:
+              type: string
+            cycleLengthWeeks:
+              type: integer
+        state:
+          type: object
+          properties:
+            currentWeek:
+              type: integer
+            currentCycleIteration:
+              type: integer
+            currentDayIndex:
+              type: integer
+        enrolledAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    EnrollRequest:
+      type: object
+      required:
+        - programId
+      properties:
+        programId:
+          type: string
+          format: uuid
+
+    AdvanceStateRequest:
+      type: object
+      required:
+        - advanceType
+      properties:
+        advanceType:
+          type: string
+          enum: [day, week]
+
+    Workout:
+      type: object
+      properties:
+        userId:
+          type: string
+          format: uuid
+        programId:
+          type: string
+          format: uuid
+        cycleIteration:
+          type: integer
+        weekNumber:
+          type: integer
+        daySlug:
+          type: string
+        date:
+          type: string
+          format: date
+        exercises:
+          type: array
+          items:
+            type: object
+            properties:
+              prescriptionId:
+                type: string
+                format: uuid
+              lift:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    format: uuid
+                  name:
+                    type: string
+                  slug:
+                    type: string
+              sets:
+                type: array
+                items:
+                  $ref: "#/components/schemas/GeneratedSet"
+              notes:
+                type: string
+              restSeconds:
+                type: integer
+
+    ProgressionHistoryEntry:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        liftId:
+          type: string
+          format: uuid
+        progressionId:
+          type: string
+          format: uuid
+        previousValue:
+          type: number
+          format: float
+        newValue:
+          type: number
+          format: float
+        delta:
+          type: number
+          format: float
+        appliedAt:
+          type: string
+          format: date-time
+        triggeredBy:
+          type: string
+        cycleIteration:
+          type: integer
+        weekNumber:
+          type: integer
+
+    PaginatedProgressionHistory:
+      allOf:
+        - $ref: "#/components/schemas/PaginationMeta"
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: "#/components/schemas/ProgressionHistoryEntry"
+
+    ManualTriggerRequest:
+      type: object
+      required:
+        - progressionId
+      properties:
+        progressionId:
+          type: string
+          format: uuid
+        liftId:
+          type: string
+          format: uuid
+          description: Specific lift (null = all configured lifts)
+        force:
+          type: boolean
+          description: Force apply even if already applied this period
+
+    ManualTriggerResponse:
+      type: object
+      properties:
+        results:
+          type: array
+          items:
+            type: object
+            properties:
+              progressionId:
+                type: string
+                format: uuid
+              liftId:
+                type: string
+                format: uuid
+              applied:
+                type: boolean
+              skipped:
+                type: boolean
+              result:
+                type: object
+                properties:
+                  previousValue:
+                    type: number
+                    format: float
+                  newValue:
+                    type: number
+                    format: float
+                  delta:
+                    type: number
+                    format: float
+                  maxType:
+                    type: string
+                  appliedAt:
+                    type: string
+                    format: date-time
+        totalApplied:
+          type: integer
+        totalSkipped:
+          type: integer
+        totalErrors:
+          type: integer

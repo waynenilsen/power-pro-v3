@@ -2,6 +2,10 @@
 
 PowerPro is a headless API for powerlifting program management. This document provides comprehensive documentation for all API endpoints.
 
+## Machine-Readable Specification
+
+An OpenAPI 3.0 specification is available at [`docs/openapi.yaml`](./openapi.yaml). This specification can be used with tools like Swagger UI, Postman, or code generators to explore and interact with the API.
+
 ## Base URL
 
 ```
