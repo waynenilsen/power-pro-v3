@@ -3,7 +3,6 @@ package api
 import (
 	"encoding/json"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
@@ -39,14 +38,6 @@ type ProgressionHistoryResponse struct {
 	AppliedAt       time.Time       `json:"appliedAt"`
 }
 
-// ProgressionHistoryListResponse wraps the paginated progression history response.
-type ProgressionHistoryListResponse struct {
-	Data       []ProgressionHistoryResponse `json:"data"`
-	Limit      int                          `json:"limit"`
-	Offset     int                          `json:"offset"`
-	TotalItems int64                        `json:"totalItems"`
-}
-
 // List handles GET /users/{userId}/progression-history
 func (h *ProgressionHistoryHandler) List(w http.ResponseWriter, r *http.Request) {
 	// Get userId from path
@@ -67,28 +58,14 @@ func (h *ProgressionHistoryHandler) List(w http.ResponseWriter, r *http.Request)
 	// Parse query parameters
 	query := r.URL.Query()
 
-	// Pagination
-	limit := 20
-	offset := 0
-	if l := query.Get("limit"); l != "" {
-		if parsed, err := strconv.Atoi(l); err == nil && parsed > 0 {
-			limit = parsed
-			if limit > 100 {
-				limit = 100
-			}
-		}
-	}
-	if o := query.Get("offset"); o != "" {
-		if parsed, err := strconv.Atoi(o); err == nil && parsed >= 0 {
-			offset = parsed
-		}
-	}
+	// Pagination (limit/offset)
+	pg := ParsePagination(query)
 
 	// Build filter
 	filter := repository.ProgressionHistoryFilter{
 		UserID: userID,
-		Limit:  int64(limit),
-		Offset: int64(offset),
+		Limit:  int64(pg.Limit),
+		Offset: int64(pg.Offset),
 	}
 
 	// Filter by liftId
@@ -177,5 +154,5 @@ func (h *ProgressionHistoryHandler) List(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Use standard envelope with pagination metadata
-	writePaginatedData(w, http.StatusOK, data, total, limit, offset)
+	writePaginatedData(w, http.StatusOK, data, total, pg.Limit, pg.Offset)
 }

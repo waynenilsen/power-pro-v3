@@ -36,13 +36,18 @@ type CycleWithWeeksTestResponse struct {
 	UpdatedAt   time.Time               `json:"updatedAt"`
 }
 
+// CyclePaginationMeta contains pagination metadata.
+type CyclePaginationMeta struct {
+	Total   int64 `json:"total"`
+	Limit   int   `json:"limit"`
+	Offset  int   `json:"offset"`
+	HasMore bool  `json:"hasMore"`
+}
+
 // PaginatedCyclesResponse is the paginated list response.
 type PaginatedCyclesResponse struct {
-	Data       []CycleTestResponse `json:"data"`
-	Page       int                 `json:"page"`
-	PageSize   int                 `json:"pageSize"`
-	TotalItems int64               `json:"totalItems"`
-	TotalPages int64               `json:"totalPages"`
+	Data []CycleTestResponse  `json:"data"`
+	Meta *CyclePaginationMeta `json:"meta"`
 }
 
 // authGetCycle performs an authenticated GET request
@@ -208,11 +213,19 @@ func TestCycleCRUD(t *testing.T) {
 			t.Fatalf("Failed to decode response: %v", err)
 		}
 
-		if result.TotalItems < 2 {
-			t.Errorf("Expected at least 2 cycles, got %d", result.TotalItems)
+		if result.Meta == nil || result.Meta.Total < 2 {
+			total := int64(0)
+			if result.Meta != nil {
+				total = result.Meta.Total
+			}
+			t.Errorf("Expected at least 2 cycles, got %d", total)
 		}
-		if result.Page != 1 {
-			t.Errorf("Expected page 1, got %d", result.Page)
+		if result.Meta == nil || result.Meta.Offset != 0 {
+			offset := 0
+			if result.Meta != nil {
+				offset = result.Meta.Offset
+			}
+			t.Errorf("Expected offset 0, got %d", offset)
 		}
 	})
 
@@ -687,8 +700,8 @@ func TestCyclePagination(t *testing.T) {
 		resp.Body.Close()
 	}
 
-	t.Run("respects page size parameter", func(t *testing.T) {
-		resp, err := authGetCycle(ts.URL("/cycles?pageSize=5"))
+	t.Run("respects limit parameter", func(t *testing.T) {
+		resp, err := authGetCycle(ts.URL("/cycles?limit=5"))
 		if err != nil {
 			t.Fatalf("Failed to make request: %v", err)
 		}
@@ -700,13 +713,17 @@ func TestCyclePagination(t *testing.T) {
 		if len(result.Data) > 5 {
 			t.Errorf("Expected at most 5 items, got %d", len(result.Data))
 		}
-		if result.PageSize != 5 {
-			t.Errorf("Expected pageSize 5, got %d", result.PageSize)
+		if result.Meta == nil || result.Meta.Limit != 5 {
+			limit := 0
+			if result.Meta != nil {
+				limit = result.Meta.Limit
+			}
+			t.Errorf("Expected limit 5, got %d", limit)
 		}
 	})
 
-	t.Run("respects page parameter", func(t *testing.T) {
-		resp, err := authGetCycle(ts.URL("/cycles?pageSize=5&page=2"))
+	t.Run("respects offset parameter", func(t *testing.T) {
+		resp, err := authGetCycle(ts.URL("/cycles?limit=5&offset=5"))
 		if err != nil {
 			t.Fatalf("Failed to make request: %v", err)
 		}
@@ -715,13 +732,17 @@ func TestCyclePagination(t *testing.T) {
 		var result PaginatedCyclesResponse
 		json.NewDecoder(resp.Body).Decode(&result)
 
-		if result.Page != 2 {
-			t.Errorf("Expected page 2, got %d", result.Page)
+		if result.Meta == nil || result.Meta.Offset != 5 {
+			offset := 0
+			if result.Meta != nil {
+				offset = result.Meta.Offset
+			}
+			t.Errorf("Expected offset 5, got %d", offset)
 		}
 	})
 
-	t.Run("calculates total pages correctly", func(t *testing.T) {
-		resp, err := authGetCycle(ts.URL("/cycles?pageSize=10"))
+	t.Run("returns hasMore correctly", func(t *testing.T) {
+		resp, err := authGetCycle(ts.URL("/cycles?limit=10"))
 		if err != nil {
 			t.Fatalf("Failed to make request: %v", err)
 		}
@@ -730,9 +751,13 @@ func TestCyclePagination(t *testing.T) {
 		var result PaginatedCyclesResponse
 		json.NewDecoder(resp.Body).Decode(&result)
 
-		expectedTotalPages := (result.TotalItems + 9) / 10
-		if result.TotalPages != expectedTotalPages {
-			t.Errorf("Expected totalPages %d, got %d", expectedTotalPages, result.TotalPages)
+		if result.Meta == nil {
+			t.Fatal("Expected meta to be present")
+		}
+		// hasMore should be true if there are more items than offset + limit
+		expectedHasMore := result.Meta.Total > int64(result.Meta.Offset+len(result.Data))
+		if result.Meta.HasMore != expectedHasMore {
+			t.Errorf("Expected hasMore %v, got %v", expectedHasMore, result.Meta.HasMore)
 		}
 	})
 }

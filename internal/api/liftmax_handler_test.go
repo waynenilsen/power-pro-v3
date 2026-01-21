@@ -102,7 +102,7 @@ func TestListLiftMaxes(t *testing.T) {
 	})
 
 	t.Run("supports pagination", func(t *testing.T) {
-		resp, err := authGetUser(ts.URL(fmt.Sprintf("/users/%s/lift-maxes?page=1&pageSize=2", userID)), userID)
+		resp, err := authGetUser(ts.URL(fmt.Sprintf("/users/%s/lift-maxes?limit=2&offset=0", userID)), userID)
 		if err != nil {
 			t.Fatalf("Failed to make request: %v", err)
 		}
@@ -125,8 +125,8 @@ func TestListLiftMaxes(t *testing.T) {
 			t.Errorf("Expected hasMore to be true")
 		}
 
-		// Get page 2
-		resp2, _ := authGetUser(ts.URL(fmt.Sprintf("/users/%s/lift-maxes?page=2&pageSize=2", userID)), userID)
+		// Get page 2 (offset=2)
+		resp2, _ := authGetUser(ts.URL(fmt.Sprintf("/users/%s/lift-maxes?limit=2&offset=2", userID)), userID)
 		defer resp2.Body.Close()
 
 		var result2 PaginatedLiftMaxesResponse

@@ -66,6 +66,29 @@ JOIN progressions p ON pp.progression_id = p.id
 WHERE pp.program_id = ?
 ORDER BY pp.priority ASC;
 
+-- name: ListProgramProgressionsWithDetailsByProgramPaginated :many
+SELECT
+    pp.id,
+    pp.program_id,
+    pp.progression_id,
+    pp.lift_id,
+    pp.priority,
+    pp.enabled,
+    pp.override_increment,
+    pp.created_at,
+    pp.updated_at,
+    p.name as progression_name,
+    p.type as progression_type,
+    p.parameters as progression_parameters
+FROM program_progressions pp
+JOIN progressions p ON pp.progression_id = p.id
+WHERE pp.program_id = ?
+ORDER BY pp.priority ASC
+LIMIT ? OFFSET ?;
+
+-- name: CountProgramProgressionsWithDetailsByProgram :one
+SELECT COUNT(*) FROM program_progressions pp WHERE pp.program_id = ?;
+
 -- name: ListEnabledProgramProgressionsByProgramAndProgression :many
 SELECT id, program_id, progression_id, lift_id, priority, enabled, override_increment, created_at, updated_at
 FROM program_progressions

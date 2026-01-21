@@ -126,16 +126,52 @@ All API responses follow a consistent envelope format for predictable client han
 
 ---
 
-## Common Query Parameters (List Endpoints)
+## Pagination
 
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `page` | int | 1 | Page number (1-indexed) |
-| `pageSize` | int | 20 | Items per page (max: 100) |
-| `sortBy` | string | varies | Field to sort by |
-| `sortOrder` | string | "asc" | "asc" or "desc" |
+All list endpoints use consistent offset-based pagination with the following query parameters:
 
-Note: While the API accepts `page` and `pageSize` parameters, the response uses offset-based pagination metadata (`offset`, `limit`, `hasMore`, `total`) for better compatibility with various client implementations.
+| Parameter | Type | Default | Max | Description |
+|-----------|------|---------|-----|-------------|
+| `limit` | int | 20 | 100 | Number of items to return |
+| `offset` | int | 0 | - | Number of items to skip |
+| `sortBy` | string | varies | - | Field to sort by |
+| `sortOrder` | string | "asc" | - | "asc" or "desc" |
+
+### Response Metadata
+
+All paginated responses include a `meta` object with pagination information:
+
+```json
+{
+  "data": [...],
+  "meta": {
+    "total": 150,
+    "limit": 20,
+    "offset": 40,
+    "hasMore": true
+  }
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `total` | int64 | Total number of items in the dataset |
+| `limit` | int | Number of items per page (as requested) |
+| `offset` | int | Current offset (as requested) |
+| `hasMore` | bool | Whether more items exist beyond the current page |
+
+### Pagination Example
+
+```bash
+# Get the first 10 lifts
+GET /lifts?limit=10&offset=0
+
+# Get the next 10 lifts
+GET /lifts?limit=10&offset=10
+
+# Get the third page (items 21-30)
+GET /lifts?limit=10&offset=20
+```
 
 ---
 
@@ -186,8 +222,8 @@ List all lifts with pagination.
 **Query Parameters**:
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `page` | int | Page number |
-| `pageSize` | int | Items per page |
+| `limit` | int | Number of items to return (default: 20, max: 100) |
+| `offset` | int | Number of items to skip (default: 0) |
 | `sortBy` | string | "name" or "created_at" |
 | `sortOrder` | string | "asc" or "desc" |
 | `is_competition_lift` | bool | Filter by competition lift status |
@@ -206,10 +242,12 @@ List all lifts with pagination.
       "updatedAt": "2024-01-01T00:00:00Z"
     }
   ],
-  "page": 1,
-  "pageSize": 20,
-  "totalItems": 3,
-  "totalPages": 1
+  "meta": {
+    "total": 3,
+    "limit": 20,
+    "offset": 0,
+    "hasMore": false
+  }
 }
 ```
 
@@ -318,8 +356,8 @@ List all lift maxes for a user.
 **Query Parameters**:
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `page` | int | Page number |
-| `pageSize` | int | Items per page |
+| `limit` | int | Number of items to return (default: 20, max: 100) |
+| `offset` | int | Number of items to skip (default: 0) |
 | `sortOrder` | string | "asc" or "desc" (default: desc by effective_date) |
 | `lift_id` | string | Filter by lift ID |
 | `type` | string | Filter by type: "ONE_RM" or "TRAINING_MAX" |
@@ -339,10 +377,12 @@ List all lift maxes for a user.
       "updatedAt": "2024-01-01T00:00:00Z"
     }
   ],
-  "page": 1,
-  "pageSize": 20,
-  "totalItems": 1,
-  "totalPages": 1
+  "meta": {
+    "total": 1,
+    "limit": 20,
+    "offset": 0,
+    "hasMore": false
+  }
 }
 ```
 
@@ -457,8 +497,8 @@ List all prescriptions.
 **Query Parameters**:
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `page` | int | Page number |
-| `pageSize` | int | Items per page |
+| `limit` | int | Number of items to return (default: 20, max: 100) |
+| `offset` | int | Number of items to skip (default: 0) |
 | `sortBy` | string | "order" or "created_at" |
 | `sortOrder` | string | "asc" or "desc" |
 | `lift_id` | string | Filter by lift ID |
@@ -487,10 +527,12 @@ List all prescriptions.
       "updatedAt": "2024-01-01T00:00:00Z"
     }
   ],
-  "page": 1,
-  "pageSize": 20,
-  "totalItems": 1,
-  "totalPages": 1
+  "meta": {
+    "total": 1,
+    "limit": 20,
+    "offset": 0,
+    "hasMore": false
+  }
 }
 ```
 
@@ -677,8 +719,8 @@ List all days.
 **Query Parameters**:
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `page` | int | Page number |
-| `pageSize` | int | Items per page |
+| `limit` | int | Number of items to return (default: 20, max: 100) |
+| `offset` | int | Number of items to skip (default: 0) |
 | `sortBy` | string | "name" or "created_at" |
 | `sortOrder` | string | "asc" or "desc" |
 | `program_id` | string | Filter by program ID |
@@ -697,10 +739,12 @@ List all days.
       "updatedAt": "2024-01-01T00:00:00Z"
     }
   ],
-  "page": 1,
-  "pageSize": 20,
-  "totalItems": 1,
-  "totalPages": 1
+  "meta": {
+    "total": 1,
+    "limit": 20,
+    "offset": 0,
+    "hasMore": false
+  }
 }
 ```
 
@@ -847,8 +891,8 @@ List all weeks.
 **Query Parameters**:
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `page` | int | Page number |
-| `pageSize` | int | Items per page |
+| `limit` | int | Number of items to return (default: 20, max: 100) |
+| `offset` | int | Number of items to skip (default: 0) |
 | `sortBy` | string | "week_number" or "created_at" |
 | `sortOrder` | string | "asc" or "desc" |
 
@@ -1158,8 +1202,8 @@ List all programs.
 **Query Parameters**:
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `page` | int | Page number |
-| `pageSize` | int | Items per page |
+| `limit` | int | Number of items to return (default: 20, max: 100) |
+| `offset` | int | Number of items to skip (default: 0) |
 | `sortBy` | string | "name" or "created_at" |
 | `sortOrder` | string | "asc" or "desc" |
 
@@ -1180,10 +1224,12 @@ List all programs.
       "updatedAt": "2024-01-01T00:00:00Z"
     }
   ],
-  "page": 1,
-  "pageSize": 20,
-  "totalItems": 1,
-  "totalPages": 1
+  "meta": {
+    "total": 1,
+    "limit": 20,
+    "offset": 0,
+    "hasMore": false
+  }
 }
 ```
 
@@ -1284,8 +1330,8 @@ List all progressions.
 **Query Parameters**:
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `page` | int | Page number |
-| `pageSize` | int | Items per page |
+| `limit` | int | Number of items to return (default: 20, max: 100) |
+| `offset` | int | Number of items to skip (default: 0) |
 | `type` | string | Filter by type: "LINEAR" or "CYCLE" |
 
 **Response** `200 OK`:
@@ -1305,10 +1351,12 @@ List all progressions.
       "updatedAt": "2024-01-01T00:00:00Z"
     }
   ],
-  "page": 1,
-  "pageSize": 20,
-  "totalItems": 1,
-  "totalPages": 1
+  "meta": {
+    "total": 1,
+    "limit": 20,
+    "offset": 0,
+    "hasMore": false
+  }
 }
 ```
 
@@ -1625,8 +1673,8 @@ List progression history entries for a user.
 **Query Parameters**:
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `page` | int | Page number |
-| `pageSize` | int | Items per page |
+| `limit` | int | Number of items to return (default: 20, max: 100) |
+| `offset` | int | Number of items to skip (default: 0) |
 | `lift_id` | string | Filter by lift ID |
 | `progression_id` | string | Filter by progression ID |
 
@@ -1648,10 +1696,12 @@ List progression history entries for a user.
       "weekNumber": 1
     }
   ],
-  "page": 1,
-  "pageSize": 20,
-  "totalItems": 1,
-  "totalPages": 1
+  "meta": {
+    "total": 1,
+    "limit": 20,
+    "offset": 0,
+    "hasMore": false
+  }
 }
 ```
 

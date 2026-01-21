@@ -122,8 +122,17 @@ func (h *ProgramProgressionHandler) List(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	// Get program progressions with details
-	entities, err := h.ppRepo.ListByProgram(programID)
+	// Pagination (limit/offset)
+	pg := ParsePagination(r.URL.Query())
+
+	// Get program progressions with details (paginated)
+	params := repository.ProgramProgressionListParams{
+		ProgramID: programID,
+		Limit:     int64(pg.Limit),
+		Offset:    int64(pg.Offset),
+	}
+
+	entities, total, err := h.ppRepo.ListByProgramPaginated(params)
 	if err != nil {
 		writeDomainError(w, apperrors.NewInternal("failed to list program progressions", err))
 		return
@@ -135,7 +144,7 @@ func (h *ProgramProgressionHandler) List(w http.ResponseWriter, r *http.Request)
 		data[i] = programProgressionWithDetailsToResponse(&entity)
 	}
 
-	writeData(w, http.StatusOK, data)
+	writePaginatedData(w, http.StatusOK, data, total, pg.Limit, pg.Offset)
 }
 
 // Get handles GET /programs/{programId}/progressions/{configId}

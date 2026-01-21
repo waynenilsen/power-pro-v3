@@ -43,13 +43,18 @@ type DayPrescriptionResponse struct {
 	CreatedAt      string `json:"createdAt"`
 }
 
+// DayPaginationMeta contains pagination metadata.
+type DayPaginationMeta struct {
+	Total   int64 `json:"total"`
+	Limit   int   `json:"limit"`
+	Offset  int   `json:"offset"`
+	HasMore bool  `json:"hasMore"`
+}
+
 // PaginatedDaysResponse is the paginated list response.
 type PaginatedDaysResponse struct {
-	Data       []DayResponse `json:"data"`
-	Page       int           `json:"page"`
-	PageSize   int           `json:"pageSize"`
-	TotalItems int64         `json:"totalItems"`
-	TotalPages int64         `json:"totalPages"`
+	Data []DayResponse      `json:"data"`
+	Meta *DayPaginationMeta `json:"meta"`
 }
 
 func TestListDays(t *testing.T) {
@@ -92,13 +97,17 @@ func TestListDays(t *testing.T) {
 		if len(result.Data) != 3 {
 			t.Errorf("Expected 3 days, got %d", len(result.Data))
 		}
-		if result.TotalItems != 3 {
-			t.Errorf("Expected totalItems 3, got %d", result.TotalItems)
+		if result.Meta == nil || result.Meta.Total != 3 {
+			total := int64(0)
+			if result.Meta != nil {
+				total = result.Meta.Total
+			}
+			t.Errorf("Expected total 3, got %d", total)
 		}
 	})
 
 	t.Run("supports pagination", func(t *testing.T) {
-		resp, err := authGet(ts.URL("/days?page=1&pageSize=2"))
+		resp, err := authGet(ts.URL("/days?limit=2&offset=0"))
 		if err != nil {
 			t.Fatalf("Failed to make request: %v", err)
 		}
@@ -110,15 +119,18 @@ func TestListDays(t *testing.T) {
 		if len(result.Data) != 2 {
 			t.Errorf("Expected 2 days on page 1, got %d", len(result.Data))
 		}
-		if result.Page != 1 {
-			t.Errorf("Expected page 1, got %d", result.Page)
+		if result.Meta == nil {
+			t.Fatal("Expected meta to be present")
 		}
-		if result.PageSize != 2 {
-			t.Errorf("Expected pageSize 2, got %d", result.PageSize)
+		if result.Meta.Offset != 0 {
+			t.Errorf("Expected offset 0, got %d", result.Meta.Offset)
+		}
+		if result.Meta.Limit != 2 {
+			t.Errorf("Expected limit 2, got %d", result.Meta.Limit)
 		}
 
-		// Get page 2
-		resp2, _ := authGet(ts.URL("/days?page=2&pageSize=2"))
+		// Get page 2 (offset=2)
+		resp2, _ := authGet(ts.URL("/days?limit=2&offset=2"))
 		defer resp2.Body.Close()
 
 		var result2 PaginatedDaysResponse

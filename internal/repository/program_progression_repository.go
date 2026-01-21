@@ -73,6 +73,40 @@ func (r *ProgramProgressionRepository) ListByProgram(programID string) ([]Progra
 	return entities, nil
 }
 
+// ProgramProgressionListParams defines pagination parameters for listing program progressions.
+type ProgramProgressionListParams struct {
+	ProgramID string
+	Limit     int64
+	Offset    int64
+}
+
+// ListByProgramPaginated retrieves program progressions with pagination.
+func (r *ProgramProgressionRepository) ListByProgramPaginated(params ProgramProgressionListParams) ([]ProgramProgressionWithDetails, int64, error) {
+	ctx := context.Background()
+
+	// Get total count
+	count, err := r.queries.CountProgramProgressionsWithDetailsByProgram(ctx, params.ProgramID)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to count program progressions: %w", err)
+	}
+
+	// Get paginated results
+	rows, err := r.queries.ListProgramProgressionsWithDetailsByProgramPaginated(ctx, db.ListProgramProgressionsWithDetailsByProgramPaginatedParams{
+		ProgramID: params.ProgramID,
+		Limit:     params.Limit,
+		Offset:    params.Offset,
+	})
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to list program progressions: %w", err)
+	}
+
+	entities := make([]ProgramProgressionWithDetails, len(rows))
+	for i, row := range rows {
+		entities[i] = *dbProgramProgressionWithDetailsPaginatedToEntity(row)
+	}
+	return entities, count, nil
+}
+
 // CheckDuplicate checks if a program progression with the same program, progression, and lift already exists.
 // Returns the existing entity if found, nil otherwise.
 func (r *ProgramProgressionRepository) CheckDuplicate(programID, progressionID string, liftID *string) (*ProgramProgressionEntity, error) {
@@ -201,6 +235,38 @@ func dbProgramProgressionToEntity(dbPP db.ProgramProgression) *ProgramProgressio
 }
 
 func dbProgramProgressionWithDetailsToEntity(row db.ListProgramProgressionsWithDetailsByProgramRow) *ProgramProgressionWithDetails {
+	createdAt, _ := time.Parse(time.RFC3339, row.CreatedAt)
+	updatedAt, _ := time.Parse(time.RFC3339, row.UpdatedAt)
+
+	var liftID *string
+	if row.LiftID.Valid {
+		liftID = &row.LiftID.String
+	}
+
+	var overrideIncrement *float64
+	if row.OverrideIncrement.Valid {
+		overrideIncrement = &row.OverrideIncrement.Float64
+	}
+
+	return &ProgramProgressionWithDetails{
+		ProgramProgressionEntity: ProgramProgressionEntity{
+			ID:                row.ID,
+			ProgramID:         row.ProgramID,
+			ProgressionID:     row.ProgressionID,
+			LiftID:            liftID,
+			Priority:          row.Priority,
+			Enabled:           row.Enabled == 1,
+			OverrideIncrement: overrideIncrement,
+			CreatedAt:         createdAt,
+			UpdatedAt:         updatedAt,
+		},
+		ProgressionName:       row.ProgressionName,
+		ProgressionType:       progression.ProgressionType(row.ProgressionType),
+		ProgressionParameters: json.RawMessage(row.ProgressionParameters),
+	}
+}
+
+func dbProgramProgressionWithDetailsPaginatedToEntity(row db.ListProgramProgressionsWithDetailsByProgramPaginatedRow) *ProgramProgressionWithDetails {
 	createdAt, _ := time.Parse(time.RFC3339, row.CreatedAt)
 	updatedAt, _ := time.Parse(time.RFC3339, row.UpdatedAt)
 

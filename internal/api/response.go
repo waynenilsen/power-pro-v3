@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"strconv"
 
 	apperrors "github.com/waynenilsen/power-pro-v3/internal/errors"
 )
@@ -45,6 +46,57 @@ type ErrorDetail struct {
 // ErrorResponse represents the standard API error response.
 type ErrorResponse struct {
 	Error ErrorDetail `json:"error"`
+}
+
+// ===== Pagination Utilities =====
+//
+// All list endpoints use consistent offset-based pagination:
+//   - Query params: limit (default: 20, max: 100) and offset (default: 0)
+//   - Response: includes meta with total, limit, offset, hasMore
+
+// PaginationDefaults defines the default pagination values.
+const (
+	DefaultLimit = 20
+	MaxLimit     = 100
+	DefaultOffset = 0
+)
+
+// Pagination holds parsed pagination parameters.
+type Pagination struct {
+	Limit  int
+	Offset int
+}
+
+// ParsePagination extracts limit and offset from query parameters.
+// Returns pagination with defaults applied and limits enforced.
+func ParsePagination(query QueryGetter) Pagination {
+	p := Pagination{
+		Limit:  DefaultLimit,
+		Offset: DefaultOffset,
+	}
+
+	if l := query.Get("limit"); l != "" {
+		if parsed, err := strconv.Atoi(l); err == nil && parsed > 0 {
+			p.Limit = parsed
+			if p.Limit > MaxLimit {
+				p.Limit = MaxLimit
+			}
+		}
+	}
+
+	if o := query.Get("offset"); o != "" {
+		if parsed, err := strconv.Atoi(o); err == nil && parsed >= 0 {
+			p.Offset = parsed
+		}
+	}
+
+	return p
+}
+
+// QueryGetter is an interface for getting query parameter values.
+// This allows ParsePagination to work with url.Values or any similar type.
+type QueryGetter interface {
+	Get(key string) string
 }
 
 // ===== Legacy Response Types (deprecated, use standard envelope) =====

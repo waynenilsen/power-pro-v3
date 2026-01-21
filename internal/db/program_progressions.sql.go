@@ -32,6 +32,17 @@ func (q *Queries) CountProgramProgressionsByProgression(ctx context.Context, pro
 	return count, err
 }
 
+const countProgramProgressionsWithDetailsByProgram = `-- name: CountProgramProgressionsWithDetailsByProgram :one
+SELECT COUNT(*) FROM program_progressions pp WHERE pp.program_id = ?
+`
+
+func (q *Queries) CountProgramProgressionsWithDetailsByProgram(ctx context.Context, programID string) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countProgramProgressionsWithDetailsByProgram, programID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createProgramProgression = `-- name: CreateProgramProgression :exec
 INSERT INTO program_progressions (id, program_id, progression_id, lift_id, priority, enabled, override_increment, created_at, updated_at)
 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -348,6 +359,84 @@ func (q *Queries) ListProgramProgressionsWithDetailsByProgram(ctx context.Contex
 	items := []ListProgramProgressionsWithDetailsByProgramRow{}
 	for rows.Next() {
 		var i ListProgramProgressionsWithDetailsByProgramRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProgramID,
+			&i.ProgressionID,
+			&i.LiftID,
+			&i.Priority,
+			&i.Enabled,
+			&i.OverrideIncrement,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.ProgressionName,
+			&i.ProgressionType,
+			&i.ProgressionParameters,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listProgramProgressionsWithDetailsByProgramPaginated = `-- name: ListProgramProgressionsWithDetailsByProgramPaginated :many
+SELECT
+    pp.id,
+    pp.program_id,
+    pp.progression_id,
+    pp.lift_id,
+    pp.priority,
+    pp.enabled,
+    pp.override_increment,
+    pp.created_at,
+    pp.updated_at,
+    p.name as progression_name,
+    p.type as progression_type,
+    p.parameters as progression_parameters
+FROM program_progressions pp
+JOIN progressions p ON pp.progression_id = p.id
+WHERE pp.program_id = ?
+ORDER BY pp.priority ASC
+LIMIT ? OFFSET ?
+`
+
+type ListProgramProgressionsWithDetailsByProgramPaginatedParams struct {
+	ProgramID string `json:"program_id"`
+	Limit     int64  `json:"limit"`
+	Offset    int64  `json:"offset"`
+}
+
+type ListProgramProgressionsWithDetailsByProgramPaginatedRow struct {
+	ID                    string          `json:"id"`
+	ProgramID             string          `json:"program_id"`
+	ProgressionID         string          `json:"progression_id"`
+	LiftID                sql.NullString  `json:"lift_id"`
+	Priority              int64           `json:"priority"`
+	Enabled               int64           `json:"enabled"`
+	OverrideIncrement     sql.NullFloat64 `json:"override_increment"`
+	CreatedAt             string          `json:"created_at"`
+	UpdatedAt             string          `json:"updated_at"`
+	ProgressionName       string          `json:"progression_name"`
+	ProgressionType       string          `json:"progression_type"`
+	ProgressionParameters string          `json:"progression_parameters"`
+}
+
+func (q *Queries) ListProgramProgressionsWithDetailsByProgramPaginated(ctx context.Context, arg ListProgramProgressionsWithDetailsByProgramPaginatedParams) ([]ListProgramProgressionsWithDetailsByProgramPaginatedRow, error) {
+	rows, err := q.db.QueryContext(ctx, listProgramProgressionsWithDetailsByProgramPaginated, arg.ProgramID, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListProgramProgressionsWithDetailsByProgramPaginatedRow{}
+	for rows.Next() {
+		var i ListProgramProgressionsWithDetailsByProgramPaginatedRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.ProgramID,

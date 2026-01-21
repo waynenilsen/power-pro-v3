@@ -2,7 +2,6 @@ package api
 
 import (
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
@@ -164,19 +163,8 @@ func (h *ProgramHandler) List(w http.ResponseWriter, r *http.Request) {
 	// Parse query parameters
 	query := r.URL.Query()
 
-	// Pagination
-	page := 1
-	pageSize := 20
-	if p := query.Get("page"); p != "" {
-		if parsed, err := strconv.Atoi(p); err == nil && parsed > 0 {
-			page = parsed
-		}
-	}
-	if ps := query.Get("pageSize"); ps != "" {
-		if parsed, err := strconv.Atoi(ps); err == nil && parsed > 0 && parsed <= 100 {
-			pageSize = parsed
-		}
-	}
+	// Pagination (limit/offset)
+	pg := ParsePagination(query)
 
 	// Sorting
 	sortBy := repository.ProgramSortByName
@@ -199,8 +187,8 @@ func (h *ProgramHandler) List(w http.ResponseWriter, r *http.Request) {
 	}
 
 	params := repository.ProgramListParams{
-		Limit:     int64(pageSize),
-		Offset:    int64((page - 1) * pageSize),
+		Limit:     int64(pg.Limit),
+		Offset:    int64(pg.Offset),
 		SortBy:    sortBy,
 		SortOrder: sortOrder,
 	}
@@ -217,9 +205,7 @@ func (h *ProgramHandler) List(w http.ResponseWriter, r *http.Request) {
 		data[i] = programToResponse(&p)
 	}
 
-	// Use standard envelope with offset-based pagination
-	offset := (page - 1) * pageSize
-	writePaginatedData(w, http.StatusOK, data, total, pageSize, offset)
+	writePaginatedData(w, http.StatusOK, data, total, pg.Limit, pg.Offset)
 }
 
 // Get handles GET /programs/{id}

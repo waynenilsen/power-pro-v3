@@ -22,13 +22,18 @@ type ProgressionResponse struct {
 	UpdatedAt  string          `json:"updatedAt"`
 }
 
+// PaginatedMeta contains pagination metadata in the standard envelope.
+type PaginatedMeta struct {
+	Total   int64 `json:"total"`
+	Limit   int   `json:"limit"`
+	Offset  int   `json:"offset"`
+	HasMore bool  `json:"hasMore"`
+}
+
 // PaginatedProgressionsResponse is the paginated list response.
 type PaginatedProgressionsResponse struct {
-	Data       []ProgressionResponse `json:"data"`
-	Page       int                   `json:"page"`
-	PageSize   int                   `json:"pageSize"`
-	TotalItems int64                 `json:"totalItems"`
-	TotalPages int64                 `json:"totalPages"`
+	Data []ProgressionResponse `json:"data"`
+	Meta PaginatedMeta         `json:"meta"`
 }
 
 func TestListProgressions(t *testing.T) {
@@ -68,7 +73,7 @@ func TestListProgressions(t *testing.T) {
 			resp.Body.Close()
 		}
 
-		resp, err := authGet(ts.URL("/progressions?page=1&pageSize=2"))
+		resp, err := authGet(ts.URL("/progressions?limit=2&offset=0"))
 		if err != nil {
 			t.Fatalf("Failed to make request: %v", err)
 		}
@@ -78,27 +83,33 @@ func TestListProgressions(t *testing.T) {
 		json.NewDecoder(resp.Body).Decode(&result)
 
 		if len(result.Data) != 2 {
-			t.Errorf("Expected 2 progressions on page 1, got %d", len(result.Data))
+			t.Errorf("Expected 2 progressions with limit=2, got %d", len(result.Data))
 		}
-		if result.Page != 1 {
-			t.Errorf("Expected page 1, got %d", result.Page)
+		if result.Meta.Offset != 0 {
+			t.Errorf("Expected offset 0, got %d", result.Meta.Offset)
 		}
-		if result.PageSize != 2 {
-			t.Errorf("Expected pageSize 2, got %d", result.PageSize)
+		if result.Meta.Limit != 2 {
+			t.Errorf("Expected limit 2, got %d", result.Meta.Limit)
 		}
-		if result.TotalItems != 3 {
-			t.Errorf("Expected totalItems 3, got %d", result.TotalItems)
+		if result.Meta.Total != 3 {
+			t.Errorf("Expected total 3, got %d", result.Meta.Total)
+		}
+		if !result.Meta.HasMore {
+			t.Errorf("Expected hasMore to be true")
 		}
 
-		// Get page 2
-		resp2, _ := authGet(ts.URL("/progressions?page=2&pageSize=2"))
+		// Get second page (offset=2)
+		resp2, _ := authGet(ts.URL("/progressions?limit=2&offset=2"))
 		defer resp2.Body.Close()
 
 		var result2 PaginatedProgressionsResponse
 		json.NewDecoder(resp2.Body).Decode(&result2)
 
 		if len(result2.Data) != 1 {
-			t.Errorf("Expected 1 progression on page 2, got %d", len(result2.Data))
+			t.Errorf("Expected 1 progression with offset=2, got %d", len(result2.Data))
+		}
+		if result2.Meta.HasMore {
+			t.Errorf("Expected hasMore to be false")
 		}
 	})
 

@@ -147,7 +147,7 @@ func TestListLifts(t *testing.T) {
 	})
 
 	t.Run("supports pagination", func(t *testing.T) {
-		resp, err := authGet(ts.URL("/lifts?page=1&pageSize=2"))
+		resp, err := authGet(ts.URL("/lifts?limit=2&offset=0"))
 		if err != nil {
 			t.Fatalf("Failed to make request: %v", err)
 		}
@@ -172,8 +172,8 @@ func TestListLifts(t *testing.T) {
 			t.Error("Expected hasMore to be true for page 1")
 		}
 
-		// Get page 2
-		resp2, _ := authGet(ts.URL("/lifts?page=2&pageSize=2"))
+		// Get page 2 (offset=2)
+		resp2, _ := authGet(ts.URL("/lifts?limit=2&offset=2"))
 		defer resp2.Body.Close()
 
 		var result2 PaginatedLiftsResponse

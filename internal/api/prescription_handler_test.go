@@ -26,13 +26,18 @@ type PrescriptionResponse struct {
 	UpdatedAt    time.Time       `json:"updatedAt"`
 }
 
+// PrescriptionPaginationMeta contains pagination metadata.
+type PrescriptionPaginationMeta struct {
+	Total   int64 `json:"total"`
+	Limit   int   `json:"limit"`
+	Offset  int   `json:"offset"`
+	HasMore bool  `json:"hasMore"`
+}
+
 // PaginatedPrescriptionsResponse is the paginated list response.
 type PaginatedPrescriptionsResponse struct {
-	Data       []PrescriptionResponse `json:"data"`
-	Page       int                    `json:"page"`
-	PageSize   int                    `json:"pageSize"`
-	TotalItems int64                  `json:"totalItems"`
-	TotalPages int64                  `json:"totalPages"`
+	Data []PrescriptionResponse      `json:"data"`
+	Meta *PrescriptionPaginationMeta `json:"meta"`
 }
 
 // LoadStrategyResponse represents the load strategy in responses.
@@ -81,8 +86,12 @@ func TestListPrescriptions(t *testing.T) {
 		if len(result.Data) != 0 {
 			t.Errorf("Expected 0 prescriptions, got %d", len(result.Data))
 		}
-		if result.TotalItems != 0 {
-			t.Errorf("Expected totalItems 0, got %d", result.TotalItems)
+		if result.Meta == nil || result.Meta.Total != 0 {
+			total := int64(0)
+			if result.Meta != nil {
+				total = result.Meta.Total
+			}
+			t.Errorf("Expected total 0, got %d", total)
 		}
 	})
 
@@ -99,8 +108,8 @@ func TestListPrescriptions(t *testing.T) {
 			resp.Body.Close()
 		}
 
-		// Get page 1
-		resp, err := authGet(ts.URL("/prescriptions?page=1&pageSize=2"))
+		// Get page 1 (offset=0, limit=2)
+		resp, err := authGet(ts.URL("/prescriptions?limit=2&offset=0"))
 		if err != nil {
 			t.Fatalf("Failed to make request: %v", err)
 		}
@@ -112,17 +121,20 @@ func TestListPrescriptions(t *testing.T) {
 		if len(result.Data) != 2 {
 			t.Errorf("Expected 2 prescriptions on page 1, got %d", len(result.Data))
 		}
-		if result.Page != 1 {
-			t.Errorf("Expected page 1, got %d", result.Page)
+		if result.Meta == nil {
+			t.Fatal("Expected meta to be present")
 		}
-		if result.PageSize != 2 {
-			t.Errorf("Expected pageSize 2, got %d", result.PageSize)
+		if result.Meta.Offset != 0 {
+			t.Errorf("Expected offset 0, got %d", result.Meta.Offset)
 		}
-		if result.TotalItems != 5 {
-			t.Errorf("Expected totalItems 5, got %d", result.TotalItems)
+		if result.Meta.Limit != 2 {
+			t.Errorf("Expected limit 2, got %d", result.Meta.Limit)
 		}
-		if result.TotalPages != 3 {
-			t.Errorf("Expected totalPages 3, got %d", result.TotalPages)
+		if result.Meta.Total != 5 {
+			t.Errorf("Expected total 5, got %d", result.Meta.Total)
+		}
+		if !result.Meta.HasMore {
+			t.Error("Expected hasMore to be true")
 		}
 	})
 }
