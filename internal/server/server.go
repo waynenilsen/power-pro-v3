@@ -36,6 +36,7 @@ type Server struct {
 	dailyLookupRepo      *repository.DailyLookupRepository
 	programRepo          *repository.ProgramRepository
 	userProgramStateRepo *repository.UserProgramStateRepository
+	workoutRepo          *repository.WorkoutRepository
 	strategyFactory      *loadstrategy.StrategyFactory
 	schemeFactory        *setscheme.SchemeFactory
 }
@@ -61,6 +62,7 @@ func New(cfg Config) *Server {
 	dailyLookupRepo := repository.NewDailyLookupRepository(cfg.DB)
 	programRepo := repository.NewProgramRepository(cfg.DB)
 	userProgramStateRepo := repository.NewUserProgramStateRepository(cfg.DB)
+	workoutRepo := repository.NewWorkoutRepository(cfg.DB, strategyFactory, schemeFactory)
 
 	s := &Server{
 		config:               cfg,
@@ -74,6 +76,7 @@ func New(cfg Config) *Server {
 		dailyLookupRepo:      dailyLookupRepo,
 		programRepo:          programRepo,
 		userProgramStateRepo: userProgramStateRepo,
+		workoutRepo:          workoutRepo,
 		strategyFactory:      strategyFactory,
 		schemeFactory:        schemeFactory,
 	}
@@ -246,6 +249,13 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	mux.Handle("POST /users/{userId}/program", withAuth(enrollmentHandler.Enroll))
 	mux.Handle("GET /users/{userId}/program", withAuth(enrollmentHandler.Get))
 	mux.Handle("DELETE /users/{userId}/program", withAuth(enrollmentHandler.Unenroll))
+
+	// Workout Generation routes:
+	// - Users can generate/preview their own workouts
+	// - Admins can generate/preview any user's workouts
+	workoutHandler := api.NewWorkoutHandler(s.workoutRepo, s.config.DB)
+	mux.Handle("GET /users/{userId}/workout", withAuth(workoutHandler.Generate))
+	mux.Handle("GET /users/{userId}/workout/preview", withAuth(workoutHandler.Preview))
 }
 
 // Start starts the HTTP server.
