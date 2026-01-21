@@ -78,11 +78,12 @@ func (c *CycleProgression) Validate() error {
 // Apply evaluates and applies the progression given the context.
 // Implements Progression interface.
 //
-// For AFTER_CYCLE triggers:
-//   - Verifies the trigger event type matches AFTER_CYCLE
-//   - Verifies the max type matches the progression's configured max type
-//   - Returns applied=false if trigger type is not AFTER_CYCLE
-//   - Returns applied=false if max type does not match
+// CycleProgression is designed for periodized programs that progress at the end of a
+// multi-week training cycle, rather than session-by-session or week-by-week.
+// This approach is common in intermediate/advanced programs where:
+//   - Adaptation takes longer and more volume/intensity exposure is needed
+//   - Programs use wave loading or accumulation/intensification phases
+//   - Lifters can't recover fast enough for weekly weight increases
 //
 // Returns ProgressionResult with applied=true and delta=increment on success.
 // The increment can be overridden per-lift via ApplyWithOverride.
@@ -91,20 +92,26 @@ func (c *CycleProgression) Apply(ctx context.Context, params ProgressionContext)
 }
 
 // ApplyWithOverride applies the progression with an optional increment override.
-// This enables lift-specific increments (e.g., 5/3/1: +5lb upper, +10lb lower)
-// via the ProgramProgression.OverrideIncrement field.
 //
-// If overrideIncrement is nil, uses the default CycleProgression.Increment.
-// If overrideIncrement is not nil, uses the override value.
+// The override mechanism solves a common powerlifting requirement: different lifts
+// progress at different rates due to muscle group size and movement complexity.
+// For example, in 5/3/1:
+//   - Upper body lifts (bench, press): +5lb per cycle
+//   - Lower body lifts (squat, deadlift): +10lb per cycle
+//
+// This is implemented via the ProgramProgression.OverrideIncrement field, which allows
+// a single CycleProgression definition to be applied with different increments per lift.
+// Without this, we'd need duplicate progression definitions for each increment value.
 func (c *CycleProgression) ApplyWithOverride(ctx context.Context, params ProgressionContext, overrideIncrement *float64) (ProgressionResult, error) {
-	// Validate context
 	if err := params.Validate(); err != nil {
 		return ProgressionResult{}, fmt.Errorf("invalid progression context: %w", err)
 	}
 
 	now := time.Now()
 
-	// Check if trigger type matches - CycleProgression only responds to AFTER_CYCLE
+	// CycleProgression ONLY responds to AFTER_CYCLE triggers.
+	// This is intentional: cycle-based progressions shouldn't accidentally fire on
+	// session completion or week advancement events.
 	if params.TriggerEvent.Type != TriggerAfterCycle {
 		return ProgressionResult{
 			Applied:       false,
@@ -118,7 +125,7 @@ func (c *CycleProgression) ApplyWithOverride(ctx context.Context, params Progres
 		}, nil
 	}
 
-	// Check if max type matches
+	// Max type must match - 5/3/1 progresses Training Max, not 1RM
 	if params.MaxType != c.MaxTypeValue {
 		return ProgressionResult{
 			Applied:       false,
@@ -132,7 +139,8 @@ func (c *CycleProgression) ApplyWithOverride(ctx context.Context, params Progres
 		}, nil
 	}
 
-	// Determine increment to use (override or default)
+	// Use lift-specific override if provided, otherwise use the default increment.
+	// This enables the upper/lower body increment differentiation pattern.
 	increment := c.Increment
 	if overrideIncrement != nil {
 		if *overrideIncrement <= 0 {
@@ -141,7 +149,6 @@ func (c *CycleProgression) ApplyWithOverride(ctx context.Context, params Progres
 		increment = *overrideIncrement
 	}
 
-	// Apply the progression
 	newValue := params.CurrentValue + increment
 
 	return ProgressionResult{

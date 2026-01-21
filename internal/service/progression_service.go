@@ -120,9 +120,29 @@ func (s *ProgressionService) HandleCycleComplete(ctx context.Context, event *pro
 }
 
 // processProgressions is the core method that processes all applicable progressions for a trigger event.
-// It handles lookup, filtering, idempotency checks, and atomic application.
+// It orchestrates the complete progression evaluation pipeline.
+//
+// The progression system follows this evaluation flow:
+//
+//  1. Enrollment Lookup: Verify the user is enrolled in a program (progression is meaningless without one)
+//  2. Progression Discovery: Fetch all enabled progressions for the user's program
+//  3. Lift Filtering: For session triggers, only consider lifts that were actually performed
+//  4. Per-Progression Evaluation: For each progression-lift combination:
+//     a. Check trigger type compatibility (e.g., don't fire cycle progressions on session complete)
+//     b. Check idempotency (prevent duplicate applications for the same trigger event)
+//     c. Apply progression atomically (fetch current max, calculate new value, persist)
+//  5. Aggregate Results: Return a summary of what was applied, skipped, or errored
+//
+// The liftsFilter parameter serves different purposes depending on trigger type:
+//   - AFTER_SESSION: Only progress lifts that were actually trained (prevents phantom progression)
+//   - AFTER_WEEK/AFTER_CYCLE: Typically nil, meaning progress all configured lifts
+//
+// This design ensures that:
+//   - A squat progression doesn't fire when the user only did bench press
+//   - Progressions are never applied twice for the same trigger event
+//   - Failures in one progression don't prevent others from being processed
 func (s *ProgressionService) processProgressions(ctx context.Context, event *progression.TriggerEventV2, liftsFilter []string) (*AggregateResult, error) {
-	// Get user's enrolled program
+	// User must be enrolled in a program - progressions are always program-specific
 	enrollment, err := s.queries.GetUserProgramStateByUserID(ctx, event.UserID)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -131,12 +151,15 @@ func (s *ProgressionService) processProgressions(ctx context.Context, event *pro
 		return nil, wrapError("failed to get user enrollment", err)
 	}
 
-	// Fetch enabled program progressions ordered by priority
+	// Fetch all enabled progressions for this program, ordered by priority.
+	// Priority ordering ensures consistent application order when multiple
+	// progressions might affect the same lift (though this is typically avoided).
 	programProgressions, err := s.queries.ListEnabledProgramProgressionsByProgram(ctx, enrollment.ProgramID)
 	if err != nil {
 		return nil, wrapError("failed to get program progressions", err)
 	}
 
+	// No progressions configured is a valid state - return empty results, not an error
 	if len(programProgressions) == 0 {
 		return &AggregateResult{
 			TriggerType:  event.Type,
@@ -150,7 +173,7 @@ func (s *ProgressionService) processProgressions(ctx context.Context, event *pro
 		}, nil
 	}
 
-	// Build a set of lifts to filter by (if any)
+	// Build lift filter set for O(1) lookup during per-progression processing
 	liftsFilterSet := make(map[string]bool)
 	if liftsFilter != nil {
 		for _, liftID := range liftsFilter {
@@ -169,7 +192,7 @@ func (s *ProgressionService) processProgressions(ctx context.Context, event *pro
 		TotalErrors:  0,
 	}
 
-	// Process each program progression
+	// Process each progression independently - failures in one don't affect others
 	for _, pp := range programProgressions {
 		triggerResult := s.processSingleProgression(ctx, event, pp, liftsFilter, liftsFilterSet)
 		if triggerResult != nil {

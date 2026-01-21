@@ -83,26 +83,34 @@ func (l *LinearProgression) Validate() error {
 // Apply evaluates and applies the progression given the context.
 // Implements Progression interface.
 //
-// For AFTER_SESSION triggers:
-//   - Verifies the trigger event type matches AFTER_SESSION
-//   - Checks if the lift was performed in the session (if lifts are specified)
-//   - Returns applied=false if trigger type mismatches or lift not in session
+// LinearProgression is the simplest and most common progression scheme in strength training,
+// used by programs designed for novice and early intermediate lifters who can add weight
+// frequently due to rapid neuromuscular adaptation.
 //
-// For AFTER_WEEK triggers:
-//   - Verifies the trigger event type matches AFTER_WEEK
-//   - Applies to all configured lifts regardless of session contents
-//   - Returns applied=false if trigger type mismatches
+// The evaluation logic distinguishes between two trigger modes:
 //
-// Returns ProgressionResult with applied=true and delta=increment on success.
+// AFTER_SESSION triggers (e.g., Starting Strength):
+//   - Progression fires after every training session
+//   - Only applies if the specific lift was actually performed that day
+//   - Enables rapid adaptation: squat goes up 5lb every session it's trained
+//   - Requires lifts performed list to prevent progressing untrained lifts
+//
+// AFTER_WEEK triggers (e.g., Bill Starr 5x5):
+//   - Progression fires once per week, regardless of how many times the lift was trained
+//   - Applies to all configured lifts without checking session contents
+//   - Provides more recovery time between weight increases
+//   - Suitable for intermediate lifters who can't recover fast enough for per-session jumps
+//
+// The method returns applied=false (not an error) when conditions aren't met,
+// allowing the service layer to track which progressions were skipped and why.
 func (l *LinearProgression) Apply(ctx context.Context, params ProgressionContext) (ProgressionResult, error) {
-	// Validate context
 	if err := params.Validate(); err != nil {
 		return ProgressionResult{}, fmt.Errorf("invalid progression context: %w", err)
 	}
 
 	now := time.Now()
 
-	// Check if trigger type matches
+	// Trigger type must match - a session-based progression shouldn't fire on week advance
 	if params.TriggerEvent.Type != l.TriggerTypeValue {
 		return ProgressionResult{
 			Applied:       false,
@@ -116,7 +124,7 @@ func (l *LinearProgression) Apply(ctx context.Context, params ProgressionContext
 		}, nil
 	}
 
-	// Check if max type matches
+	// Max type must match - Training Max progressions don't affect 1RM and vice versa
 	if params.MaxType != l.MaxTypeValue {
 		return ProgressionResult{
 			Applied:       false,
@@ -130,7 +138,9 @@ func (l *LinearProgression) Apply(ctx context.Context, params ProgressionContext
 		}, nil
 	}
 
-	// For AFTER_SESSION triggers, verify the lift was performed in the session
+	// For session-based progressions, only progress lifts that were actually performed.
+	// This prevents scenarios like progressing deadlift weight on a squat day.
+	// If LiftsPerformed is empty, we assume all lifts were performed (backward compat).
 	if l.TriggerTypeValue == TriggerAfterSession {
 		liftsPerformed := params.TriggerEvent.LiftsPerformed
 		if len(liftsPerformed) > 0 {
@@ -156,7 +166,7 @@ func (l *LinearProgression) Apply(ctx context.Context, params ProgressionContext
 		}
 	}
 
-	// Apply the progression
+	// All conditions met - apply the fixed increment
 	newValue := params.CurrentValue + l.Increment
 
 	return ProgressionResult{

@@ -120,7 +120,26 @@ func DefaultGenerationContext(liftLookup prescription.LiftLookup) GenerationCont
 	}
 }
 
-// GenerateWorkout creates a workout from resolved prescriptions.
+// GenerateWorkout transforms abstract program prescriptions into a concrete, user-specific workout.
+//
+// This is the culmination of the workout generation pipeline, combining:
+//   - Program structure (which exercises in what order)
+//   - User state (current week, cycle iteration for periodization context)
+//   - User maxes (for load calculation)
+//   - Lookup tables (for week/day-specific intensity modifications)
+//
+// The generation process resolves each prescription sequentially, maintaining exercise order
+// as defined in the program. Exercise ordering is critical in powerlifting - compound movements
+// (squat, bench, deadlift) typically come first when the lifter is freshest, followed by
+// accessory work.
+//
+// The GenContext carries dependencies through the resolution chain:
+//   - LiftLookup: Provides lift names/slugs for display
+//   - SetGenContext: Configuration like work set threshold (default 80%)
+//   - LookupContext: Week/day-specific modifiers for periodization
+//
+// If any prescription fails to resolve (e.g., missing max value), the entire workout
+// generation fails. This is intentional - partial workouts could lead to imbalanced training.
 func GenerateWorkout(
 	ctx context.Context,
 	userID string,
@@ -137,8 +156,9 @@ func GenerateWorkout(
 
 	exercises := make([]ExerciseInfo, 0, len(prescriptions))
 
+	// Resolve each prescription in order. The order is preserved from the day's prescription
+	// list, which was defined by the program author. This ensures primary lifts come first.
 	for _, p := range prescriptions {
-		// Create resolution context for this prescription
 		resCtx := prescription.ResolutionContext{
 			LiftLookup:    genCtx.LiftLookup,
 			SetGenContext: genCtx.SetGenContext,
@@ -150,7 +170,6 @@ func GenerateWorkout(
 			return nil, fmt.Errorf("failed to resolve prescription %s: %w", p.ID, err)
 		}
 
-		// Convert resolved prescription to exercise info
 		exercise := ExerciseInfo{
 			PrescriptionID: resolved.PrescriptionID,
 			Lift: LiftInfo{

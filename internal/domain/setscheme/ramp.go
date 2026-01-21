@@ -55,18 +55,35 @@ func (r *RampSetScheme) Type() SetSchemeType {
 	return TypeRamp
 }
 
-// GenerateSets generates concrete sets from a base weight.
-// Each generated set has:
-//   - SetNumber: 1 through len(Steps) (1-indexed)
-//   - Weight: baseWeight * (step.Percentage / 100)
-//   - TargetReps: step.Reps value
-//   - IsWorkSet: true if step.Percentage >= WorkSetThreshold
+// GenerateSets generates concrete sets from a base weight, classifying each as warmup or work.
+//
+// RampSetScheme implements the "ramping" warmup pattern common in strength training, where
+// the lifter performs progressively heavier sets leading up to their work weight. This serves
+// multiple purposes:
+//   - Gradual neuromuscular preparation for heavy loads
+//   - Technique practice at submaximal weights
+//   - Core temperature elevation and joint lubrication
+//
+// The WorkSetThreshold (default 80%) determines how sets are classified:
+//   - Sets below threshold: Warmup sets - lighter weight, primarily for preparation
+//   - Sets at/above threshold: Work sets - heavy enough to drive adaptation
+//
+// This classification matters for training volume tracking: only work sets count toward
+// weekly volume totals. A lifter doing 5 ramping sets to 315lb squat isn't doing 5x5;
+// they're doing warmups plus 1-2 work sets.
+//
+// Example ramp for 315lb work weight:
+//   - Step 1: 40% → 126lb (warmup) - just the bar + light plates
+//   - Step 2: 60% → 189lb (warmup) - moderate weight, dial in technique
+//   - Step 3: 75% → 236lb (warmup) - getting heavier, final prep
+//   - Step 4: 85% → 268lb (work set) - crosses threshold, counts toward volume
+//   - Step 5: 100% → 315lb (work set) - top set
 func (r *RampSetScheme) GenerateSets(baseWeight float64, ctx SetGenerationContext) ([]GeneratedSet, error) {
 	if err := r.Validate(); err != nil {
 		return nil, err
 	}
 
-	// Use the scheme's WorkSetThreshold, falling back to default if not set
+	// Use scheme-specific threshold or fall back to default (80%)
 	threshold := r.WorkSetThreshold
 	if threshold <= 0 {
 		threshold = DefaultWorkSetThreshold

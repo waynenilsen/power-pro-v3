@@ -344,18 +344,29 @@ func DefaultResolutionContext(liftLookup LiftLookup) ResolutionContext {
 	}
 }
 
-// Resolve executes the prescription resolution workflow:
-// 1. Looks up the lift information
-// 2. Calls LoadStrategy.CalculateLoad to get base weight
-// 3. Calls SetScheme.GenerateSets with base weight
-// 4. Returns ResolvedPrescription with sets, notes, and rest
+// Resolve executes the prescription resolution workflow, transforming a template prescription
+// into concrete workout instructions with actual weights and reps for a specific user.
+//
+// The resolution workflow implements the core business logic for personalized workout generation:
+//
+//  1. Look up lift information - Provides human-readable names for the workout display
+//  2. Calculate base weight via LoadStrategy - Applies the program's load calculation method
+//     (e.g., 85% of Training Max) using the user's current max values
+//  3. Generate sets via SetScheme - Produces concrete sets with weights and reps based on
+//     the calculated load (e.g., 5x5 at 85% TM, or ramping warmup sets)
+//
+// The separation of LoadStrategy and SetScheme enables flexible program design:
+//   - LoadStrategy handles HOW to calculate target weight (percentage of max, fixed weight, RPE-based)
+//   - SetScheme handles WHAT sets to generate from that weight (fixed sets, ramps, AMRAP, etc.)
+//
+// This decoupling allows mixing and matching strategies to represent diverse powerlifting programs
+// (Starting Strength, 5/3/1, Texas Method, etc.) using the same prescription infrastructure.
 func (p *Prescription) Resolve(ctx context.Context, userID string, resCtx ResolutionContext) (*ResolvedPrescription, error) {
-	// Validate userID
 	if strings.TrimSpace(userID) == "" {
 		return nil, fmt.Errorf("user ID is required for prescription resolution")
 	}
 
-	// Look up lift information
+	// Look up lift information for display purposes (name, slug)
 	var liftInfo LiftInfo
 	if resCtx.LiftLookup != nil {
 		lift, err := resCtx.LiftLookup.GetLiftByID(ctx, p.LiftID)
@@ -371,7 +382,13 @@ func (p *Prescription) Resolve(ctx context.Context, userID string, resCtx Resolu
 		liftInfo = LiftInfo{ID: p.LiftID}
 	}
 
-	// Calculate base weight using load strategy
+	// Calculate base weight using the configured LoadStrategy.
+	// The LoadStrategy encapsulates the program's method for determining target weight:
+	// - PERCENT_OF: Calculate as percentage of user's 1RM or Training Max
+	// - FIXED_WEIGHT: Use a literal weight value (future)
+	// - RPE_TARGET: Calculate based on RPE guidelines (future)
+	// The LookupContext allows weekly/daily modifiers to adjust the percentage dynamically
+	// (e.g., 5/3/1's week 1=65/75/85%, week 2=70/80/90%, week 3=75/85/95%).
 	loadParams := loadstrategy.LoadCalculationParams{
 		UserID:        userID,
 		LiftID:        p.LiftID,
@@ -379,14 +396,18 @@ func (p *Prescription) Resolve(ctx context.Context, userID string, resCtx Resolu
 	}
 	baseWeight, err := p.LoadStrategy.CalculateLoad(ctx, loadParams)
 	if err != nil {
-		// Check if it's a "max not found" error for clearer messaging
 		if errors.Is(err, loadstrategy.ErrMaxNotFound) {
 			return nil, fmt.Errorf("%w: unable to calculate load for lift %s", ErrMaxNotFound, p.LiftID)
 		}
 		return nil, fmt.Errorf("failed to calculate load: %w", err)
 	}
 
-	// Generate sets using set scheme
+	// Generate concrete sets from the calculated base weight.
+	// The SetScheme determines the structure of the workout:
+	// - FIXED: N sets of M reps at the base weight (e.g., 5x5)
+	// - RAMP: Progressive warmup sets leading to work sets (e.g., Bill Starr style)
+	// - AMRAP: As many reps as possible on final set (future)
+	// - TOP_BACKOFF: Heavy top set followed by lighter backoff work (future)
 	sets, err := p.SetScheme.GenerateSets(baseWeight, resCtx.SetGenContext)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate sets: %w", err)

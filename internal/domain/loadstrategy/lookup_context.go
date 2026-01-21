@@ -59,16 +59,31 @@ func (c *LookupContext) GetDailyEntry() *dailylookup.DailyLookupEntry {
 	return c.DailyLookup.GetByDayIdentifier(c.DaySlug)
 }
 
-// ApplyModifiers applies lookup modifiers to a base percentage.
+// ApplyModifiers applies lookup modifiers to a base percentage, enabling programs
+// to vary intensity across weeks and days without changing the underlying prescription.
+//
+// This is a core periodization mechanism used by programs like:
+//   - 5/3/1: Different percentages each week (65/75/85% → 70/80/90% → 75/85/95%)
+//   - Texas Method: Different intensities by day (heavy/light/medium)
+//   - Juggernaut: Different percentages per set within a week
+//
 // The modification order is:
 //  1. Weekly lookup (set-specific percentage or percentage modifier)
 //  2. Daily lookup (percentage modifier)
 //
-// If both lookups have percentage modifiers, they are applied multiplicatively.
-// If a weekly lookup has a percentages array and SetNumber is valid, that specific
-// percentage is used directly (ignoring the base percentage).
+// Two distinct modification modes exist for weekly lookups:
+//   - Set-specific percentages: Used when each set has a different prescribed percentage
+//     (e.g., 5/3/1's "5x65%, 5x75%, 5+x85%"). These REPLACE the base percentage entirely.
+//   - Percentage modifier: A multiplier applied to the base (e.g., deload week at 90%
+//     would use modifier=90, reducing all weights by 10%).
 //
-// Returns the modified percentage.
+// Daily modifiers are always multiplicative, allowing patterns like:
+//   - Monday (Heavy): 100% modifier → full intensity
+//   - Wednesday (Light): 80% modifier → reduced intensity
+//   - Friday (Medium): 90% modifier → moderate intensity
+//
+// When both weekly and daily modifiers apply, they stack multiplicatively.
+// Example: Base 85%, weekly modifier 95%, daily modifier 90% → 85 * 0.95 * 0.90 = 72.675%
 func (c *LookupContext) ApplyModifiers(basePercentage float64) float64 {
 	if c == nil {
 		return basePercentage
@@ -76,27 +91,31 @@ func (c *LookupContext) ApplyModifiers(basePercentage float64) float64 {
 
 	resultPercentage := basePercentage
 
-	// Apply weekly lookup modifications first
+	// Weekly lookup modifications are applied first.
+	// Programs define weekly intensity patterns through either:
+	// 1. Explicit per-set percentages (replaces base entirely) - for programs like 5/3/1
+	// 2. A percentage modifier (multiplies base) - for deload weeks or wave loading
 	weeklyEntry := c.GetWeeklyEntry()
 	if weeklyEntry != nil {
-		// Check if we have set-specific percentages
 		if len(weeklyEntry.Percentages) > 0 && c.SetNumber > 0 {
-			// Use set-specific percentage (1-indexed, so subtract 1)
+			// Set-specific percentage mode: each set has an explicitly defined percentage.
+			// SetNumber is 1-indexed (user-facing), array is 0-indexed, so we subtract 1.
+			// This completely replaces the base percentage rather than modifying it.
 			setIndex := c.SetNumber - 1
 			if setIndex < len(weeklyEntry.Percentages) {
-				// Set-specific percentage overrides the base percentage entirely
 				resultPercentage = weeklyEntry.Percentages[setIndex]
 			}
 		} else if weeklyEntry.PercentageModifier != nil {
-			// Apply percentage modifier as a multiplier
+			// Percentage modifier mode: scale the base percentage.
+			// Modifier is stored as a percentage (e.g., 90 means 90%), so divide by 100.
 			resultPercentage = resultPercentage * (*weeklyEntry.PercentageModifier / 100)
 		}
 	}
 
-	// Apply daily lookup modifications second
+	// Daily lookup modifications are applied second (multiplicatively).
+	// This enables heavy/light/medium day patterns within a training week.
 	dailyEntry := c.GetDailyEntry()
 	if dailyEntry != nil {
-		// Daily lookup's PercentageModifier is always a multiplier
 		if dailyEntry.PercentageModifier != 0 {
 			resultPercentage = resultPercentage * (dailyEntry.PercentageModifier / 100)
 		}
