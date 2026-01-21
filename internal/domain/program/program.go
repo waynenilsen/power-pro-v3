@@ -5,10 +5,10 @@ package program
 
 import (
 	"errors"
-	"fmt"
-	"regexp"
 	"strings"
 	"time"
+
+	"github.com/waynenilsen/power-pro-v3/internal/validation"
 )
 
 // Validation errors
@@ -27,9 +27,6 @@ const MaxNameLength = 100
 
 // MaxSlugLength is the maximum length for a program slug.
 const MaxSlugLength = 100
-
-// slugPattern defines the valid pattern for slugs.
-var slugPattern = regexp.MustCompile(`^[a-z0-9-]+$`)
 
 // Program represents a program domain entity with all business rules.
 type Program struct {
@@ -71,33 +68,12 @@ type LookupReference struct {
 	Name string
 }
 
-// ValidationResult contains the result of validating a program.
-type ValidationResult struct {
-	Valid  bool
-	Errors []error
-}
+// ValidationResult is an alias for the shared validation.Result type.
+type ValidationResult = validation.Result
 
 // NewValidationResult creates a valid result.
 func NewValidationResult() *ValidationResult {
-	return &ValidationResult{Valid: true, Errors: []error{}}
-}
-
-// AddError adds an error to the validation result and marks it invalid.
-func (v *ValidationResult) AddError(err error) {
-	v.Valid = false
-	v.Errors = append(v.Errors, err)
-}
-
-// Error returns a combined error message if there are validation errors.
-func (v *ValidationResult) Error() error {
-	if v.Valid {
-		return nil
-	}
-	var msgs []string
-	for _, err := range v.Errors {
-		msgs = append(msgs, err.Error())
-	}
-	return fmt.Errorf("validation failed: %s", strings.Join(msgs, "; "))
+	return validation.NewResult()
 }
 
 // ValidateName validates the program name according to business rules.
@@ -118,13 +94,19 @@ func ValidateSlug(slug string) error {
 	if strings.TrimSpace(slug) == "" {
 		return ErrSlugRequired
 	}
-	if len(slug) > MaxSlugLength {
-		return ErrSlugTooLong
+	err := validation.ValidateSlug(slug, MaxSlugLength)
+	if err == nil {
+		return nil
 	}
-	if !slugPattern.MatchString(slug) {
+	// Map shared validation errors to package-specific errors for backward compatibility
+	if errors.Is(err, validation.ErrSlugInvalid) {
 		return ErrSlugInvalid
 	}
-	return nil
+	// Check for slug too long error by checking error message prefix
+	if strings.HasPrefix(err.Error(), "slug must be") {
+		return ErrSlugTooLong
+	}
+	return ErrSlugInvalid
 }
 
 // ValidateCycleID validates the cycle_id field.

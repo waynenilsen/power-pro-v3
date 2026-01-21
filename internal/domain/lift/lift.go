@@ -6,24 +6,26 @@ package lift
 import (
 	"errors"
 	"fmt"
-	"regexp"
 	"strings"
 	"time"
+
+	"github.com/waynenilsen/power-pro-v3/internal/validation"
 )
+
+// MaxSlugLength is the maximum allowed length for lift slugs.
+const MaxSlugLength = 100
 
 // Validation errors
 var (
-	ErrNameRequired       = errors.New("lift name is required")
-	ErrNameTooLong        = errors.New("lift name must be 100 characters or less")
-	ErrSlugInvalid        = errors.New("lift slug must contain only lowercase alphanumeric characters and hyphens")
-	ErrSlugEmpty          = errors.New("lift slug cannot be empty")
-	ErrSlugTooLong        = errors.New("lift slug must be 100 characters or less")
-	ErrCircularReference  = errors.New("circular reference detected: lift cannot be its own ancestor")
-	ErrSelfReference      = errors.New("lift cannot reference itself as parent")
+	ErrNameRequired      = errors.New("lift name is required")
+	ErrNameTooLong       = errors.New("lift name must be 100 characters or less")
+	ErrCircularReference = errors.New("circular reference detected: lift cannot be its own ancestor")
+	ErrSelfReference     = errors.New("lift cannot reference itself as parent")
+	// Slug errors delegated to shared validation package
+	ErrSlugEmpty   = validation.ErrSlugEmpty
+	ErrSlugInvalid = validation.ErrSlugInvalid
+	ErrSlugTooLong = validation.SlugTooLongError(MaxSlugLength)
 )
-
-// slugPattern matches valid slugs: lowercase alphanumeric with hyphens
-var slugPattern = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`)
 
 // Lift represents a lift domain entity with all business rules.
 type Lift struct {
@@ -45,33 +47,13 @@ type LiftRepository interface {
 	SlugExists(slug string, excludeID *string) (bool, error)
 }
 
-// ValidationResult contains the result of validating a lift.
-type ValidationResult struct {
-	Valid  bool
-	Errors []error
-}
+// ValidationResult is an alias for the shared validation.Result type.
+// This maintains backward compatibility while using the shared implementation.
+type ValidationResult = validation.Result
 
 // NewValidationResult creates a valid result.
 func NewValidationResult() *ValidationResult {
-	return &ValidationResult{Valid: true, Errors: []error{}}
-}
-
-// AddError adds an error to the validation result and marks it invalid.
-func (v *ValidationResult) AddError(err error) {
-	v.Valid = false
-	v.Errors = append(v.Errors, err)
-}
-
-// Error returns a combined error message if there are validation errors.
-func (v *ValidationResult) Error() error {
-	if v.Valid {
-		return nil
-	}
-	var msgs []string
-	for _, err := range v.Errors {
-		msgs = append(msgs, err.Error())
-	}
-	return fmt.Errorf("validation failed: %s", strings.Join(msgs, "; "))
+	return validation.NewResult()
 }
 
 // ValidateName validates the lift name according to business rules.
@@ -90,61 +72,13 @@ func ValidateName(name string) error {
 // ValidateSlug validates the lift slug according to business rules.
 // Returns an error if validation fails, nil otherwise.
 func ValidateSlug(slug string) error {
-	if slug == "" {
-		return ErrSlugEmpty
-	}
-	if len(slug) > 100 {
-		return ErrSlugTooLong
-	}
-	if !slugPattern.MatchString(slug) {
-		return ErrSlugInvalid
-	}
-	return nil
+	return validation.ValidateSlug(slug, MaxSlugLength)
 }
 
 // GenerateSlug creates a URL-safe slug from a name.
-// It converts to lowercase, replaces spaces and special characters with hyphens,
-// removes consecutive hyphens, and trims leading/trailing hyphens.
+// Delegates to the shared validation.GenerateSlug function.
 func GenerateSlug(name string) string {
-	// Convert to lowercase
-	slug := strings.ToLower(name)
-
-	// Replace spaces and common special characters with hyphens
-	replacer := strings.NewReplacer(
-		" ", "-",
-		"_", "-",
-		".", "-",
-		",", "",
-		"'", "",
-		"\"", "",
-		"(", "",
-		")", "",
-		"[", "",
-		"]", "",
-		"/", "-",
-		"\\", "-",
-		"&", "-",
-	)
-	slug = replacer.Replace(slug)
-
-	// Remove any characters that aren't alphanumeric or hyphens
-	var result strings.Builder
-	for _, r := range slug {
-		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '-' {
-			result.WriteRune(r)
-		}
-	}
-	slug = result.String()
-
-	// Remove consecutive hyphens
-	for strings.Contains(slug, "--") {
-		slug = strings.ReplaceAll(slug, "--", "-")
-	}
-
-	// Trim leading and trailing hyphens
-	slug = strings.Trim(slug, "-")
-
-	return slug
+	return validation.GenerateSlug(name)
 }
 
 // ValidateParentLiftID validates the parent lift reference.

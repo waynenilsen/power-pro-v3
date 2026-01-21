@@ -7,21 +7,26 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"regexp"
 	"strings"
 	"time"
+
+	"github.com/waynenilsen/power-pro-v3/internal/validation"
 )
+
+// MaxSlugLength is the maximum allowed length for day slugs.
+const MaxSlugLength = 50
 
 // Validation errors
 var (
 	ErrNameRequired         = errors.New("day name is required")
 	ErrNameTooLong          = errors.New("day name must be 50 characters or less")
-	ErrSlugInvalid          = errors.New("day slug must contain only lowercase alphanumeric characters and hyphens")
-	ErrSlugEmpty            = errors.New("day slug cannot be empty")
-	ErrSlugTooLong          = errors.New("day slug must be 50 characters or less")
 	ErrMetadataInvalidJSON  = errors.New("day metadata must be valid JSON")
 	ErrOrderNegative        = errors.New("order must be >= 0")
 	ErrPrescriptionNotFound = errors.New("prescription not found in day")
+	// Slug errors delegated to shared validation package
+	ErrSlugEmpty   = validation.ErrSlugEmpty
+	ErrSlugInvalid = validation.ErrSlugInvalid
+	ErrSlugTooLong = validation.SlugTooLongError(MaxSlugLength)
 )
 
 // Metadata keys
@@ -37,8 +42,6 @@ const (
 	IntensityLevelMedium = "MEDIUM"
 )
 
-// slugPattern matches valid slugs: lowercase alphanumeric with hyphens
-var slugPattern = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`)
 
 // Day represents a day domain entity with all business rules.
 type Day struct {
@@ -66,33 +69,12 @@ type DayWithPrescriptions struct {
 	Prescriptions []DayPrescription
 }
 
-// ValidationResult contains the result of validating a day.
-type ValidationResult struct {
-	Valid  bool
-	Errors []error
-}
+// ValidationResult is an alias for the shared validation.Result type.
+type ValidationResult = validation.Result
 
 // NewValidationResult creates a valid result.
 func NewValidationResult() *ValidationResult {
-	return &ValidationResult{Valid: true, Errors: []error{}}
-}
-
-// AddError adds an error to the validation result and marks it invalid.
-func (v *ValidationResult) AddError(err error) {
-	v.Valid = false
-	v.Errors = append(v.Errors, err)
-}
-
-// Error returns a combined error message if there are validation errors.
-func (v *ValidationResult) Error() error {
-	if v.Valid {
-		return nil
-	}
-	var msgs []string
-	for _, err := range v.Errors {
-		msgs = append(msgs, err.Error())
-	}
-	return fmt.Errorf("validation failed: %s", strings.Join(msgs, "; "))
+	return validation.NewResult()
 }
 
 // ValidateName validates the day name according to business rules.
@@ -111,16 +93,7 @@ func ValidateName(name string) error {
 // ValidateSlug validates the day slug according to business rules.
 // Returns an error if validation fails, nil otherwise.
 func ValidateSlug(slug string) error {
-	if slug == "" {
-		return ErrSlugEmpty
-	}
-	if len(slug) > 50 {
-		return ErrSlugTooLong
-	}
-	if !slugPattern.MatchString(slug) {
-		return ErrSlugInvalid
-	}
-	return nil
+	return validation.ValidateSlug(slug, MaxSlugLength)
 }
 
 // ValidateMetadata validates the day metadata.
@@ -147,48 +120,9 @@ func ValidateOrder(order int) error {
 }
 
 // GenerateSlug creates a URL-safe slug from a name.
-// It converts to lowercase, replaces spaces and special characters with hyphens,
-// removes consecutive hyphens, and trims leading/trailing hyphens.
+// Delegates to the shared validation.GenerateSlug function.
 func GenerateSlug(name string) string {
-	// Convert to lowercase
-	slug := strings.ToLower(name)
-
-	// Replace spaces and common special characters with hyphens
-	replacer := strings.NewReplacer(
-		" ", "-",
-		"_", "-",
-		".", "-",
-		",", "",
-		"'", "",
-		"\"", "",
-		"(", "",
-		")", "",
-		"[", "",
-		"]", "",
-		"/", "-",
-		"\\", "-",
-		"&", "-",
-	)
-	slug = replacer.Replace(slug)
-
-	// Remove any characters that aren't alphanumeric or hyphens
-	var result strings.Builder
-	for _, r := range slug {
-		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '-' {
-			result.WriteRune(r)
-		}
-	}
-	slug = result.String()
-
-	// Remove consecutive hyphens
-	for strings.Contains(slug, "--") {
-		slug = strings.ReplaceAll(slug, "--", "-")
-	}
-
-	// Trim leading and trailing hyphens
-	slug = strings.Trim(slug, "-")
-
-	return slug
+	return validation.GenerateSlug(name)
 }
 
 // CreateDayInput contains the input data for creating a new day.

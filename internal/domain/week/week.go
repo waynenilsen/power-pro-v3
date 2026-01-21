@@ -5,9 +5,10 @@ package week
 
 import (
 	"errors"
-	"fmt"
 	"strings"
 	"time"
+
+	"github.com/waynenilsen/power-pro-v3/internal/validation"
 )
 
 // Validation errors
@@ -73,33 +74,12 @@ type WeekWithDays struct {
 	Days []WeekDay
 }
 
-// ValidationResult contains the result of validating a week.
-type ValidationResult struct {
-	Valid  bool
-	Errors []error
-}
+// ValidationResult is an alias for the shared validation.Result type.
+type ValidationResult = validation.Result
 
 // NewValidationResult creates a valid result.
 func NewValidationResult() *ValidationResult {
-	return &ValidationResult{Valid: true, Errors: []error{}}
-}
-
-// AddError adds an error to the validation result and marks it invalid.
-func (v *ValidationResult) AddError(err error) {
-	v.Valid = false
-	v.Errors = append(v.Errors, err)
-}
-
-// Error returns a combined error message if there are validation errors.
-func (v *ValidationResult) Error() error {
-	if v.Valid {
-		return nil
-	}
-	var msgs []string
-	for _, err := range v.Errors {
-		msgs = append(msgs, err.Error())
-	}
-	return fmt.Errorf("validation failed: %s", strings.Join(msgs, "; "))
+	return validation.NewResult()
 }
 
 // ValidateWeekNumber validates the week number according to business rules.

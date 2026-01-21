@@ -9,6 +9,8 @@ import (
 	"math"
 	"strings"
 	"time"
+
+	"github.com/waynenilsen/power-pro-v3/internal/validation"
 )
 
 // MaxType represents the type of max (1RM or Training Max)
@@ -61,44 +63,13 @@ type LiftMaxRepository interface {
 	GetCurrentOneRM(userID, liftID string) (*LiftMax, error)
 }
 
-// ValidationResult contains the result of validating a lift max.
-type ValidationResult struct {
-	Valid    bool
-	Errors   []error
-	Warnings []string
-}
+// ValidationResult is an alias for the shared validation.Result type.
+// This includes support for warnings used during TM validation.
+type ValidationResult = validation.Result
 
 // NewValidationResult creates a valid result.
 func NewValidationResult() *ValidationResult {
-	return &ValidationResult{Valid: true, Errors: []error{}, Warnings: []string{}}
-}
-
-// AddError adds an error to the validation result and marks it invalid.
-func (v *ValidationResult) AddError(err error) {
-	v.Valid = false
-	v.Errors = append(v.Errors, err)
-}
-
-// AddWarning adds a warning to the validation result without marking it invalid.
-func (v *ValidationResult) AddWarning(warning string) {
-	v.Warnings = append(v.Warnings, warning)
-}
-
-// HasWarnings returns true if there are any warnings.
-func (v *ValidationResult) HasWarnings() bool {
-	return len(v.Warnings) > 0
-}
-
-// Error returns a combined error message if there are validation errors.
-func (v *ValidationResult) Error() error {
-	if v.Valid {
-		return nil
-	}
-	var msgs []string
-	for _, err := range v.Errors {
-		msgs = append(msgs, err.Error())
-	}
-	return fmt.Errorf("validation failed: %s", strings.Join(msgs, "; "))
+	return validation.NewResult()
 }
 
 // ValidateValue validates the lift max value according to business rules.
