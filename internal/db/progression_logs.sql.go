@@ -37,6 +37,18 @@ func (q *Queries) CheckIdempotency(ctx context.Context, arg CheckIdempotencyPara
 	return already_applied, err
 }
 
+const countProgressionHistoryBase = `-- name: CountProgressionHistoryBase :one
+SELECT COUNT(*) FROM progression_logs pl
+WHERE pl.user_id = ?
+`
+
+func (q *Queries) CountProgressionHistoryBase(ctx context.Context, userID string) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countProgressionHistoryBase, userID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countProgressionLogsByUser = `-- name: CountProgressionLogsByUser :one
 SELECT COUNT(*) FROM progression_logs WHERE user_id = ?
 `
@@ -129,6 +141,88 @@ func (q *Queries) GetProgressionLog(ctx context.Context, id string) (Progression
 		&i.AppliedAt,
 	)
 	return i, err
+}
+
+const listProgressionHistoryBase = `-- name: ListProgressionHistoryBase :many
+SELECT
+    pl.id,
+    pl.user_id,
+    pl.progression_id,
+    pl.lift_id,
+    pl.previous_value,
+    pl.new_value,
+    pl.delta,
+    pl.trigger_type,
+    pl.trigger_context,
+    pl.applied_at,
+    p.name AS progression_name,
+    p.type AS progression_type,
+    l.name AS lift_name
+FROM progression_logs pl
+JOIN progressions p ON pl.progression_id = p.id
+JOIN lifts l ON pl.lift_id = l.id
+WHERE pl.user_id = ?
+ORDER BY pl.applied_at DESC
+LIMIT ? OFFSET ?
+`
+
+type ListProgressionHistoryBaseParams struct {
+	UserID string `json:"user_id"`
+	Limit  int64  `json:"limit"`
+	Offset int64  `json:"offset"`
+}
+
+type ListProgressionHistoryBaseRow struct {
+	ID              string  `json:"id"`
+	UserID          string  `json:"user_id"`
+	ProgressionID   string  `json:"progression_id"`
+	LiftID          string  `json:"lift_id"`
+	PreviousValue   float64 `json:"previous_value"`
+	NewValue        float64 `json:"new_value"`
+	Delta           float64 `json:"delta"`
+	TriggerType     string  `json:"trigger_type"`
+	TriggerContext  string  `json:"trigger_context"`
+	AppliedAt       string  `json:"applied_at"`
+	ProgressionName string  `json:"progression_name"`
+	ProgressionType string  `json:"progression_type"`
+	LiftName        string  `json:"lift_name"`
+}
+
+func (q *Queries) ListProgressionHistoryBase(ctx context.Context, arg ListProgressionHistoryBaseParams) ([]ListProgressionHistoryBaseRow, error) {
+	rows, err := q.db.QueryContext(ctx, listProgressionHistoryBase, arg.UserID, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListProgressionHistoryBaseRow{}
+	for rows.Next() {
+		var i ListProgressionHistoryBaseRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.ProgressionID,
+			&i.LiftID,
+			&i.PreviousValue,
+			&i.NewValue,
+			&i.Delta,
+			&i.TriggerType,
+			&i.TriggerContext,
+			&i.AppliedAt,
+			&i.ProgressionName,
+			&i.ProgressionType,
+			&i.LiftName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listProgressionLogsByUser = `-- name: ListProgressionLogsByUser :many

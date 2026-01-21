@@ -37,10 +37,11 @@ type Server struct {
 	programRepo          *repository.ProgramRepository
 	userProgramStateRepo *repository.UserProgramStateRepository
 	workoutRepo          *repository.WorkoutRepository
-	progressionRepo        *repository.ProgressionRepository
-	programProgressionRepo *repository.ProgramProgressionRepository
-	strategyFactory        *loadstrategy.StrategyFactory
-	schemeFactory          *setscheme.SchemeFactory
+	progressionRepo            *repository.ProgressionRepository
+	programProgressionRepo     *repository.ProgramProgressionRepository
+	progressionHistoryRepo     *repository.ProgressionHistoryRepository
+	strategyFactory            *loadstrategy.StrategyFactory
+	schemeFactory              *setscheme.SchemeFactory
 }
 
 // New creates a new Server instance.
@@ -67,6 +68,7 @@ func New(cfg Config) *Server {
 	workoutRepo := repository.NewWorkoutRepository(cfg.DB, strategyFactory, schemeFactory)
 	progressionRepo := repository.NewProgressionRepository(cfg.DB)
 	programProgressionRepo := repository.NewProgramProgressionRepository(cfg.DB)
+	progressionHistoryRepo := repository.NewProgressionHistoryRepository(cfg.DB)
 
 	s := &Server{
 		config:               cfg,
@@ -80,11 +82,12 @@ func New(cfg Config) *Server {
 		dailyLookupRepo:      dailyLookupRepo,
 		programRepo:          programRepo,
 		userProgramStateRepo: userProgramStateRepo,
-		workoutRepo:            workoutRepo,
-		progressionRepo:        progressionRepo,
-		programProgressionRepo: programProgressionRepo,
-		strategyFactory:        strategyFactory,
-		schemeFactory:          schemeFactory,
+		workoutRepo:                workoutRepo,
+		progressionRepo:            progressionRepo,
+		programProgressionRepo:     programProgressionRepo,
+		progressionHistoryRepo:     progressionHistoryRepo,
+		strategyFactory:            strategyFactory,
+		schemeFactory:              schemeFactory,
 	}
 
 	mux := http.NewServeMux()
@@ -288,6 +291,13 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	workoutHandler := api.NewWorkoutHandler(s.workoutRepo, s.config.DB)
 	mux.Handle("GET /users/{userId}/workout", withAuth(workoutHandler.Generate))
 	mux.Handle("GET /users/{userId}/workout/preview", withAuth(workoutHandler.Preview))
+
+	// Progression History routes:
+	// - Users can query their own progression history
+	// - Admins can query any user's progression history
+	// - Handler performs its own authorization check
+	progressionHistoryHandler := api.NewProgressionHistoryHandler(s.progressionHistoryRepo)
+	mux.Handle("GET /users/{userId}/progression-history", withAuth(progressionHistoryHandler.List))
 }
 
 // Start starts the HTTP server.
