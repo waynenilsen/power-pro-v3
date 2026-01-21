@@ -27,6 +27,7 @@ type Querier interface {
 	CountPrescriptions(ctx context.Context) (int64, error)
 	CountPrescriptionsFilterLift(ctx context.Context, liftID string) (int64, error)
 	CountProgramProgressionsByProgram(ctx context.Context, programID string) (int64, error)
+	CountProgramProgressionsByProgression(ctx context.Context, progressionID string) (int64, error)
 	CountPrograms(ctx context.Context) (int64, error)
 	CountProgressionLogsByUser(ctx context.Context, userID string) (int64, error)
 	CountProgressionLogsByUserAndLift(ctx context.Context, arg CountProgressionLogsByUserAndLiftParams) (int64, error)

@@ -21,6 +21,17 @@ func (q *Queries) CountProgramProgressionsByProgram(ctx context.Context, program
 	return count, err
 }
 
+const countProgramProgressionsByProgression = `-- name: CountProgramProgressionsByProgression :one
+SELECT COUNT(*) FROM program_progressions WHERE progression_id = ?
+`
+
+func (q *Queries) CountProgramProgressionsByProgression(ctx context.Context, progressionID string) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countProgramProgressionsByProgression, progressionID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createProgramProgression = `-- name: CreateProgramProgression :exec
 INSERT INTO program_progressions (id, program_id, progression_id, lift_id, priority, enabled, override_increment, created_at, updated_at)
 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)

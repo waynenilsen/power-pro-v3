@@ -37,6 +37,7 @@ type Server struct {
 	programRepo          *repository.ProgramRepository
 	userProgramStateRepo *repository.UserProgramStateRepository
 	workoutRepo          *repository.WorkoutRepository
+	progressionRepo      *repository.ProgressionRepository
 	strategyFactory      *loadstrategy.StrategyFactory
 	schemeFactory        *setscheme.SchemeFactory
 }
@@ -63,6 +64,7 @@ func New(cfg Config) *Server {
 	programRepo := repository.NewProgramRepository(cfg.DB)
 	userProgramStateRepo := repository.NewUserProgramStateRepository(cfg.DB)
 	workoutRepo := repository.NewWorkoutRepository(cfg.DB, strategyFactory, schemeFactory)
+	progressionRepo := repository.NewProgressionRepository(cfg.DB)
 
 	s := &Server{
 		config:               cfg,
@@ -77,6 +79,7 @@ func New(cfg Config) *Server {
 		programRepo:          programRepo,
 		userProgramStateRepo: userProgramStateRepo,
 		workoutRepo:          workoutRepo,
+		progressionRepo:      progressionRepo,
 		strategyFactory:      strategyFactory,
 		schemeFactory:        schemeFactory,
 	}
@@ -241,6 +244,16 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	mux.Handle("POST /programs", withAdmin(programHandler.Create))
 	mux.Handle("PUT /programs/{id}", withAdmin(programHandler.Update))
 	mux.Handle("DELETE /programs/{id}", withAdmin(programHandler.Delete))
+
+	// Progression routes:
+	// - All authenticated users can read progression data
+	// - Only admins can create/update/delete progressions
+	progressionHandler := api.NewProgressionHandler(s.progressionRepo)
+	mux.Handle("GET /progressions", withAuth(progressionHandler.List))
+	mux.Handle("GET /progressions/{id}", withAuth(progressionHandler.Get))
+	mux.Handle("POST /progressions", withAdmin(progressionHandler.Create))
+	mux.Handle("PUT /progressions/{id}", withAdmin(progressionHandler.Update))
+	mux.Handle("DELETE /progressions/{id}", withAdmin(progressionHandler.Delete))
 
 	// User Program Enrollment routes:
 	// - Users can manage their own enrollment (enroll, view, unenroll)

@@ -38,3 +38,6 @@ DELETE FROM program_progressions WHERE program_id = ?;
 
 -- name: CountProgramProgressionsByProgram :one
 SELECT COUNT(*) FROM program_progressions WHERE program_id = ?;
+
+-- name: CountProgramProgressionsByProgression :one
+SELECT COUNT(*) FROM program_progressions WHERE progression_id = ?;
