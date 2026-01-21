@@ -10,12 +10,12 @@ Audit unit test coverage for domain logic and fill gaps to achieve >90% coverage
 This is a MUST-priority requirement. The domain packages contain critical business logic that must be thoroughly tested to support future development with confidence.
 
 ## Acceptance Criteria
-- [ ] Generate coverage report for all domain packages
-- [ ] Identify coverage gaps in domain logic
-- [ ] Write unit tests to fill coverage gaps
-- [ ] Coverage report shows >90% for domain packages
-- [ ] Critical paths are tested (prescription resolution, workout generation, progression)
-- [ ] All tests pass consistently
+- [x] Generate coverage report for all domain packages
+- [x] Identify coverage gaps in domain logic
+- [x] Write unit tests to fill coverage gaps
+- [x] Coverage report shows >90% for domain packages
+- [x] Critical paths are tested (prescription resolution, workout generation, progression)
+- [x] All tests pass consistently
 
 ## Technical Notes
 - Use `go test -coverprofile` to generate coverage reports

@@ -1001,4 +1001,259 @@ func TestTriggerContext_Interface(t *testing.T) {
 	var _ TriggerContext = SessionTriggerContext{}
 	var _ TriggerContext = WeekTriggerContext{}
 	var _ TriggerContext = CycleTriggerContext{}
+	var _ TriggerContext = ManualTriggerContext{}
+}
+
+// TestManualTriggerContext_TriggerType tests ManualTriggerContext returns correct type.
+func TestManualTriggerContext_TriggerType(t *testing.T) {
+	tests := []struct {
+		name            string
+		innerType       TriggerType
+		expectedTrigger TriggerType
+	}{
+		{
+			name:            "session trigger type",
+			innerType:       TriggerAfterSession,
+			expectedTrigger: TriggerAfterSession,
+		},
+		{
+			name:            "week trigger type",
+			innerType:       TriggerAfterWeek,
+			expectedTrigger: TriggerAfterWeek,
+		},
+		{
+			name:            "cycle trigger type",
+			innerType:       TriggerAfterCycle,
+			expectedTrigger: TriggerAfterCycle,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := ManualTriggerContext{
+				InnerTriggerType: tt.innerType,
+			}
+			if ctx.TriggerType() != tt.expectedTrigger {
+				t.Errorf("expected %s, got %s", tt.expectedTrigger, ctx.TriggerType())
+			}
+		})
+	}
+}
+
+// TestManualTriggerContext_Validate tests ManualTriggerContext validation.
+func TestManualTriggerContext_Validate(t *testing.T) {
+	// ManualTriggerContext.Validate() always returns nil as it's system-synthesized
+	tests := []struct {
+		name string
+		ctx  ManualTriggerContext
+	}{
+		{
+			name: "empty context",
+			ctx:  ManualTriggerContext{},
+		},
+		{
+			name: "full context",
+			ctx: ManualTriggerContext{
+				Manual:           true,
+				Force:            true,
+				LiftID:           "lift-123",
+				InnerTriggerType: TriggerAfterSession,
+			},
+		},
+		{
+			name: "context without underlying",
+			ctx: ManualTriggerContext{
+				Manual:           true,
+				Force:            false,
+				InnerTriggerType: TriggerAfterCycle,
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.ctx.Validate()
+			if err != nil {
+				t.Errorf("expected nil error, got %v", err)
+			}
+		})
+	}
+}
+
+// TestManualTriggerContext_MarshalJSON tests ManualTriggerContext JSON serialization.
+func TestManualTriggerContext_MarshalJSON(t *testing.T) {
+	underlyingCtx := SessionTriggerContext{
+		SessionID:      "session-123",
+		DaySlug:        "day-a",
+		WeekNumber:     1,
+		LiftsPerformed: []string{"lift-1"},
+	}
+
+	ctx := ManualTriggerContext{
+		Manual:            true,
+		Force:             true,
+		LiftID:            "lift-456",
+		UnderlyingContext: underlyingCtx,
+		InnerTriggerType:  TriggerAfterSession,
+	}
+
+	data, err := ctx.MarshalJSON()
+	if err != nil {
+		t.Fatalf("MarshalJSON failed: %v", err)
+	}
+
+	// Verify JSON structure
+	var parsed map[string]interface{}
+	if err := json.Unmarshal(data, &parsed); err != nil {
+		t.Fatalf("failed to parse JSON: %v", err)
+	}
+
+	if parsed["manual"] != true {
+		t.Errorf("expected manual=true, got %v", parsed["manual"])
+	}
+	if parsed["force"] != true {
+		t.Errorf("expected force=true, got %v", parsed["force"])
+	}
+	if parsed["liftId"] != "lift-456" {
+		t.Errorf("expected liftId='lift-456', got %v", parsed["liftId"])
+	}
+	if parsed["triggerType"] != string(TriggerAfterSession) {
+		t.Errorf("expected triggerType='%s', got %v", TriggerAfterSession, parsed["triggerType"])
+	}
+	if _, ok := parsed["context"]; !ok {
+		t.Error("expected 'context' field to be present")
+	}
+}
+
+// TestManualTriggerContext_MarshalJSON_NilUnderlying tests with nil underlying context.
+func TestManualTriggerContext_MarshalJSON_NilUnderlying(t *testing.T) {
+	ctx := ManualTriggerContext{
+		Manual:            true,
+		Force:             false,
+		LiftID:            "",
+		UnderlyingContext: nil,
+		InnerTriggerType:  TriggerAfterCycle,
+	}
+
+	data, err := ctx.MarshalJSON()
+	if err != nil {
+		t.Fatalf("MarshalJSON failed: %v", err)
+	}
+
+	// Verify JSON structure
+	var parsed map[string]interface{}
+	if err := json.Unmarshal(data, &parsed); err != nil {
+		t.Fatalf("failed to parse JSON: %v", err)
+	}
+
+	if parsed["manual"] != true {
+		t.Errorf("expected manual=true, got %v", parsed["manual"])
+	}
+	if parsed["force"] != false {
+		t.Errorf("expected force=false, got %v", parsed["force"])
+	}
+}
+
+// TestNewManualTriggerContext tests the factory function.
+func TestNewManualTriggerContext(t *testing.T) {
+	underlyingCtx := SessionTriggerContext{
+		SessionID:      "session-123",
+		DaySlug:        "day-a",
+		WeekNumber:     1,
+		LiftsPerformed: []string{"lift-1"},
+	}
+
+	t.Run("with force=true", func(t *testing.T) {
+		ctx := NewManualTriggerContext(underlyingCtx, "lift-456", true)
+
+		if ctx == nil {
+			t.Fatal("expected non-nil context")
+		}
+		if !ctx.Manual {
+			t.Error("expected Manual=true")
+		}
+		if !ctx.Force {
+			t.Error("expected Force=true")
+		}
+		if ctx.LiftID != "lift-456" {
+			t.Errorf("expected LiftID='lift-456', got %q", ctx.LiftID)
+		}
+		if ctx.InnerTriggerType != TriggerAfterSession {
+			t.Errorf("expected InnerTriggerType=%s, got %s", TriggerAfterSession, ctx.InnerTriggerType)
+		}
+		if ctx.TriggerType() != TriggerAfterSession {
+			t.Errorf("expected TriggerType()=%s, got %s", TriggerAfterSession, ctx.TriggerType())
+		}
+	})
+
+	t.Run("with force=false", func(t *testing.T) {
+		ctx := NewManualTriggerContext(underlyingCtx, "", false)
+
+		if ctx == nil {
+			t.Fatal("expected non-nil context")
+		}
+		if !ctx.Manual {
+			t.Error("expected Manual=true")
+		}
+		if ctx.Force {
+			t.Error("expected Force=false")
+		}
+		if ctx.LiftID != "" {
+			t.Errorf("expected empty LiftID, got %q", ctx.LiftID)
+		}
+	})
+
+	t.Run("with week trigger context", func(t *testing.T) {
+		weekCtx := WeekTriggerContext{
+			PreviousWeek:   1,
+			NewWeek:        2,
+			CycleIteration: 1,
+		}
+		ctx := NewManualTriggerContext(weekCtx, "lift-789", false)
+
+		if ctx.TriggerType() != TriggerAfterWeek {
+			t.Errorf("expected TriggerType()=%s, got %s", TriggerAfterWeek, ctx.TriggerType())
+		}
+		if ctx.InnerTriggerType != TriggerAfterWeek {
+			t.Errorf("expected InnerTriggerType=%s, got %s", TriggerAfterWeek, ctx.InnerTriggerType)
+		}
+	})
+
+	t.Run("with cycle trigger context", func(t *testing.T) {
+		cycleCtx := CycleTriggerContext{
+			CompletedCycle: 1,
+			NewCycle:       2,
+			TotalWeeks:     4,
+		}
+		ctx := NewManualTriggerContext(cycleCtx, "", true)
+
+		if ctx.TriggerType() != TriggerAfterCycle {
+			t.Errorf("expected TriggerType()=%s, got %s", TriggerAfterCycle, ctx.TriggerType())
+		}
+	})
+}
+
+// TestTriggerEventV2_MarshalJSON_WithNilContext tests edge case.
+func TestTriggerEventV2_MarshalJSON_WithNilContext(t *testing.T) {
+	event := TriggerEventV2{
+		Type:      TriggerAfterSession,
+		UserID:    "user-123",
+		Timestamp: time.Now(),
+		Context:   nil,
+	}
+
+	data, err := json.Marshal(event)
+	if err != nil {
+		t.Fatalf("MarshalJSON failed: %v", err)
+	}
+
+	// Should serialize without context field
+	var parsed map[string]interface{}
+	if err := json.Unmarshal(data, &parsed); err != nil {
+		t.Fatalf("failed to parse JSON: %v", err)
+	}
+
+	if parsed["type"] != string(TriggerAfterSession) {
+		t.Errorf("expected type=%s, got %v", TriggerAfterSession, parsed["type"])
+	}
 }

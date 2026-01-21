@@ -436,6 +436,58 @@ func TestUpdateWeek_NoChanges(t *testing.T) {
 	}
 }
 
+func TestUpdateWeek_InvalidVariant(t *testing.T) {
+	variant := "A"
+	week := &Week{ID: "test-id", WeekNumber: 1, Variant: &variant, CycleID: "cycle-123"}
+	originalVariant := week.Variant
+
+	invalidVariant := "C" // Invalid variant
+	input := UpdateWeekInput{Variant: &invalidVariant}
+
+	result := UpdateWeek(week, input)
+
+	if result.Valid {
+		t.Error("UpdateWeek with invalid variant returned valid result")
+	}
+	if week.Variant != originalVariant {
+		t.Errorf("week.Variant was changed despite validation failure")
+	}
+}
+
+func TestUpdateWeek_InvalidCycleID(t *testing.T) {
+	week := &Week{ID: "test-id", WeekNumber: 1, CycleID: "cycle-123"}
+	originalCycleID := week.CycleID
+
+	emptyCycleID := ""
+	input := UpdateWeekInput{CycleID: &emptyCycleID}
+
+	result := UpdateWeek(week, input)
+
+	if result.Valid {
+		t.Error("UpdateWeek with invalid cycle ID returned valid result")
+	}
+	if week.CycleID != originalCycleID {
+		t.Errorf("week.CycleID was changed despite validation failure")
+	}
+}
+
+func TestUpdateWeek_EmptyVariantBecomesNil(t *testing.T) {
+	variant := "A"
+	week := &Week{ID: "test-id", WeekNumber: 1, Variant: &variant, CycleID: "cycle-123"}
+
+	emptyVariant := ""
+	input := UpdateWeekInput{Variant: &emptyVariant}
+
+	result := UpdateWeek(week, input)
+
+	if !result.Valid {
+		t.Errorf("UpdateWeek returned invalid result: %v", result.Errors)
+	}
+	if week.Variant != nil {
+		t.Errorf("week.Variant = %v, want nil (empty string normalized to nil)", week.Variant)
+	}
+}
+
 // ==================== Week.Validate Tests ====================
 
 func TestWeek_Validate_Valid(t *testing.T) {
@@ -477,6 +529,41 @@ func TestWeek_Validate_InvalidCycleID(t *testing.T) {
 
 	if result.Valid {
 		t.Error("Validate returned valid result for week with empty cycle ID")
+	}
+}
+
+func TestWeek_Validate_InvalidVariant(t *testing.T) {
+	invalidVariant := "C"
+	week := &Week{
+		ID:         "test-id",
+		WeekNumber: 1,
+		CycleID:    "cycle-123",
+		Variant:    &invalidVariant,
+	}
+
+	result := week.Validate()
+
+	if result.Valid {
+		t.Error("Validate returned valid result for week with invalid variant")
+	}
+}
+
+func TestWeek_Validate_MultipleErrors(t *testing.T) {
+	invalidVariant := "invalid"
+	week := &Week{
+		ID:         "test-id",
+		WeekNumber: 0,
+		CycleID:    "",
+		Variant:    &invalidVariant,
+	}
+
+	result := week.Validate()
+
+	if result.Valid {
+		t.Error("Validate returned valid result for week with multiple errors")
+	}
+	if len(result.Errors) < 2 {
+		t.Errorf("Expected at least 2 errors, got %d", len(result.Errors))
 	}
 }
 

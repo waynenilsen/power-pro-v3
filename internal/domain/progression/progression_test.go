@@ -1174,3 +1174,81 @@ func TestProgressionResult_JSON(t *testing.T) {
 func intPtr(i int) *int {
 	return &i
 }
+
+// TestProgressionEnvelope_MarshalJSON tests ProgressionEnvelope.MarshalJSON.
+func TestProgressionEnvelope_MarshalJSON(t *testing.T) {
+	tests := []struct {
+		name     string
+		envelope ProgressionEnvelope
+		wantType ProgressionType
+	}{
+		{
+			name: "LINEAR_PROGRESSION type",
+			envelope: ProgressionEnvelope{
+				Type: TypeLinear,
+			},
+			wantType: TypeLinear,
+		},
+		{
+			name: "CYCLE_PROGRESSION type",
+			envelope: ProgressionEnvelope{
+				Type: TypeCycle,
+			},
+			wantType: TypeCycle,
+		},
+		{
+			name: "empty type",
+			envelope: ProgressionEnvelope{
+				Type: "",
+			},
+			wantType: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			data, err := tt.envelope.MarshalJSON()
+			if err != nil {
+				t.Fatalf("MarshalJSON failed: %v", err)
+			}
+
+			// Verify JSON structure
+			var parsed map[string]interface{}
+			if err := json.Unmarshal(data, &parsed); err != nil {
+				t.Fatalf("failed to parse JSON: %v", err)
+			}
+
+			typeVal, ok := parsed["type"]
+			if !ok {
+				t.Error("expected 'type' field in JSON")
+			}
+			if typeVal != string(tt.wantType) {
+				t.Errorf("expected type %q, got %v", tt.wantType, typeVal)
+			}
+		})
+	}
+}
+
+// TestProgressionEnvelope_MarshalJSON_Roundtrip tests marshal/unmarshal roundtrip.
+func TestProgressionEnvelope_MarshalJSON_Roundtrip(t *testing.T) {
+	original := ProgressionEnvelope{
+		Type: TypeLinear,
+	}
+
+	// Marshal
+	data, err := original.MarshalJSON()
+	if err != nil {
+		t.Fatalf("MarshalJSON failed: %v", err)
+	}
+
+	// Unmarshal
+	var restored ProgressionEnvelope
+	if err := restored.UnmarshalJSON(data); err != nil {
+		t.Fatalf("UnmarshalJSON failed: %v", err)
+	}
+
+	// Verify
+	if restored.Type != original.Type {
+		t.Errorf("Type mismatch: expected %s, got %s", original.Type, restored.Type)
+	}
+}

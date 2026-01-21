@@ -567,3 +567,81 @@ func TestStrategyFactory_OverwriteRegistration(t *testing.T) {
 		t.Errorf("expected value 200 from second registration, got %f", value)
 	}
 }
+
+// TestStrategyEnvelope_MarshalJSON tests StrategyEnvelope.MarshalJSON.
+func TestStrategyEnvelope_MarshalJSON(t *testing.T) {
+	tests := []struct {
+		name     string
+		envelope StrategyEnvelope
+		wantType LoadStrategyType
+	}{
+		{
+			name: "PERCENT_OF type",
+			envelope: StrategyEnvelope{
+				Type: TypePercentOf,
+			},
+			wantType: TypePercentOf,
+		},
+		{
+			name: "RPE_TARGET type",
+			envelope: StrategyEnvelope{
+				Type: TypeRPETarget,
+			},
+			wantType: TypeRPETarget,
+		},
+		{
+			name: "empty type",
+			envelope: StrategyEnvelope{
+				Type: "",
+			},
+			wantType: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			data, err := tt.envelope.MarshalJSON()
+			if err != nil {
+				t.Fatalf("MarshalJSON failed: %v", err)
+			}
+
+			// Verify JSON structure
+			var parsed map[string]interface{}
+			if err := json.Unmarshal(data, &parsed); err != nil {
+				t.Fatalf("failed to parse JSON: %v", err)
+			}
+
+			typeVal, ok := parsed["type"]
+			if !ok {
+				t.Error("expected 'type' field in JSON")
+			}
+			if typeVal != string(tt.wantType) {
+				t.Errorf("expected type %q, got %v", tt.wantType, typeVal)
+			}
+		})
+	}
+}
+
+// TestStrategyEnvelope_MarshalJSON_Roundtrip tests marshal/unmarshal roundtrip.
+func TestStrategyEnvelope_MarshalJSON_Roundtrip(t *testing.T) {
+	original := StrategyEnvelope{
+		Type: TypePercentOf,
+	}
+
+	// Marshal
+	data, err := original.MarshalJSON()
+	if err != nil {
+		t.Fatalf("MarshalJSON failed: %v", err)
+	}
+
+	// Unmarshal
+	var restored StrategyEnvelope
+	if err := restored.UnmarshalJSON(data); err != nil {
+		t.Fatalf("UnmarshalJSON failed: %v", err)
+	}
+
+	// Verify
+	if restored.Type != original.Type {
+		t.Errorf("Type mismatch: expected %s, got %s", original.Type, restored.Type)
+	}
+}
