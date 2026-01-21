@@ -14,6 +14,10 @@ Copy-paste ready example requests for all endpoints are available at [`docs/exam
 
 Complete example responses for all endpoints are available at [`docs/example-responses.md`](./example-responses.md). This includes success responses, common error responses, and pagination format details.
 
+## Error Documentation
+
+Comprehensive error handling documentation is available at [`docs/errors.md`](./errors.md). This includes all HTTP status codes, error response formats, common error scenarios, and error handling best practices.
+
 ## Base URL
 
 ```
