@@ -18,6 +18,14 @@ Complete example responses for all endpoints are available at [`docs/example-res
 
 Comprehensive error handling documentation is available at [`docs/errors.md`](./errors.md). This includes all HTTP status codes, error response formats, common error scenarios, and error handling best practices.
 
+## Workflow Documentation
+
+Common multi-step API workflows are documented at [`docs/workflows.md`](./workflows.md). This includes:
+- User onboarding workflow
+- Program enrollment workflow
+- Workout generation workflow
+- Progression trigger workflow
+
 ## Base URL
 
 ```
