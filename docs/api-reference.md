@@ -10,6 +10,10 @@ An OpenAPI 3.0 specification is available at [`docs/openapi.yaml`](./openapi.yam
 
 Copy-paste ready example requests for all endpoints are available at [`docs/example-requests.md`](./example-requests.md). These examples use realistic data and demonstrate common workflows.
 
+## Example Responses
+
+Complete example responses for all endpoints are available at [`docs/example-responses.md`](./example-responses.md). This includes success responses, common error responses, and pagination format details.
+
 ## Base URL
 
 ```
