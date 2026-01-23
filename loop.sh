@@ -1,14 +1,15 @@
 #!/usr/bin/env bash
 #
-# new-outer-loop.sh - Run new-inner-loop.sh in a continuous loop
+# loop.sh - Run crumbler workflow in a continuous loop
 #
 # Usage:
-#   ./new-outer-loop.sh          # Run indefinitely
-#   ./new-outer-loop.sh 5         # Run 5 iterations
+#   ./loop.sh          # Run indefinitely
+#   ./loop.sh 5        # Run 5 iterations
 #
 # Each iteration:
-#   1. Runs new-inner-loop.sh
-#   2. Repeats
+#   1. Gets prompt from crumbler
+#   2. Executes work based on prompt
+#   3. Repeats
 #
 
 
@@ -32,7 +33,7 @@ DIM='\033[2m'
 RESET='\033[0m'
 
 main() {
-  echo -e "${CYAN}outer loop starting${RESET}"
+  echo -e "${CYAN}crumbler loop starting${RESET}"
   [ "$MAX_ITERATIONS" -gt 0 ] && echo -e "${DIM}max iterations: ${MAX_ITERATIONS}${RESET}"
   echo ""
 
@@ -45,7 +46,14 @@ main() {
     echo -e "${CYAN}━━━ iteration ${ITERATION} ━━━${RESET}"
     echo ""
 
-    "$SCRIPT_DIR/inner-loop.sh"
+    # Get prompt from crumbler and execute
+    PROMPT=$("$SCRIPT_DIR/crumbler" prompt 2>&1)
+    if [ $? -eq 0 ] && [ -n "$PROMPT" ]; then
+      echo "$PROMPT" | "$SCRIPT_DIR/claude-wrapper.sh"
+    else
+      echo -e "${CYAN}No work available or crumbler error${RESET}"
+      break
+    fi
 
     # Check iteration limit
     if [ "$MAX_ITERATIONS" -gt 0 ] && [ "$ITERATION" -ge "$MAX_ITERATIONS" ]; then

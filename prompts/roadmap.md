@@ -323,7 +323,7 @@ Tickets (phases/{state}/NNN-phase-name/sprints/{state}/NNN-sprint-name/tickets/{
 ### Sprint Completion Rules
 - A sprint cannot be moved to `done` if it has any tickets in `todo` or `in-progress` states
 - All tickets must be completed or moved to `not-doing` before closing a sprint
-- Use `./sdlc.sh move sprint <number> done` to move sprints (validation is automatic)
+- Work is managed using crumbler. Use `./crumbler help` to learn about the crumbler workflow
 
 ## Phase Document Format
 

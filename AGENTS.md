@@ -1,29 +1,6 @@
 # Agents
 
-## CRITICAL: Agent Autonomy Rules
-
-**YOU ARE ON YOUR OWN. NO HUMAN IS COMING TO HELP YOU.**
-
-This is a throwaway Ubuntu box for agentic hands-off coding. You must solve your own problems.
-
-### Environment Setup
-- **Install tools as needed**: You cannot sudo, but you can install user-level tools (go install, pip install --user, npm install -g, etc.)
-- **Environment variables**: Put PATH updates and exports in `~/.no-guard-bashrc.sh` - that file exists for this purpose
-- **Just make it work**: If you need a tool, install it. If you need a config, create it. Figure it out.
-
-### Self-Improvement Mandate
-
-**YOU MUST UPDATE THE AGENTIC CODING SYSTEM AS YOU GO.**
-
-When you encounter ANY of these situations, you MUST update the relevant prompts, scripts, or documentation:
-- You run into a strange situation or issue
-- You are adding new tools
-- You are changing how things work
-- You discover ambiguity in the instructions
-- You find a better way to do something
-- A prompt is missing information you needed
-
-Update files in `prompts/`, `CLAUDE.md`, `loop.sh`, `inner-loop.sh`, `sdlc.sh`, or create new documentation as needed. The system must evolve and improve through your work.
+use crumbler as ./crumbler
 
 ### Hard Constraints (NEVER VIOLATE)
 
@@ -39,9 +16,7 @@ Update files in `prompts/`, `CLAUDE.md`, `loop.sh`, `inner-loop.sh`, `sdlc.sh`, 
 
 Read the README to learn more about what we are doing. This project is PowerPro. It is a headless api there is no frontend and there should not be a frontend. The core challenge of powerpro is keeping the code DRY. All of these powerlifters are doing things slightly differently but at the end of the day they're really doing very similar things. It is our job as programmers to manage this complexity in a re-usable way. The difficulty will come from managing the complexity related to that. When designing the entities and their relationship to eachother and the classes even in early phases it will be critical to design it such that we don't end up with spaghetti and you must keep your eye on the horizon. Don't preemptively add fields but you may preemptively add needed layers of abstraction that may well start as trivial / passthrough for initial implementations.
 
-If you are working on a ticket, ERD, PRD, or roadmap Phase you must use sdlc.sh to manipulate those objects.
-
-If you are told to work on a ticket and it is complete then you must use sdlc.sh to update that status.
+Work is organized using crumbler - a simple task decomposition system. Use `./crumbler help` to learn more about the crumbler system. The filesystem IS the state - existence means work to do, deletion means done. Work depth-first: complete children before parents.
 
 ## Ticket System
 [Ticket System](./prompts/ticket-system.md)

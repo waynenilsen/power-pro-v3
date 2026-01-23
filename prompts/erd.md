@@ -229,7 +229,7 @@ When creating tickets from ERD requirements:
 - Link ticket to requirement ID (e.g., "Implements REQ-001")
 - Ensure ticket acceptance criteria match ERD acceptance criteria
 - Maintain traceability between ERD and implementation tickets
-- Use `./sdlc.sh` commands to manage tickets (see `erd-to-tickets.md`)
+- Work is managed using crumbler. Use `./crumbler help` to learn about the crumbler workflow (see `erd-to-tickets.md` for breaking down ERDs into crumbs)
 
 ## Technical Debt Sprints
 
