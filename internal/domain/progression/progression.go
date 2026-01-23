@@ -20,8 +20,9 @@ const (
 	TypeLinear ProgressionType = "LINEAR_PROGRESSION"
 	// TypeCycle adds a fixed increment at cycle completion.
 	TypeCycle ProgressionType = "CYCLE_PROGRESSION"
+	// TypeAMRAP adjusts weight based on AMRAP set performance (e.g., nSuns).
+	TypeAMRAP ProgressionType = "AMRAP_PROGRESSION"
 	// Future types documented for extensibility:
-	// TypeAMRAP ProgressionType = "AMRAP_PROGRESSION" - progression based on AMRAP performance
 	// TypeDeloadOnFailure ProgressionType = "DELOAD_ON_FAILURE" - reduces weight after repeated failures
 	// TypeRPEBased ProgressionType = "RPE_BASED_PROGRESSION" - adjusts based on RPE targets
 	// TypeDouble ProgressionType = "DOUBLE_PROGRESSION" - increases reps first, then weight
@@ -31,6 +32,7 @@ const (
 var ValidProgressionTypes = map[ProgressionType]bool{
 	TypeLinear: true,
 	TypeCycle:  true,
+	TypeAMRAP:  true,
 }
 
 // TriggerType identifies what event causes a progression to evaluate/apply.
@@ -43,6 +45,8 @@ const (
 	TriggerAfterWeek TriggerType = "AFTER_WEEK"
 	// TriggerAfterCycle fires when a cycle completes (wraps back to week 1).
 	TriggerAfterCycle TriggerType = "AFTER_CYCLE"
+	// TriggerAfterSet fires immediately after logging an AMRAP set.
+	TriggerAfterSet TriggerType = "AFTER_SET"
 )
 
 // ValidTriggerTypes contains all valid trigger types for validation.
@@ -50,6 +54,7 @@ var ValidTriggerTypes = map[TriggerType]bool{
 	TriggerAfterSession: true,
 	TriggerAfterWeek:    true,
 	TriggerAfterCycle:   true,
+	TriggerAfterSet:     true,
 }
 
 // MaxType represents the type of max (mirrors liftmax.MaxType for decoupling).
@@ -97,6 +102,14 @@ type TriggerEvent struct {
 	DaySlug *string `json:"daySlug,omitempty"`
 	// LiftsPerformed lists the lift IDs that were part of the completed session (optional).
 	LiftsPerformed []string `json:"liftsPerformed,omitempty"`
+
+	// AMRAP-specific fields (for AFTER_SET trigger)
+	// RepsPerformed is the number of reps achieved on the AMRAP set.
+	RepsPerformed *int `json:"repsPerformed,omitempty"`
+	// IsAMRAP indicates whether this was an AMRAP set.
+	IsAMRAP bool `json:"isAMRAP,omitempty"`
+	// SetWeight is the weight used for the set (optional, for logging context).
+	SetWeight *float64 `json:"setWeight,omitempty"`
 }
 
 // Validate validates the TriggerEvent.

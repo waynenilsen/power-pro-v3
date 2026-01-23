@@ -288,6 +288,7 @@ func GetDefaultFactory() *progression.ProgressionFactory {
 	factory := progression.NewProgressionFactory()
 	progression.RegisterLinearProgression(factory)
 	progression.RegisterCycleProgression(factory)
+	progression.RegisterAMRAPProgression(factory)
 	return factory
 }
 
