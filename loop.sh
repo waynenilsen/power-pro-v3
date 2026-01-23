@@ -49,7 +49,7 @@ main() {
     # Get prompt from crumbler and execute
     PROMPT=$("$SCRIPT_DIR/crumbler" prompt 2>&1)
     if [ $? -eq 0 ] && [ -n "$PROMPT" ]; then
-      echo "$PROMPT" | "$SCRIPT_DIR/claude-wrapper.sh"
+      "$SCRIPT_DIR/claude-wrapper.sh" "$PROMPT"
     else
       echo -e "${CYAN}No work available or crumbler error${RESET}"
       break
