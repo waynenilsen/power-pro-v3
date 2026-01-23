@@ -18,6 +18,7 @@ type Querier interface {
 	CountDaysFilteredByProgram(ctx context.Context, programID sql.NullString) (int64, error)
 	CountDaysInWeek(ctx context.Context, weekID string) (int64, error)
 	CountEnrolledUsers(ctx context.Context, programID string) (int64, error)
+	CountFailureCountersByUser(ctx context.Context, userID string) (int64, error)
 	CountLiftMaxesByUser(ctx context.Context, userID string) (int64, error)
 	CountLiftMaxesByUserFilterLift(ctx context.Context, arg CountLiftMaxesByUserFilterLiftParams) (int64, error)
 	CountLiftMaxesByUserFilterLiftAndType(ctx context.Context, arg CountLiftMaxesByUserFilterLiftAndTypeParams) (int64, error)
@@ -45,6 +46,7 @@ type Querier interface {
 	CreateDailyLookup(ctx context.Context, arg CreateDailyLookupParams) error
 	CreateDay(ctx context.Context, arg CreateDayParams) error
 	CreateDayPrescription(ctx context.Context, arg CreateDayPrescriptionParams) error
+	CreateFailureCounter(ctx context.Context, arg CreateFailureCounterParams) error
 	CreateLift(ctx context.Context, arg CreateLiftParams) error
 	CreateLiftMax(ctx context.Context, arg CreateLiftMaxParams) error
 	CreateLoggedSet(ctx context.Context, arg CreateLoggedSetParams) error
@@ -70,6 +72,8 @@ type Querier interface {
 	DeleteDay(ctx context.Context, id string) error
 	DeleteDayPrescription(ctx context.Context, id string) error
 	DeleteDayPrescriptionByDayAndPrescription(ctx context.Context, arg DeleteDayPrescriptionByDayAndPrescriptionParams) error
+	DeleteFailureCounter(ctx context.Context, id string) error
+	DeleteFailureCounterByKey(ctx context.Context, arg DeleteFailureCounterByKeyParams) error
 	DeleteLift(ctx context.Context, id string) error
 	DeleteLiftMax(ctx context.Context, id string) error
 	DeleteLoggedSet(ctx context.Context, id string) error
@@ -102,6 +106,8 @@ type Querier interface {
 	GetDaysForWeek(ctx context.Context, weekID string) ([]GetDaysForWeekRow, error)
 	GetEnrollmentForWorkout(ctx context.Context, userID string) (GetEnrollmentForWorkoutRow, error)
 	GetEnrollmentWithProgram(ctx context.Context, userID string) (GetEnrollmentWithProgramRow, error)
+	GetFailureCounter(ctx context.Context, id string) (FailureCounter, error)
+	GetFailureCounterByKey(ctx context.Context, arg GetFailureCounterByKeyParams) (FailureCounter, error)
 	GetLatestAMRAPForLift(ctx context.Context, arg GetLatestAMRAPForLiftParams) (LoggedSet, error)
 	GetLift(ctx context.Context, id string) (Lift, error)
 	GetLiftBySlug(ctx context.Context, slug string) (Lift, error)
@@ -130,6 +136,7 @@ type Querier interface {
 	GetWeekDayByWeekAndDayAndDayOfWeek(ctx context.Context, arg GetWeekDayByWeekAndDayAndDayOfWeekParams) (WeekDay, error)
 	GetWeeklyLookup(ctx context.Context, id string) (WeeklyLookup, error)
 	GetWeeklyLookupForProgram(ctx context.Context, id string) (WeeklyLookup, error)
+	IncrementFailureCounter(ctx context.Context, arg IncrementFailureCounterParams) error
 	LiftHasChildReferences(ctx context.Context, parentLiftID sql.NullString) (int64, error)
 	LiftHasMaxReferences(ctx context.Context, liftID string) (int64, error)
 	LiftHasPrescriptionReferences(ctx context.Context, liftID string) (int64, error)
@@ -154,6 +161,9 @@ type Querier interface {
 	ListDaysFilteredByProgramByNameDesc(ctx context.Context, arg ListDaysFilteredByProgramByNameDescParams) ([]Day, error)
 	ListEnabledProgramProgressionsByProgram(ctx context.Context, programID string) ([]ProgramProgression, error)
 	ListEnabledProgramProgressionsByProgramAndProgression(ctx context.Context, arg ListEnabledProgramProgressionsByProgramAndProgressionParams) ([]ProgramProgression, error)
+	ListFailureCountersByProgression(ctx context.Context, progressionID string) ([]FailureCounter, error)
+	ListFailureCountersByUser(ctx context.Context, userID string) ([]FailureCounter, error)
+	ListFailureCountersByUserAndLift(ctx context.Context, arg ListFailureCountersByUserAndLiftParams) ([]FailureCounter, error)
 	ListLiftMaxesByUserByEffectiveDateAsc(ctx context.Context, arg ListLiftMaxesByUserByEffectiveDateAscParams) ([]LiftMax, error)
 	ListLiftMaxesByUserByEffectiveDateDesc(ctx context.Context, arg ListLiftMaxesByUserByEffectiveDateDescParams) ([]LiftMax, error)
 	ListLiftMaxesByUserFilterLiftAndTypeByEffectiveDateAsc(ctx context.Context, arg ListLiftMaxesByUserFilterLiftAndTypeByEffectiveDateAscParams) ([]LiftMax, error)
@@ -210,6 +220,7 @@ type Querier interface {
 	ProgramHasEnrolledUsers(ctx context.Context, programID string) (int64, error)
 	ProgramSlugExists(ctx context.Context, slug string) (int64, error)
 	ProgramSlugExistsExcluding(ctx context.Context, arg ProgramSlugExistsExcludingParams) (int64, error)
+	ResetFailureCounter(ctx context.Context, arg ResetFailureCounterParams) error
 	SlugExists(ctx context.Context, arg SlugExistsParams) (int64, error)
 	SlugExistsForNew(ctx context.Context, slug string) (int64, error)
 	UniqueConstraintExists(ctx context.Context, arg UniqueConstraintExistsParams) (int64, error)
@@ -218,6 +229,7 @@ type Querier interface {
 	UpdateDailyLookup(ctx context.Context, arg UpdateDailyLookupParams) error
 	UpdateDay(ctx context.Context, arg UpdateDayParams) error
 	UpdateDayPrescriptionOrder(ctx context.Context, arg UpdateDayPrescriptionOrderParams) error
+	UpdateFailureCounter(ctx context.Context, arg UpdateFailureCounterParams) error
 	UpdateLift(ctx context.Context, arg UpdateLiftParams) error
 	UpdateLiftMax(ctx context.Context, arg UpdateLiftMaxParams) error
 	UpdatePrescription(ctx context.Context, arg UpdatePrescriptionParams) error
@@ -227,6 +239,8 @@ type Querier interface {
 	UpdateUserProgramState(ctx context.Context, arg UpdateUserProgramStateParams) error
 	UpdateWeek(ctx context.Context, arg UpdateWeekParams) error
 	UpdateWeeklyLookup(ctx context.Context, arg UpdateWeeklyLookupParams) error
+	UpsertFailureCounterOnFailure(ctx context.Context, arg UpsertFailureCounterOnFailureParams) error
+	UpsertFailureCounterOnSuccess(ctx context.Context, arg UpsertFailureCounterOnSuccessParams) error
 	UserIsEnrolled(ctx context.Context, userID string) (int64, error)
 	WeekIsUsedInActiveCycle(ctx context.Context, id string) (int64, error)
 	WeekNumberExistsInCycle(ctx context.Context, arg WeekNumberExistsInCycleParams) (int64, error)

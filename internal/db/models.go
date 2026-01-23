@@ -43,6 +43,18 @@ type DayPrescription struct {
 	CreatedAt      string `json:"created_at"`
 }
 
+type FailureCounter struct {
+	ID                  string         `json:"id"`
+	UserID              string         `json:"user_id"`
+	LiftID              string         `json:"lift_id"`
+	ProgressionID       string         `json:"progression_id"`
+	ConsecutiveFailures int64          `json:"consecutive_failures"`
+	LastFailureAt       sql.NullString `json:"last_failure_at"`
+	LastSuccessAt       sql.NullString `json:"last_success_at"`
+	CreatedAt           string         `json:"created_at"`
+	UpdatedAt           string         `json:"updated_at"`
+}
+
 type Lift struct {
 	ID                string         `json:"id"`
 	Name              string         `json:"name"`

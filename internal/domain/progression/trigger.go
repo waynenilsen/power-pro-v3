@@ -117,6 +117,58 @@ func (c CycleTriggerContext) Validate() error {
 	return nil
 }
 
+// FailureTriggerContext contains context for ON_FAILURE triggers.
+// This context is passed when a user fails to meet target reps on a set.
+type FailureTriggerContext struct {
+	// LoggedSetID is the UUID of the logged set that triggered the failure.
+	LoggedSetID string `json:"loggedSetId"`
+	// LiftID is the UUID of the lift for the failed set.
+	LiftID string `json:"liftId"`
+	// TargetReps is the number of reps that were prescribed.
+	TargetReps int `json:"targetReps"`
+	// RepsPerformed is the number of reps actually achieved.
+	RepsPerformed int `json:"repsPerformed"`
+	// RepsDifference is RepsPerformed - TargetReps (always negative for failures).
+	RepsDifference int `json:"repsDifference"`
+	// ConsecutiveFailures is the current count of consecutive failures for this lift/progression.
+	ConsecutiveFailures int `json:"consecutiveFailures"`
+	// Weight is the weight used for the failed set.
+	Weight float64 `json:"weight"`
+	// ProgressionID is the UUID of the progression this failure counter is tracking.
+	ProgressionID string `json:"progressionId"`
+}
+
+// TriggerType implements TriggerContext.
+func (c FailureTriggerContext) TriggerType() TriggerType {
+	return TriggerOnFailure
+}
+
+// Validate implements TriggerContext.
+func (c FailureTriggerContext) Validate() error {
+	if c.LoggedSetID == "" {
+		return fmt.Errorf("%w: loggedSetId is required for failure trigger context", ErrInvalidParams)
+	}
+	if c.LiftID == "" {
+		return fmt.Errorf("%w: liftId is required for failure trigger context", ErrInvalidParams)
+	}
+	if c.TargetReps < 1 {
+		return fmt.Errorf("%w: targetReps must be at least 1", ErrInvalidParams)
+	}
+	if c.RepsPerformed < 0 {
+		return fmt.Errorf("%w: repsPerformed must be non-negative", ErrInvalidParams)
+	}
+	if c.RepsPerformed >= c.TargetReps {
+		return fmt.Errorf("%w: repsPerformed must be less than targetReps for a failure", ErrInvalidParams)
+	}
+	if c.ConsecutiveFailures < 1 {
+		return fmt.Errorf("%w: consecutiveFailures must be at least 1 for a failure trigger", ErrInvalidParams)
+	}
+	if c.ProgressionID == "" {
+		return fmt.Errorf("%w: progressionId is required for failure trigger context", ErrInvalidParams)
+	}
+	return nil
+}
+
 // TriggerEventV2 contains all parameters for a trigger event.
 // This is the new trigger event structure with strongly-typed context.
 // The "V2" suffix distinguishes it from the existing flat TriggerEvent during migration.
@@ -224,6 +276,12 @@ func UnmarshalTriggerContext(triggerType TriggerType, data json.RawMessage) (Tri
 			return nil, fmt.Errorf("failed to unmarshal cycle trigger context: %w", err)
 		}
 		return ctx, nil
+	case TriggerOnFailure:
+		var ctx FailureTriggerContext
+		if err := json.Unmarshal(data, &ctx); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal failure trigger context: %w", err)
+		}
+		return ctx, nil
 	default:
 		return nil, fmt.Errorf("%w: %s", ErrUnknownTriggerType, triggerType)
 	}
@@ -269,6 +327,16 @@ func NewCycleTriggerEvent(userID string, completedCycle, totalWeeks int) *Trigge
 			NewCycle:       completedCycle + 1,
 			TotalWeeks:     totalWeeks,
 		},
+	}
+}
+
+// NewFailureTriggerEvent creates a new ON_FAILURE trigger event.
+func NewFailureTriggerEvent(userID string, ctx FailureTriggerContext) *TriggerEventV2 {
+	return &TriggerEventV2{
+		Type:      TriggerOnFailure,
+		UserID:    userID,
+		Timestamp: time.Now(),
+		Context:   ctx,
 	}
 }
 

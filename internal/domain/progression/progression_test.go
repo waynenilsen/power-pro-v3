@@ -164,6 +164,7 @@ func TestValidTriggerTypes(t *testing.T) {
 		TriggerAfterWeek,
 		TriggerAfterCycle,
 		TriggerAfterSet,
+		TriggerOnFailure,
 	}
 
 	for _, triggerType := range expectedTypes {

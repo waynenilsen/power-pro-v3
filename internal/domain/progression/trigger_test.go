@@ -30,6 +30,14 @@ func TestCycleTriggerContext_TriggerType(t *testing.T) {
 	}
 }
 
+// TestFailureTriggerContext_TriggerType tests that FailureTriggerContext returns correct type.
+func TestFailureTriggerContext_TriggerType(t *testing.T) {
+	ctx := FailureTriggerContext{}
+	if ctx.TriggerType() != TriggerOnFailure {
+		t.Errorf("expected %s, got %s", TriggerOnFailure, ctx.TriggerType())
+	}
+}
+
 // TestSessionTriggerContext_Validate tests SessionTriggerContext validation.
 func TestSessionTriggerContext_Validate(t *testing.T) {
 	tests := []struct {
@@ -287,6 +295,152 @@ func TestCycleTriggerContext_Validate(t *testing.T) {
 				CompletedCycle: 1,
 				NewCycle:       2,
 				TotalWeeks:     -1,
+			},
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.ctx.Validate()
+			if tt.wantErr && err == nil {
+				t.Error("expected error, got nil")
+			}
+			if !tt.wantErr && err != nil {
+				t.Errorf("unexpected error: %v", err)
+			}
+		})
+	}
+}
+
+// TestFailureTriggerContext_Validate tests FailureTriggerContext validation.
+func TestFailureTriggerContext_Validate(t *testing.T) {
+	tests := []struct {
+		name    string
+		ctx     FailureTriggerContext
+		wantErr bool
+	}{
+		{
+			name: "valid context",
+			ctx: FailureTriggerContext{
+				LoggedSetID:         "set-123",
+				LiftID:              "lift-456",
+				TargetReps:          5,
+				RepsPerformed:       3,
+				RepsDifference:      -2,
+				ConsecutiveFailures: 1,
+				Weight:              100.0,
+				ProgressionID:       "prog-789",
+			},
+			wantErr: false,
+		},
+		{
+			name: "valid context with higher failure count",
+			ctx: FailureTriggerContext{
+				LoggedSetID:         "set-123",
+				LiftID:              "lift-456",
+				TargetReps:          8,
+				RepsPerformed:       4,
+				RepsDifference:      -4,
+				ConsecutiveFailures: 3,
+				Weight:              225.5,
+				ProgressionID:       "prog-789",
+			},
+			wantErr: false,
+		},
+		{
+			name: "missing loggedSetId",
+			ctx: FailureTriggerContext{
+				LoggedSetID:         "",
+				LiftID:              "lift-456",
+				TargetReps:          5,
+				RepsPerformed:       3,
+				ConsecutiveFailures: 1,
+				ProgressionID:       "prog-789",
+			},
+			wantErr: true,
+		},
+		{
+			name: "missing liftId",
+			ctx: FailureTriggerContext{
+				LoggedSetID:         "set-123",
+				LiftID:              "",
+				TargetReps:          5,
+				RepsPerformed:       3,
+				ConsecutiveFailures: 1,
+				ProgressionID:       "prog-789",
+			},
+			wantErr: true,
+		},
+		{
+			name: "zero targetReps",
+			ctx: FailureTriggerContext{
+				LoggedSetID:         "set-123",
+				LiftID:              "lift-456",
+				TargetReps:          0,
+				RepsPerformed:       3,
+				ConsecutiveFailures: 1,
+				ProgressionID:       "prog-789",
+			},
+			wantErr: true,
+		},
+		{
+			name: "negative repsPerformed",
+			ctx: FailureTriggerContext{
+				LoggedSetID:         "set-123",
+				LiftID:              "lift-456",
+				TargetReps:          5,
+				RepsPerformed:       -1,
+				ConsecutiveFailures: 1,
+				ProgressionID:       "prog-789",
+			},
+			wantErr: true,
+		},
+		{
+			name: "repsPerformed equals targetReps (not a failure)",
+			ctx: FailureTriggerContext{
+				LoggedSetID:         "set-123",
+				LiftID:              "lift-456",
+				TargetReps:          5,
+				RepsPerformed:       5,
+				ConsecutiveFailures: 1,
+				ProgressionID:       "prog-789",
+			},
+			wantErr: true,
+		},
+		{
+			name: "repsPerformed exceeds targetReps (not a failure)",
+			ctx: FailureTriggerContext{
+				LoggedSetID:         "set-123",
+				LiftID:              "lift-456",
+				TargetReps:          5,
+				RepsPerformed:       7,
+				ConsecutiveFailures: 1,
+				ProgressionID:       "prog-789",
+			},
+			wantErr: true,
+		},
+		{
+			name: "zero consecutiveFailures",
+			ctx: FailureTriggerContext{
+				LoggedSetID:         "set-123",
+				LiftID:              "lift-456",
+				TargetReps:          5,
+				RepsPerformed:       3,
+				ConsecutiveFailures: 0,
+				ProgressionID:       "prog-789",
+			},
+			wantErr: true,
+		},
+		{
+			name: "missing progressionId",
+			ctx: FailureTriggerContext{
+				LoggedSetID:         "set-123",
+				LiftID:              "lift-456",
+				TargetReps:          5,
+				RepsPerformed:       3,
+				ConsecutiveFailures: 1,
+				ProgressionID:       "",
 			},
 			wantErr: true,
 		},
@@ -719,6 +873,12 @@ func TestUnmarshalTriggerContext(t *testing.T) {
 			wantErr:     false,
 		},
 		{
+			name:        "failure context",
+			triggerType: TriggerOnFailure,
+			json:        `{"loggedSetId":"set-1","liftId":"lift-1","targetReps":5,"repsPerformed":3,"repsDifference":-2,"consecutiveFailures":2,"weight":100.0,"progressionId":"prog-1"}`,
+			wantErr:     false,
+		},
+		{
 			name:        "unknown trigger type",
 			triggerType: "UNKNOWN",
 			json:        `{}`,
@@ -853,6 +1013,56 @@ func TestNewCycleTriggerEvent(t *testing.T) {
 	}
 	if ctx.TotalWeeks != totalWeeks {
 		t.Errorf("expected totalWeeks %d, got %d", totalWeeks, ctx.TotalWeeks)
+	}
+}
+
+// TestNewFailureTriggerEvent tests failure trigger event factory.
+func TestNewFailureTriggerEvent(t *testing.T) {
+	userID := "user-123"
+	failureCtx := FailureTriggerContext{
+		LoggedSetID:         "set-456",
+		LiftID:              "lift-789",
+		TargetReps:          5,
+		RepsPerformed:       3,
+		RepsDifference:      -2,
+		ConsecutiveFailures: 2,
+		Weight:              225.0,
+		ProgressionID:       "prog-abc",
+	}
+
+	event := NewFailureTriggerEvent(userID, failureCtx)
+
+	if event.Type != TriggerOnFailure {
+		t.Errorf("expected type %s, got %s", TriggerOnFailure, event.Type)
+	}
+	if event.UserID != userID {
+		t.Errorf("expected userID %s, got %s", userID, event.UserID)
+	}
+	if event.Timestamp.IsZero() {
+		t.Error("expected Timestamp to be set")
+	}
+
+	ctx, ok := event.Context.(FailureTriggerContext)
+	if !ok {
+		t.Fatalf("expected FailureTriggerContext, got %T", event.Context)
+	}
+	if ctx.LoggedSetID != failureCtx.LoggedSetID {
+		t.Errorf("expected loggedSetId %s, got %s", failureCtx.LoggedSetID, ctx.LoggedSetID)
+	}
+	if ctx.LiftID != failureCtx.LiftID {
+		t.Errorf("expected liftId %s, got %s", failureCtx.LiftID, ctx.LiftID)
+	}
+	if ctx.TargetReps != failureCtx.TargetReps {
+		t.Errorf("expected targetReps %d, got %d", failureCtx.TargetReps, ctx.TargetReps)
+	}
+	if ctx.RepsPerformed != failureCtx.RepsPerformed {
+		t.Errorf("expected repsPerformed %d, got %d", failureCtx.RepsPerformed, ctx.RepsPerformed)
+	}
+	if ctx.ConsecutiveFailures != failureCtx.ConsecutiveFailures {
+		t.Errorf("expected consecutiveFailures %d, got %d", failureCtx.ConsecutiveFailures, ctx.ConsecutiveFailures)
+	}
+	if ctx.ProgressionID != failureCtx.ProgressionID {
+		t.Errorf("expected progressionId %s, got %s", failureCtx.ProgressionID, ctx.ProgressionID)
 	}
 }
 
@@ -1001,6 +1211,7 @@ func TestTriggerContext_Interface(t *testing.T) {
 	var _ TriggerContext = SessionTriggerContext{}
 	var _ TriggerContext = WeekTriggerContext{}
 	var _ TriggerContext = CycleTriggerContext{}
+	var _ TriggerContext = FailureTriggerContext{}
 	var _ TriggerContext = ManualTriggerContext{}
 }
 

@@ -47,6 +47,8 @@ const (
 	TriggerAfterCycle TriggerType = "AFTER_CYCLE"
 	// TriggerAfterSet fires immediately after logging an AMRAP set.
 	TriggerAfterSet TriggerType = "AFTER_SET"
+	// TriggerOnFailure fires when a set fails (reps_performed < target_reps).
+	TriggerOnFailure TriggerType = "ON_FAILURE"
 )
 
 // ValidTriggerTypes contains all valid trigger types for validation.
@@ -55,6 +57,7 @@ var ValidTriggerTypes = map[TriggerType]bool{
 	TriggerAfterWeek:    true,
 	TriggerAfterCycle:   true,
 	TriggerAfterSet:     true,
+	TriggerOnFailure:    true,
 }
 
 // MaxType represents the type of max (mirrors liftmax.MaxType for decoupling).
