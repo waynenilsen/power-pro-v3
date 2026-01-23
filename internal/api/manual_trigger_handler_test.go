@@ -50,6 +50,36 @@ type ManualTriggerResponse struct {
 	TotalErrors  int                           `json:"totalErrors"`
 }
 
+// ProgressionResponseEnvelope wraps the API response with standard envelope.
+type ProgressionResponseEnvelope struct {
+	Data ProgressionResponse `json:"data"`
+}
+
+// CycleResponseData represents cycle data in the API response.
+type CycleResponseData struct {
+	ID string `json:"id"`
+}
+
+// CycleResponseEnvelope wraps cycle response with standard envelope.
+type CycleResponseEnvelope struct {
+	Data CycleResponseData `json:"data"`
+}
+
+// ProgramResponseData represents program data in the API response.
+type ProgramResponseData struct {
+	ID string `json:"id"`
+}
+
+// ProgramResponseEnvelope wraps program response with standard envelope.
+type ProgramResponseEnvelope struct {
+	Data ProgramResponseData `json:"data"`
+}
+
+// ManualTriggerResponseEnvelope wraps manual trigger response with standard envelope.
+type ManualTriggerResponseEnvelope struct {
+	Data ManualTriggerResponse `json:"data"`
+}
+
 // Helper functions for manual trigger tests
 
 func authPostTrigger(url string, body interface{}, userID string) (*http.Response, error) {
@@ -121,9 +151,11 @@ func createMTTestProgression(t *testing.T, ts *testutil.TestServer, name string,
 		t.Fatalf("Failed to create test progression (status %d): %s", resp.StatusCode, bodyBytes)
 	}
 
-	var prog ProgressionResponse
-	json.NewDecoder(resp.Body).Decode(&prog)
-	return prog.ID
+	var envelope ProgressionResponseEnvelope
+	if err := json.NewDecoder(resp.Body).Decode(&envelope); err != nil {
+		t.Fatalf("Failed to decode progression response: %v", err)
+	}
+	return envelope.Data.ID
 }
 
 // setupManualTriggerTestData creates all necessary test data for manual trigger tests
@@ -139,18 +171,22 @@ func setupManualTriggerTestData(t *testing.T, ts *testutil.TestServer) (userID, 
 		t.Fatalf("Failed to create cycle: %v", err)
 	}
 	defer cycleResp.Body.Close()
-	var cycle struct{ ID string `json:"id"` }
-	json.NewDecoder(cycleResp.Body).Decode(&cycle)
+	var cycleEnvelope CycleResponseEnvelope
+	if err := json.NewDecoder(cycleResp.Body).Decode(&cycleEnvelope); err != nil {
+		t.Fatalf("Failed to decode cycle response: %v", err)
+	}
 
 	// Create a program
-	progResp, err := adminPost(ts.URL("/programs"), `{"name": "MT Test Program", "slug": "mt-test-program", "cycleId": "`+cycle.ID+`"}`)
+	progResp, err := adminPost(ts.URL("/programs"), `{"name": "MT Test Program", "slug": "mt-test-program", "cycleId": "`+cycleEnvelope.Data.ID+`"}`)
 	if err != nil {
 		t.Fatalf("Failed to create program: %v", err)
 	}
 	defer progResp.Body.Close()
-	var program struct{ ID string `json:"id"` }
-	json.NewDecoder(progResp.Body).Decode(&program)
-	programID = program.ID
+	var programEnvelope ProgramResponseEnvelope
+	if err := json.NewDecoder(progResp.Body).Decode(&programEnvelope); err != nil {
+		t.Fatalf("Failed to decode program response: %v", err)
+	}
+	programID = programEnvelope.Data.ID
 
 	// Create a lift
 	liftID = createMTTestLift(t, ts, "MT Test Squat", "mt-test-squat-"+uuid.New().String()[:8])
@@ -372,10 +408,11 @@ func TestManualTriggerResponseFormat(t *testing.T) {
 			t.Fatalf("Expected status 200, got %d: %s", resp.StatusCode, respBody)
 		}
 
-		var result ManualTriggerResponse
-		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		var envelope ManualTriggerResponseEnvelope
+		if err := json.NewDecoder(resp.Body).Decode(&envelope); err != nil {
 			t.Fatalf("Failed to decode response: %v", err)
 		}
+		result := envelope.Data
 
 		// Verify response structure
 		if result.Results == nil {
@@ -408,8 +445,9 @@ func TestManualTriggerResponseFormat(t *testing.T) {
 			t.Fatalf("Expected status 200, got %d: %s", resp.StatusCode, respBody)
 		}
 
-		var result ManualTriggerResponse
-		json.NewDecoder(resp.Body).Decode(&result)
+		var envelope ManualTriggerResponseEnvelope
+		json.NewDecoder(resp.Body).Decode(&envelope)
+		result := envelope.Data
 
 		if result.TotalApplied != 1 {
 			t.Errorf("Expected TotalApplied=1, got %d", result.TotalApplied)
@@ -465,8 +503,9 @@ func TestManualTriggerIdempotency(t *testing.T) {
 		}
 		defer resp1.Body.Close()
 
-		var result1 ManualTriggerResponse
-		json.NewDecoder(resp1.Body).Decode(&result1)
+		var envelope1 ManualTriggerResponseEnvelope
+		json.NewDecoder(resp1.Body).Decode(&envelope1)
+		result1 := envelope1.Data
 
 		if result1.TotalApplied != 1 {
 			t.Fatalf("Expected first application to succeed, got TotalApplied=%d", result1.TotalApplied)
@@ -481,8 +520,9 @@ func TestManualTriggerIdempotency(t *testing.T) {
 		}
 		defer resp2.Body.Close()
 
-		var result2 ManualTriggerResponse
-		json.NewDecoder(resp2.Body).Decode(&result2)
+		var envelope2 ManualTriggerResponseEnvelope
+		json.NewDecoder(resp2.Body).Decode(&envelope2)
+		result2 := envelope2.Data
 
 		if result2.TotalApplied != 1 {
 			t.Errorf("Expected second force application to succeed, got TotalApplied=%d (skipped=%d, errors=%d)",
@@ -509,15 +549,25 @@ func TestManualTriggerMultipleLifts(t *testing.T) {
 	userID := testutil.TestUserID
 
 	// Create a cycle
-	cycleResp, _ := adminPost(ts.URL("/cycles"), `{"name": "Multi Lift Cycle", "lengthWeeks": 4}`)
-	var cycle struct{ ID string `json:"id"` }
-	json.NewDecoder(cycleResp.Body).Decode(&cycle)
+	cycleResp, err := adminPost(ts.URL("/cycles"), `{"name": "Multi Lift Cycle", "lengthWeeks": 4}`)
+	if err != nil {
+		t.Fatalf("Failed to create cycle: %v", err)
+	}
+	var cycleEnvelope CycleResponseEnvelope
+	if err := json.NewDecoder(cycleResp.Body).Decode(&cycleEnvelope); err != nil {
+		t.Fatalf("Failed to decode cycle response: %v", err)
+	}
 	cycleResp.Body.Close()
 
 	// Create a program
-	progResp, _ := adminPost(ts.URL("/programs"), `{"name": "Multi Lift Program", "slug": "multi-lift-program-`+uuid.New().String()[:8]+`", "cycleId": "`+cycle.ID+`"}`)
-	var program struct{ ID string `json:"id"` }
-	json.NewDecoder(progResp.Body).Decode(&program)
+	progResp, err := adminPost(ts.URL("/programs"), `{"name": "Multi Lift Program", "slug": "multi-lift-program-`+uuid.New().String()[:8]+`", "cycleId": "`+cycleEnvelope.Data.ID+`"}`)
+	if err != nil {
+		t.Fatalf("Failed to create program: %v", err)
+	}
+	var programEnvelope ProgramResponseEnvelope
+	if err := json.NewDecoder(progResp.Body).Decode(&programEnvelope); err != nil {
+		t.Fatalf("Failed to decode program response: %v", err)
+	}
 	progResp.Body.Close()
 
 	// Create multiple lifts
@@ -529,18 +579,18 @@ func TestManualTriggerMultipleLifts(t *testing.T) {
 
 	// Link progression to program for both lifts
 	ppBody1 := `{"progressionId": "` + progressionID + `", "liftId": "` + lift1ID + `", "priority": 1, "enabled": true}`
-	pp1Resp, _ := adminPost(ts.URL("/programs/"+program.ID+"/progressions"), ppBody1)
+	pp1Resp, _ := adminPost(ts.URL("/programs/"+programEnvelope.Data.ID+"/progressions"), ppBody1)
 	pp1Resp.Body.Close()
 
 	ppBody2 := `{"progressionId": "` + progressionID + `", "liftId": "` + lift2ID + `", "priority": 2, "enabled": true}`
-	pp2Resp, _ := adminPost(ts.URL("/programs/"+program.ID+"/progressions"), ppBody2)
+	pp2Resp, _ := adminPost(ts.URL("/programs/"+programEnvelope.Data.ID+"/progressions"), ppBody2)
 	pp2Resp.Body.Close()
 
 	// Enroll user in program (need to unenroll first if already enrolled)
 	unenrollResp, _ := authDelete(ts.URL("/users/"+userID+"/program"), userID)
 	unenrollResp.Body.Close()
 
-	enrollResp, _ := authPostUser(ts.URL("/users/"+userID+"/program"), `{"programId": "`+program.ID+`"}`, userID)
+	enrollResp, _ := authPostUser(ts.URL("/users/"+userID+"/program"), `{"programId": "`+programEnvelope.Data.ID+`"}`, userID)
 	enrollResp.Body.Close()
 
 	// Create initial lift maxes
@@ -570,8 +620,9 @@ func TestManualTriggerMultipleLifts(t *testing.T) {
 			t.Fatalf("Expected status 200, got %d: %s", resp.StatusCode, respBody)
 		}
 
-		var result ManualTriggerResponse
-		json.NewDecoder(resp.Body).Decode(&result)
+		var envelope ManualTriggerResponseEnvelope
+		json.NewDecoder(resp.Body).Decode(&envelope)
+		result := envelope.Data
 
 		if result.TotalApplied != 2 {
 			t.Errorf("Expected TotalApplied=2 (both lifts), got %d (skipped=%d, errors=%d)",
@@ -614,8 +665,9 @@ func TestManualTriggerMultipleLifts(t *testing.T) {
 		}
 		defer resp.Body.Close()
 
-		var result ManualTriggerResponse
-		json.NewDecoder(resp.Body).Decode(&result)
+		var envelope ManualTriggerResponseEnvelope
+		json.NewDecoder(resp.Body).Decode(&envelope)
+		result := envelope.Data
 
 		if result.TotalApplied != 1 {
 			t.Errorf("Expected TotalApplied=1, got %d", result.TotalApplied)
@@ -829,8 +881,9 @@ func TestManualTriggerWithTestServer(t *testing.T) {
 		}
 		defer resp.Body.Close()
 
-		var result ManualTriggerResponse
-		json.NewDecoder(resp.Body).Decode(&result)
+		var envelope ManualTriggerResponseEnvelope
+		json.NewDecoder(resp.Body).Decode(&envelope)
+		result := envelope.Data
 
 		if result.TotalApplied != 1 {
 			respBody, _ := io.ReadAll(resp.Body)
