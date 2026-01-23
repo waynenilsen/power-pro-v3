@@ -36,6 +36,11 @@ type PaginatedProgressionsResponse struct {
 	Meta PaginatedMeta         `json:"meta"`
 }
 
+// ProgressionEnvelope wraps single progression response with standard envelope.
+type ProgressionEnvelope struct {
+	Data ProgressionResponse `json:"data"`
+}
+
 func TestListProgressions(t *testing.T) {
 	ts, err := testutil.NewTestServer()
 	if err != nil {
@@ -174,8 +179,9 @@ func TestGetProgression(t *testing.T) {
 	// Create a progression first
 	createBody := `{"name": "Test Progression", "type": "LINEAR_PROGRESSION", "parameters": {"increment": 5.0, "maxType": "TRAINING_MAX", "triggerType": "AFTER_SESSION"}}`
 	createResp, _ := adminPost(ts.URL("/progressions"), createBody)
-	var created ProgressionResponse
-	json.NewDecoder(createResp.Body).Decode(&created)
+	var createEnvelope ProgressionEnvelope
+	json.NewDecoder(createResp.Body).Decode(&createEnvelope)
+	created := createEnvelope.Data
 	createResp.Body.Close()
 
 	t.Run("returns progression by ID", func(t *testing.T) {
@@ -189,8 +195,9 @@ func TestGetProgression(t *testing.T) {
 			t.Fatalf("Expected status 200, got %d", resp.StatusCode)
 		}
 
-		var prog ProgressionResponse
-		json.NewDecoder(resp.Body).Decode(&prog)
+		var envelope ProgressionEnvelope
+		json.NewDecoder(resp.Body).Decode(&envelope)
+		prog := envelope.Data
 
 		if prog.ID != created.ID {
 			t.Errorf("Expected ID %s, got %s", created.ID, prog.ID)
@@ -240,8 +247,9 @@ func TestCreateProgression(t *testing.T) {
 			t.Fatalf("Expected status 201, got %d: %s", resp.StatusCode, body)
 		}
 
-		var prog ProgressionResponse
-		json.NewDecoder(resp.Body).Decode(&prog)
+		var envelope ProgressionEnvelope
+		json.NewDecoder(resp.Body).Decode(&envelope)
+		prog := envelope.Data
 
 		if prog.Name != "Starting Strength Squat" {
 			t.Errorf("Expected name 'Starting Strength Squat', got %s", prog.Name)
@@ -284,8 +292,9 @@ func TestCreateProgression(t *testing.T) {
 			t.Fatalf("Expected status 201, got %d: %s", resp.StatusCode, body)
 		}
 
-		var prog ProgressionResponse
-		json.NewDecoder(resp.Body).Decode(&prog)
+		var envelope ProgressionEnvelope
+		json.NewDecoder(resp.Body).Decode(&envelope)
+		prog := envelope.Data
 
 		if prog.Type != "CYCLE_PROGRESSION" {
 			t.Errorf("Expected type 'CYCLE_PROGRESSION', got %s", prog.Type)
@@ -450,8 +459,9 @@ func TestUpdateProgression(t *testing.T) {
 	// Create a progression to update
 	createBody := `{"name": "Original Name", "type": "LINEAR_PROGRESSION", "parameters": {"increment": 5.0, "maxType": "TRAINING_MAX", "triggerType": "AFTER_SESSION"}}`
 	createResp, _ := adminPost(ts.URL("/progressions"), createBody)
-	var created ProgressionResponse
-	json.NewDecoder(createResp.Body).Decode(&created)
+	var createEnvelope ProgressionEnvelope
+	json.NewDecoder(createResp.Body).Decode(&createEnvelope)
+	created := createEnvelope.Data
 	createResp.Body.Close()
 
 	t.Run("updates progression name", func(t *testing.T) {
@@ -467,8 +477,9 @@ func TestUpdateProgression(t *testing.T) {
 			t.Fatalf("Expected status 200, got %d: %s", resp.StatusCode, bodyBytes)
 		}
 
-		var prog ProgressionResponse
-		json.NewDecoder(resp.Body).Decode(&prog)
+		var envelope ProgressionEnvelope
+		json.NewDecoder(resp.Body).Decode(&envelope)
+		prog := envelope.Data
 
 		if prog.Name != "Updated Name" {
 			t.Errorf("Expected name 'Updated Name', got %s", prog.Name)
@@ -492,8 +503,9 @@ func TestUpdateProgression(t *testing.T) {
 			t.Fatalf("Expected status 200, got %d: %s", resp.StatusCode, bodyBytes)
 		}
 
-		var prog ProgressionResponse
-		json.NewDecoder(resp.Body).Decode(&prog)
+		var envelope ProgressionEnvelope
+		json.NewDecoder(resp.Body).Decode(&envelope)
+		prog := envelope.Data
 
 		if prog.Type != "CYCLE_PROGRESSION" {
 			t.Errorf("Expected type 'CYCLE_PROGRESSION', got %s", prog.Type)
@@ -542,8 +554,9 @@ func TestDeleteProgression(t *testing.T) {
 		// Create a progression to delete
 		createBody := `{"name": "To Delete", "type": "LINEAR_PROGRESSION", "parameters": {"increment": 5.0, "maxType": "TRAINING_MAX", "triggerType": "AFTER_SESSION"}}`
 		createResp, _ := adminPost(ts.URL("/progressions"), createBody)
-		var created ProgressionResponse
-		json.NewDecoder(createResp.Body).Decode(&created)
+		var createEnvelope ProgressionEnvelope
+		json.NewDecoder(createResp.Body).Decode(&createEnvelope)
+		created := createEnvelope.Data
 		createResp.Body.Close()
 
 		// Delete it
@@ -591,8 +604,9 @@ func TestProgressionResponseFormat(t *testing.T) {
 	// Create a progression
 	createBody := `{"name": "Format Test", "type": "LINEAR_PROGRESSION", "parameters": {"increment": 5.0, "maxType": "TRAINING_MAX", "triggerType": "AFTER_SESSION"}}`
 	createResp, _ := adminPost(ts.URL("/progressions"), createBody)
-	var created ProgressionResponse
-	json.NewDecoder(createResp.Body).Decode(&created)
+	var createEnvelope ProgressionEnvelope
+	json.NewDecoder(createResp.Body).Decode(&createEnvelope)
+	created := createEnvelope.Data
 	createResp.Body.Close()
 
 	t.Run("response has correct JSON field names", func(t *testing.T) {
@@ -602,8 +616,9 @@ func TestProgressionResponseFormat(t *testing.T) {
 		body, _ := io.ReadAll(resp.Body)
 		bodyStr := string(body)
 
-		// Check camelCase field names per ERD spec
+		// Check camelCase field names per ERD spec (inside data envelope)
 		expectedFields := []string{
+			`"data"`,
 			`"id"`,
 			`"name"`,
 			`"type"`,
@@ -623,8 +638,9 @@ func TestProgressionResponseFormat(t *testing.T) {
 		resp, _ := authGet(ts.URL("/progressions/" + created.ID))
 		defer resp.Body.Close()
 
-		var prog ProgressionResponse
-		json.NewDecoder(resp.Body).Decode(&prog)
+		var envelope ProgressionEnvelope
+		json.NewDecoder(resp.Body).Decode(&envelope)
+		prog := envelope.Data
 
 		var params map[string]interface{}
 		if err := json.Unmarshal(prog.Parameters, &params); err != nil {

@@ -40,6 +40,11 @@ type PaginatedPrescriptionsResponse struct {
 	Meta *PrescriptionPaginationMeta `json:"meta"`
 }
 
+// PrescriptionEnvelope wraps single prescription response with standard envelope.
+type PrescriptionEnvelope struct {
+	Data PrescriptionResponse `json:"data"`
+}
+
 // LoadStrategyResponse represents the load strategy in responses.
 type LoadStrategyResponse struct {
 	Type              string  `json:"type"`
@@ -270,8 +275,9 @@ func TestGetPrescription(t *testing.T) {
 		"restSeconds": 180
 	}`, seededSquatID)
 	createResp, _ := adminPost(ts.URL("/prescriptions"), createBody)
-	var createdPrescription PrescriptionResponse
-	json.NewDecoder(createResp.Body).Decode(&createdPrescription)
+	var createEnvelope PrescriptionEnvelope
+	json.NewDecoder(createResp.Body).Decode(&createEnvelope)
+	createdPrescription := createEnvelope.Data
 	createResp.Body.Close()
 
 	t.Run("returns prescription by ID", func(t *testing.T) {
@@ -285,8 +291,9 @@ func TestGetPrescription(t *testing.T) {
 			t.Fatalf("Expected status 200, got %d", resp.StatusCode)
 		}
 
-		var p PrescriptionResponse
-		json.NewDecoder(resp.Body).Decode(&p)
+		var envelope PrescriptionEnvelope
+		json.NewDecoder(resp.Body).Decode(&envelope)
+		p := envelope.Data
 
 		if p.ID != createdPrescription.ID {
 			t.Errorf("Expected ID %s, got %s", createdPrescription.ID, p.ID)
@@ -375,8 +382,9 @@ func TestCreatePrescription(t *testing.T) {
 			t.Fatalf("Expected status 201, got %d: %s", resp.StatusCode, body)
 		}
 
-		var p PrescriptionResponse
-		json.NewDecoder(resp.Body).Decode(&p)
+		var envelope PrescriptionEnvelope
+		json.NewDecoder(resp.Body).Decode(&envelope)
+		p := envelope.Data
 
 		if p.ID == "" {
 			t.Errorf("Expected ID to be generated")
@@ -409,8 +417,9 @@ func TestCreatePrescription(t *testing.T) {
 			t.Fatalf("Expected status 201, got %d: %s", resp.StatusCode, bodyBytes)
 		}
 
-		var p PrescriptionResponse
-		json.NewDecoder(resp.Body).Decode(&p)
+		var envelope PrescriptionEnvelope
+		json.NewDecoder(resp.Body).Decode(&envelope)
+		p := envelope.Data
 
 		// Order defaults to 0
 		if p.Order != 0 {
@@ -441,8 +450,9 @@ func TestCreatePrescription(t *testing.T) {
 			t.Fatalf("Expected status 201, got %d: %s", resp.StatusCode, bodyBytes)
 		}
 
-		var p PrescriptionResponse
-		json.NewDecoder(resp.Body).Decode(&p)
+		var envelope PrescriptionEnvelope
+		json.NewDecoder(resp.Body).Decode(&envelope)
+		p := envelope.Data
 
 		// Verify RAMP scheme was stored
 		var ss map[string]interface{}
@@ -611,8 +621,9 @@ func TestUpdatePrescription(t *testing.T) {
 		"restSeconds": 180
 	}`, seededSquatID)
 	createResp, _ := adminPost(ts.URL("/prescriptions"), createBody)
-	var createdPrescription PrescriptionResponse
-	json.NewDecoder(createResp.Body).Decode(&createdPrescription)
+	var createEnvelope PrescriptionEnvelope
+	json.NewDecoder(createResp.Body).Decode(&createEnvelope)
+	createdPrescription := createEnvelope.Data
 	createResp.Body.Close()
 
 	t.Run("updates prescription notes", func(t *testing.T) {
@@ -628,8 +639,9 @@ func TestUpdatePrescription(t *testing.T) {
 			t.Fatalf("Expected status 200, got %d: %s", resp.StatusCode, bodyBytes)
 		}
 
-		var p PrescriptionResponse
-		json.NewDecoder(resp.Body).Decode(&p)
+		var envelope PrescriptionEnvelope
+		json.NewDecoder(resp.Body).Decode(&envelope)
+		p := envelope.Data
 
 		if p.Notes != "Updated notes" {
 			t.Errorf("Expected notes 'Updated notes', got %s", p.Notes)
@@ -649,8 +661,9 @@ func TestUpdatePrescription(t *testing.T) {
 			t.Fatalf("Expected status 200, got %d", resp.StatusCode)
 		}
 
-		var p PrescriptionResponse
-		json.NewDecoder(resp.Body).Decode(&p)
+		var envelope PrescriptionEnvelope
+		json.NewDecoder(resp.Body).Decode(&envelope)
+		p := envelope.Data
 
 		if p.Order != 5 {
 			t.Errorf("Expected order 5, got %d", p.Order)
@@ -666,8 +679,9 @@ func TestUpdatePrescription(t *testing.T) {
 			t.Fatalf("Expected status 200, got %d", resp.StatusCode)
 		}
 
-		var p PrescriptionResponse
-		json.NewDecoder(resp.Body).Decode(&p)
+		var envelope PrescriptionEnvelope
+		json.NewDecoder(resp.Body).Decode(&envelope)
+		p := envelope.Data
 
 		if p.RestSeconds == nil || *p.RestSeconds != 240 {
 			t.Errorf("Expected restSeconds 240, got %v", p.RestSeconds)
@@ -683,8 +697,9 @@ func TestUpdatePrescription(t *testing.T) {
 			t.Fatalf("Expected status 200, got %d", resp.StatusCode)
 		}
 
-		var p PrescriptionResponse
-		json.NewDecoder(resp.Body).Decode(&p)
+		var envelope PrescriptionEnvelope
+		json.NewDecoder(resp.Body).Decode(&envelope)
+		p := envelope.Data
 
 		if p.RestSeconds != nil {
 			t.Errorf("Expected restSeconds to be cleared, got %v", p.RestSeconds)
@@ -701,8 +716,9 @@ func TestUpdatePrescription(t *testing.T) {
 			t.Fatalf("Expected status 200, got %d: %s", resp.StatusCode, bodyBytes)
 		}
 
-		var p PrescriptionResponse
-		json.NewDecoder(resp.Body).Decode(&p)
+		var envelope PrescriptionEnvelope
+		json.NewDecoder(resp.Body).Decode(&envelope)
+		p := envelope.Data
 
 		var ls LoadStrategyResponse
 		json.Unmarshal(p.LoadStrategy, &ls)
@@ -724,8 +740,9 @@ func TestUpdatePrescription(t *testing.T) {
 			t.Fatalf("Expected status 200, got %d: %s", resp.StatusCode, bodyBytes)
 		}
 
-		var p PrescriptionResponse
-		json.NewDecoder(resp.Body).Decode(&p)
+		var envelope PrescriptionEnvelope
+		json.NewDecoder(resp.Body).Decode(&envelope)
+		p := envelope.Data
 
 		var ss SetSchemeResponse
 		json.Unmarshal(p.SetScheme, &ss)
@@ -748,8 +765,9 @@ func TestUpdatePrescription(t *testing.T) {
 			t.Fatalf("Expected status 200, got %d: %s", resp.StatusCode, bodyBytes)
 		}
 
-		var p PrescriptionResponse
-		json.NewDecoder(resp.Body).Decode(&p)
+		var envelope PrescriptionEnvelope
+		json.NewDecoder(resp.Body).Decode(&envelope)
+		p := envelope.Data
 
 		if p.LiftID != benchID {
 			t.Errorf("Expected liftId %s, got %s", benchID, p.LiftID)
@@ -822,8 +840,9 @@ func TestDeletePrescription(t *testing.T) {
 			"setScheme": {"type": "FIXED", "sets": 5, "reps": 5}
 		}`, seededSquatID)
 		createResp, _ := adminPost(ts.URL("/prescriptions"), createBody)
-		var createdPrescription PrescriptionResponse
-		json.NewDecoder(createResp.Body).Decode(&createdPrescription)
+		var createEnvelope PrescriptionEnvelope
+		json.NewDecoder(createResp.Body).Decode(&createEnvelope)
+		createdPrescription := createEnvelope.Data
 		createResp.Body.Close()
 
 		// Delete it
@@ -927,8 +946,9 @@ func TestPrescriptionResponseFormat(t *testing.T) {
 		"restSeconds": 180
 	}`, seededSquatID)
 	createResp, _ := adminPost(ts.URL("/prescriptions"), createBody)
-	var createdPrescription PrescriptionResponse
-	json.NewDecoder(createResp.Body).Decode(&createdPrescription)
+	var createEnvelope PrescriptionEnvelope
+	json.NewDecoder(createResp.Body).Decode(&createEnvelope)
+	createdPrescription := createEnvelope.Data
 	createResp.Body.Close()
 
 	t.Run("response has correct JSON field names", func(t *testing.T) {
@@ -962,8 +982,9 @@ func TestPrescriptionResponseFormat(t *testing.T) {
 		resp, _ := authGet(ts.URL("/prescriptions/" + createdPrescription.ID))
 		defer resp.Body.Close()
 
-		var p PrescriptionResponse
-		json.NewDecoder(resp.Body).Decode(&p)
+		var envelope PrescriptionEnvelope
+		json.NewDecoder(resp.Body).Decode(&envelope)
+		p := envelope.Data
 
 		var ls map[string]interface{}
 		json.Unmarshal(p.LoadStrategy, &ls)
@@ -983,8 +1004,9 @@ func TestPrescriptionResponseFormat(t *testing.T) {
 		resp, _ := authGet(ts.URL("/prescriptions/" + createdPrescription.ID))
 		defer resp.Body.Close()
 
-		var p PrescriptionResponse
-		json.NewDecoder(resp.Body).Decode(&p)
+		var envelope PrescriptionEnvelope
+		json.NewDecoder(resp.Body).Decode(&envelope)
+		p := envelope.Data
 
 		var ss map[string]interface{}
 		json.Unmarshal(p.SetScheme, &ss)
@@ -1019,14 +1041,27 @@ type ResolvedPrescriptionTestResponse struct {
 	RestSeconds *int   `json:"restSeconds,omitempty"`
 }
 
+// ResolvedPrescriptionEnvelope wraps single resolved prescription response with standard envelope.
+type ResolvedPrescriptionEnvelope struct {
+	Data ResolvedPrescriptionTestResponse `json:"data"`
+}
+
+// BatchResolveResultItem matches a single item in the batch resolution response.
+type BatchResolveResultItem struct {
+	PrescriptionID string                            `json:"prescriptionId"`
+	Status         string                            `json:"status"`
+	Resolved       *ResolvedPrescriptionTestResponse `json:"resolved,omitempty"`
+	Error          string                            `json:"error,omitempty"`
+}
+
 // BatchResolveTestResponse matches the batch resolution API response format.
 type BatchResolveTestResponse struct {
-	Results []struct {
-		PrescriptionID string                            `json:"prescriptionId"`
-		Status         string                            `json:"status"`
-		Resolved       *ResolvedPrescriptionTestResponse `json:"resolved,omitempty"`
-		Error          string                            `json:"error,omitempty"`
-	} `json:"results"`
+	Results []BatchResolveResultItem `json:"results"`
+}
+
+// BatchResolveEnvelope wraps batch resolution response with standard envelope.
+type BatchResolveEnvelope struct {
+	Data BatchResolveTestResponse `json:"data"`
 }
 
 // authPost performs an authenticated POST request
@@ -1057,8 +1092,9 @@ func TestResolvePrescription(t *testing.T) {
 		"restSeconds": 180
 	}`, seededSquatID)
 	createResp, _ := adminPost(ts.URL("/prescriptions"), createBody)
-	var createdPrescription PrescriptionResponse
-	json.NewDecoder(createResp.Body).Decode(&createdPrescription)
+	var createEnvelope PrescriptionEnvelope
+	json.NewDecoder(createResp.Body).Decode(&createEnvelope)
+	createdPrescription := createEnvelope.Data
 	createResp.Body.Close()
 
 	// Create a training max for the user
@@ -1084,8 +1120,9 @@ func TestResolvePrescription(t *testing.T) {
 			t.Fatalf("Expected status 200, got %d: %s", resp.StatusCode, bodyBytes)
 		}
 
-		var resolved ResolvedPrescriptionTestResponse
-		json.NewDecoder(resp.Body).Decode(&resolved)
+		var envelope ResolvedPrescriptionEnvelope
+		json.NewDecoder(resp.Body).Decode(&envelope)
+		resolved := envelope.Data
 
 		if resolved.PrescriptionID != createdPrescription.ID {
 			t.Errorf("Expected prescriptionId %s, got %s", createdPrescription.ID, resolved.PrescriptionID)
@@ -1146,8 +1183,9 @@ func TestResolvePrescription(t *testing.T) {
 			"setScheme": {"type": "FIXED", "sets": 3, "reps": 8}
 		}`, benchID)
 		createResp, _ := adminPost(ts.URL("/prescriptions"), createBody)
-		var benchPrescription PrescriptionResponse
-		json.NewDecoder(createResp.Body).Decode(&benchPrescription)
+		var benchEnvelope PrescriptionEnvelope
+		json.NewDecoder(createResp.Body).Decode(&benchEnvelope)
+		benchPrescription := benchEnvelope.Data
 		createResp.Body.Close()
 
 		// Try to resolve without a max
@@ -1155,7 +1193,7 @@ func TestResolvePrescription(t *testing.T) {
 		resp, _ := authPost(ts.URL("/prescriptions/"+benchPrescription.ID+"/resolve"), body)
 		defer resp.Body.Close()
 
-		if resp.StatusCode != http.StatusUnprocessableEntity {
+		if resp.StatusCode != http.StatusBadRequest {
 			bodyBytes, _ := io.ReadAll(resp.Body)
 			t.Errorf("Expected status 422, got %d: %s", resp.StatusCode, bodyBytes)
 		}
@@ -1222,10 +1260,10 @@ func TestResolvePrescriptionBatch(t *testing.T) {
 		"notes": "Warmup"
 	}`, seededSquatID)
 	createResp, _ := adminPost(ts.URL("/prescriptions"), createBody)
-	var p1 PrescriptionResponse
-	json.NewDecoder(createResp.Body).Decode(&p1)
+	var p1Envelope PrescriptionEnvelope
+	json.NewDecoder(createResp.Body).Decode(&p1Envelope)
 	createResp.Body.Close()
-	prescriptionIDs = append(prescriptionIDs, p1.ID)
+	prescriptionIDs = append(prescriptionIDs, p1Envelope.Data.ID)
 
 	// Squat prescription 2 (using same lift/max - should hit cache)
 	createBody2 := fmt.Sprintf(`{
@@ -1236,10 +1274,10 @@ func TestResolvePrescriptionBatch(t *testing.T) {
 		"notes": "Work sets"
 	}`, seededSquatID)
 	createResp2, _ := adminPost(ts.URL("/prescriptions"), createBody2)
-	var p2 PrescriptionResponse
-	json.NewDecoder(createResp2.Body).Decode(&p2)
+	var p2Envelope PrescriptionEnvelope
+	json.NewDecoder(createResp2.Body).Decode(&p2Envelope)
 	createResp2.Body.Close()
-	prescriptionIDs = append(prescriptionIDs, p2.ID)
+	prescriptionIDs = append(prescriptionIDs, p2Envelope.Data.ID)
 
 	// Bench prescription
 	createBody3 := fmt.Sprintf(`{
@@ -1249,10 +1287,10 @@ func TestResolvePrescriptionBatch(t *testing.T) {
 		"order": 2
 	}`, benchID)
 	createResp3, _ := adminPost(ts.URL("/prescriptions"), createBody3)
-	var p3 PrescriptionResponse
-	json.NewDecoder(createResp3.Body).Decode(&p3)
+	var p3Envelope PrescriptionEnvelope
+	json.NewDecoder(createResp3.Body).Decode(&p3Envelope)
 	createResp3.Body.Close()
-	prescriptionIDs = append(prescriptionIDs, p3.ID)
+	prescriptionIDs = append(prescriptionIDs, p3Envelope.Data.ID)
 
 	t.Run("batch resolves all prescriptions successfully", func(t *testing.T) {
 		body := fmt.Sprintf(`{"prescriptionIds": ["%s", "%s", "%s"], "userId": "%s"}`,
@@ -1268,8 +1306,9 @@ func TestResolvePrescriptionBatch(t *testing.T) {
 			t.Fatalf("Expected status 200, got %d: %s", resp.StatusCode, bodyBytes)
 		}
 
-		var batchResp BatchResolveTestResponse
-		json.NewDecoder(resp.Body).Decode(&batchResp)
+		var batchEnvelope BatchResolveEnvelope
+		json.NewDecoder(resp.Body).Decode(&batchEnvelope)
+		batchResp := batchEnvelope.Data
 
 		if len(batchResp.Results) != 3 {
 			t.Fatalf("Expected 3 results, got %d", len(batchResp.Results))
@@ -1312,8 +1351,9 @@ func TestResolvePrescriptionBatch(t *testing.T) {
 			"setScheme": {"type": "FIXED", "sets": 5, "reps": 5}
 		}`, deadliftID)
 		createResp, _ := adminPost(ts.URL("/prescriptions"), createBody)
-		var noMaxPrescription PrescriptionResponse
-		json.NewDecoder(createResp.Body).Decode(&noMaxPrescription)
+		var noMaxEnvelope PrescriptionEnvelope
+		json.NewDecoder(createResp.Body).Decode(&noMaxEnvelope)
+		noMaxPrescription := noMaxEnvelope.Data
 		createResp.Body.Close()
 
 		// Include one valid and one invalid prescription
@@ -1330,8 +1370,9 @@ func TestResolvePrescriptionBatch(t *testing.T) {
 			t.Fatalf("Expected status 200, got %d: %s", resp.StatusCode, bodyBytes)
 		}
 
-		var batchResp BatchResolveTestResponse
-		json.NewDecoder(resp.Body).Decode(&batchResp)
+		var batchEnvelope BatchResolveEnvelope
+		json.NewDecoder(resp.Body).Decode(&batchEnvelope)
+		batchResp := batchEnvelope.Data
 
 		if len(batchResp.Results) != 3 {
 			t.Fatalf("Expected 3 results, got %d", len(batchResp.Results))
@@ -1417,8 +1458,9 @@ func TestResolveWithRampScheme(t *testing.T) {
 		"order": 0
 	}`, seededSquatID)
 	createResp, _ := adminPost(ts.URL("/prescriptions"), createBody)
-	var prescription PrescriptionResponse
-	json.NewDecoder(createResp.Body).Decode(&prescription)
+	var prescriptionEnvelope PrescriptionEnvelope
+	json.NewDecoder(createResp.Body).Decode(&prescriptionEnvelope)
+	prescription := prescriptionEnvelope.Data
 	createResp.Body.Close()
 
 	t.Run("resolves RAMP scheme correctly", func(t *testing.T) {
@@ -1434,8 +1476,9 @@ func TestResolveWithRampScheme(t *testing.T) {
 			t.Fatalf("Expected status 200, got %d: %s", resp.StatusCode, bodyBytes)
 		}
 
-		var resolved ResolvedPrescriptionTestResponse
-		json.NewDecoder(resp.Body).Decode(&resolved)
+		var resolvedEnvelope ResolvedPrescriptionEnvelope
+		json.NewDecoder(resp.Body).Decode(&resolvedEnvelope)
+		resolved := resolvedEnvelope.Data
 
 		if len(resolved.Sets) != 4 {
 			t.Fatalf("Expected 4 sets, got %d", len(resolved.Sets))
@@ -1494,8 +1537,9 @@ func TestResolveResponseFormat(t *testing.T) {
 		"restSeconds": %d
 	}`, seededSquatID, restSeconds)
 	createResp, _ := adminPost(ts.URL("/prescriptions"), createBody)
-	var prescription PrescriptionResponse
-	json.NewDecoder(createResp.Body).Decode(&prescription)
+	var prescriptionEnvelope PrescriptionEnvelope
+	json.NewDecoder(createResp.Body).Decode(&prescriptionEnvelope)
+	prescription := prescriptionEnvelope.Data
 	createResp.Body.Close()
 
 	t.Run("response has correct JSON field names", func(t *testing.T) {
@@ -1530,8 +1574,9 @@ func TestResolveResponseFormat(t *testing.T) {
 		resp, _ := authPost(ts.URL("/prescriptions/"+prescription.ID+"/resolve"), body)
 		defer resp.Body.Close()
 
-		var resolved ResolvedPrescriptionTestResponse
-		json.NewDecoder(resp.Body).Decode(&resolved)
+		var resolvedEnvelope ResolvedPrescriptionEnvelope
+		json.NewDecoder(resp.Body).Decode(&resolvedEnvelope)
+		resolved := resolvedEnvelope.Data
 
 		if resolved.Lift.ID != seededSquatID {
 			t.Errorf("Expected lift.id = %s, got %s", seededSquatID, resolved.Lift.ID)
@@ -1560,8 +1605,9 @@ func TestResolveAdditionalCases(t *testing.T) {
 			"setScheme": {"type": "FIXED", "sets": 5, "reps": 5}
 		}`, seededSquatID)
 		createResp, _ := adminPost(ts.URL("/prescriptions"), createBody)
-		var prescription PrescriptionResponse
-		json.NewDecoder(createResp.Body).Decode(&prescription)
+		var prescriptionEnvelope PrescriptionEnvelope
+		json.NewDecoder(createResp.Body).Decode(&prescriptionEnvelope)
+		prescription := prescriptionEnvelope.Data
 		createResp.Body.Close()
 
 		resp, _ := authPost(ts.URL("/prescriptions/"+prescription.ID+"/resolve"), "{invalid json}")
@@ -1589,8 +1635,9 @@ func TestResolveAdditionalCases(t *testing.T) {
 			"setScheme": {"type": "FIXED", "sets": 5, "reps": 5}
 		}`, seededSquatID)
 		createResp, _ := adminPost(ts.URL("/prescriptions"), createBody)
-		var prescription PrescriptionResponse
-		json.NewDecoder(createResp.Body).Decode(&prescription)
+		var prescriptionEnvelope PrescriptionEnvelope
+		json.NewDecoder(createResp.Body).Decode(&prescriptionEnvelope)
+		prescription := prescriptionEnvelope.Data
 		createResp.Body.Close()
 
 		resp, _ := authPost(ts.URL("/prescriptions/"+prescription.ID+"/resolve"), `{"userId": "   "}`)
@@ -1609,8 +1656,9 @@ func TestResolveAdditionalCases(t *testing.T) {
 			"setScheme": {"type": "FIXED", "sets": 5, "reps": 5}
 		}`, seededSquatID)
 		createResp, _ := adminPost(ts.URL("/prescriptions"), createBody)
-		var prescription PrescriptionResponse
-		json.NewDecoder(createResp.Body).Decode(&prescription)
+		var prescriptionEnvelope PrescriptionEnvelope
+		json.NewDecoder(createResp.Body).Decode(&prescriptionEnvelope)
+		prescription := prescriptionEnvelope.Data
 		createResp.Body.Close()
 
 		body := fmt.Sprintf(`{"prescriptionIds": ["%s"], "userId": "   "}`, prescription.ID)
@@ -1650,10 +1698,10 @@ func TestCachingBehavior(t *testing.T) {
 			"order": %d
 		}`, seededSquatID, 70+i*5, i)
 		createResp, _ := adminPost(ts.URL("/prescriptions"), createBody)
-		var p PrescriptionResponse
-		json.NewDecoder(createResp.Body).Decode(&p)
+		var pEnvelope PrescriptionEnvelope
+		json.NewDecoder(createResp.Body).Decode(&pEnvelope)
 		createResp.Body.Close()
-		prescriptionIDs = append(prescriptionIDs, p.ID)
+		prescriptionIDs = append(prescriptionIDs, pEnvelope.Data.ID)
 	}
 
 	t.Run("batch uses cached max for same lift", func(t *testing.T) {
@@ -1671,8 +1719,9 @@ func TestCachingBehavior(t *testing.T) {
 			t.Fatalf("Expected status 200, got %d: %s", resp.StatusCode, bodyBytes)
 		}
 
-		var batchResp BatchResolveTestResponse
-		json.NewDecoder(resp.Body).Decode(&batchResp)
+		var batchEnvelope BatchResolveEnvelope
+		json.NewDecoder(resp.Body).Decode(&batchEnvelope)
+		batchResp := batchEnvelope.Data
 
 		if len(batchResp.Results) != 5 {
 			t.Fatalf("Expected 5 results, got %d", len(batchResp.Results))

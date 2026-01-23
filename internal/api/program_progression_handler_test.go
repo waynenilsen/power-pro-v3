@@ -32,6 +32,43 @@ type ProgressionRefResponse struct {
 	Parameters json.RawMessage `json:"parameters"`
 }
 
+// ProgramProgressionEnvelope wraps a single program progression response.
+type ProgramProgressionEnvelope struct {
+	Data ProgramProgressionTestResponse `json:"data"`
+}
+
+// PPProgressionEnvelope wraps a single progression response.
+type PPProgressionEnvelope struct {
+	Data struct {
+		ID string `json:"id"`
+	} `json:"data"`
+}
+
+// PPCycleEnvelope wraps a single cycle response.
+type PPCycleEnvelope struct {
+	Data struct {
+		ID string `json:"id"`
+	} `json:"data"`
+}
+
+// PPProgramEnvelope wraps a single program response.
+type PPProgramEnvelope struct {
+	Data struct {
+		ID string `json:"id"`
+	} `json:"data"`
+}
+
+// PPPaginatedProgressionsResponse wraps a paginated list of program progressions.
+type PPPaginatedProgressionsResponse struct {
+	Data []ProgramProgressionTestResponse `json:"data"`
+	Meta *struct {
+		Total   int64 `json:"total"`
+		Limit   int   `json:"limit"`
+		Offset  int   `json:"offset"`
+		HasMore bool  `json:"hasMore"`
+	} `json:"meta"`
+}
+
 // Helper functions for this test file
 
 func authGetProgramProgression(url string) (*http.Response, error) {
@@ -95,9 +132,9 @@ func createPPTestProgression(t *testing.T, ts *testutil.TestServer, name string,
 		t.Fatalf("Failed to create test progression (status %d): %s", resp.StatusCode, bodyBytes)
 	}
 
-	var prog ProgressionResponse
-	json.NewDecoder(resp.Body).Decode(&prog)
-	return prog.ID
+	var envelope PPProgressionEnvelope
+	json.NewDecoder(resp.Body).Decode(&envelope)
+	return envelope.Data.ID
 }
 
 // createPPTestCycle creates a test cycle and returns its ID
@@ -115,9 +152,9 @@ func createPPTestCycle(t *testing.T, ts *testutil.TestServer, name string) strin
 		t.Fatalf("Failed to create test cycle (status %d): %s", resp.StatusCode, bodyBytes)
 	}
 
-	var cycle CycleTestResponse
-	json.NewDecoder(resp.Body).Decode(&cycle)
-	return cycle.ID
+	var envelope PPCycleEnvelope
+	json.NewDecoder(resp.Body).Decode(&envelope)
+	return envelope.Data.ID
 }
 
 // createPPTestProgram creates a test program and returns its ID
@@ -135,9 +172,9 @@ func createPPTestProgram(t *testing.T, ts *testutil.TestServer, name, slug, cycl
 		t.Fatalf("Failed to create test program (status %d): %s", resp.StatusCode, bodyBytes)
 	}
 
-	var prog ProgramTestResponse
-	json.NewDecoder(resp.Body).Decode(&prog)
-	return prog.ID
+	var envelope PPProgramEnvelope
+	json.NewDecoder(resp.Body).Decode(&envelope)
+	return envelope.Data.ID
 }
 
 // createPPTestLift creates a test lift and returns its ID
@@ -187,9 +224,11 @@ func TestProgramProgressionCRUD(t *testing.T) {
 			t.Fatalf("Expected status 201, got %d: %s", resp.StatusCode, bodyBytes)
 		}
 
-		if err := json.NewDecoder(resp.Body).Decode(&createdConfig); err != nil {
+		var envelope ProgramProgressionEnvelope
+		if err := json.NewDecoder(resp.Body).Decode(&envelope); err != nil {
 			t.Fatalf("Failed to decode response: %v", err)
 		}
+		createdConfig = envelope.Data
 
 		if createdConfig.ID == "" {
 			t.Error("Expected non-empty ID")
@@ -236,8 +275,9 @@ func TestProgramProgressionCRUD(t *testing.T) {
 			t.Fatalf("Expected status 201, got %d: %s", resp.StatusCode, bodyBytes)
 		}
 
-		var config ProgramProgressionTestResponse
-		json.NewDecoder(resp.Body).Decode(&config)
+		var envelope ProgramProgressionEnvelope
+		json.NewDecoder(resp.Body).Decode(&envelope)
+		config := envelope.Data
 
 		if config.LiftID == nil || *config.LiftID != liftID {
 			t.Errorf("Expected liftId %s, got %v", liftID, config.LiftID)
@@ -265,10 +305,11 @@ func TestProgramProgressionCRUD(t *testing.T) {
 			t.Fatalf("Expected status 200, got %d: %s", resp.StatusCode, bodyBytes)
 		}
 
-		var configs []ProgramProgressionTestResponse
-		if err := json.NewDecoder(resp.Body).Decode(&configs); err != nil {
+		var result PPPaginatedProgressionsResponse
+		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 			t.Fatalf("Failed to decode response: %v", err)
 		}
+		configs := result.Data
 
 		if len(configs) < 2 {
 			t.Errorf("Expected at least 2 configs, got %d", len(configs))
@@ -309,8 +350,9 @@ func TestProgramProgressionCRUD(t *testing.T) {
 			t.Fatalf("Expected status 200, got %d: %s", resp.StatusCode, bodyBytes)
 		}
 
-		var config ProgramProgressionTestResponse
-		json.NewDecoder(resp.Body).Decode(&config)
+		var envelope ProgramProgressionEnvelope
+		json.NewDecoder(resp.Body).Decode(&envelope)
+		config := envelope.Data
 
 		if config.ID != createdConfig.ID {
 			t.Errorf("Expected ID %s, got %s", createdConfig.ID, config.ID)
@@ -330,8 +372,9 @@ func TestProgramProgressionCRUD(t *testing.T) {
 			t.Fatalf("Expected status 200, got %d: %s", resp.StatusCode, bodyBytes)
 		}
 
-		var updated ProgramProgressionTestResponse
-		json.NewDecoder(resp.Body).Decode(&updated)
+		var envelope ProgramProgressionEnvelope
+		json.NewDecoder(resp.Body).Decode(&envelope)
+		updated := envelope.Data
 
 		if updated.Priority != 5 {
 			t.Errorf("Expected priority 5, got %d", updated.Priority)
@@ -356,8 +399,9 @@ func TestProgramProgressionCRUD(t *testing.T) {
 		prog3ID := createPPTestProgression(t, ts, "To Delete Progression", "LINEAR_PROGRESSION")
 		body := `{"progressionId": "` + prog3ID + `"}`
 		createResp, _ := adminPostProgramProgression(ts.URL("/programs/"+programID+"/progressions"), body)
-		var toDelete ProgramProgressionTestResponse
-		json.NewDecoder(createResp.Body).Decode(&toDelete)
+		var createEnvelope ProgramProgressionEnvelope
+		json.NewDecoder(createResp.Body).Decode(&createEnvelope)
+		toDelete := createEnvelope.Data
 		createResp.Body.Close()
 
 		resp, err := adminDeleteProgramProgression(ts.URL("/programs/" + programID + "/progressions/" + toDelete.ID))
@@ -565,8 +609,9 @@ func TestProgramProgressionAuthorization(t *testing.T) {
 	// Create a config as admin
 	body := `{"progressionId": "` + progressionID + `"}`
 	createResp, _ := adminPostProgramProgression(ts.URL("/programs/"+programID+"/progressions"), body)
-	var createdConfig ProgramProgressionTestResponse
-	json.NewDecoder(createResp.Body).Decode(&createdConfig)
+	var createEnvelope ProgramProgressionEnvelope
+	json.NewDecoder(createResp.Body).Decode(&createEnvelope)
+	createdConfig := createEnvelope.Data
 	createResp.Body.Close()
 
 	t.Run("unauthenticated user gets 401 on GET list", func(t *testing.T) {
@@ -671,8 +716,9 @@ func TestProgramProgressionResponseFormat(t *testing.T) {
 
 	body := `{"progressionId": "` + progressionID + `"}`
 	createResp, _ := adminPostProgramProgression(ts.URL("/programs/"+programID+"/progressions"), body)
-	var createdConfig ProgramProgressionTestResponse
-	json.NewDecoder(createResp.Body).Decode(&createdConfig)
+	var createEnvelope ProgramProgressionEnvelope
+	json.NewDecoder(createResp.Body).Decode(&createEnvelope)
+	createdConfig := createEnvelope.Data
 	createResp.Body.Close()
 
 	t.Run("single config response has correct JSON field names", func(t *testing.T) {
@@ -758,8 +804,9 @@ func TestProgramProgressionPriorityOrdering(t *testing.T) {
 		}
 		defer resp.Body.Close()
 
-		var configs []ProgramProgressionTestResponse
-		json.NewDecoder(resp.Body).Decode(&configs)
+		var result PPPaginatedProgressionsResponse
+		json.NewDecoder(resp.Body).Decode(&result)
+		configs := result.Data
 
 		if len(configs) != 3 {
 			t.Fatalf("Expected 3 configs, got %d", len(configs))
@@ -790,8 +837,9 @@ func TestProgramProgressionCrossProgram(t *testing.T) {
 	// Create config for program 1
 	body := `{"progressionId": "` + progressionID + `"}`
 	resp, _ := adminPostProgramProgression(ts.URL("/programs/"+program1ID+"/progressions"), body)
-	var config1 ProgramProgressionTestResponse
-	json.NewDecoder(resp.Body).Decode(&config1)
+	var config1Envelope ProgramProgressionEnvelope
+	json.NewDecoder(resp.Body).Decode(&config1Envelope)
+	config1 := config1Envelope.Data
 	resp.Body.Close()
 
 	t.Run("config cannot be accessed from wrong program", func(t *testing.T) {

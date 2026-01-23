@@ -57,6 +57,16 @@ type PaginatedDaysResponse struct {
 	Meta *DayPaginationMeta `json:"meta"`
 }
 
+// DayEnvelope wraps single day response with standard envelope.
+type DayEnvelope struct {
+	Data DayResponse `json:"data"`
+}
+
+// DayWithPrescriptionsEnvelope wraps day with prescriptions response.
+type DayWithPrescriptionsEnvelope struct {
+	Data DayWithPrescriptionsResponse `json:"data"`
+}
+
 func TestListDays(t *testing.T) {
 	ts, err := testutil.NewTestServer()
 	if err != nil {
@@ -182,8 +192,9 @@ func TestGetDay(t *testing.T) {
 	// Create a day
 	createBody := `{"name": "Test Day", "slug": "test-day"}`
 	createResp, _ := adminPost(ts.URL("/days"), createBody)
-	var createdDay DayResponse
-	json.NewDecoder(createResp.Body).Decode(&createdDay)
+	var createEnvelope DayEnvelope
+	json.NewDecoder(createResp.Body).Decode(&createEnvelope)
+	createdDay := createEnvelope.Data
 	createResp.Body.Close()
 
 	t.Run("returns day by ID with prescriptions", func(t *testing.T) {
@@ -197,8 +208,9 @@ func TestGetDay(t *testing.T) {
 			t.Fatalf("Expected status 200, got %d", resp.StatusCode)
 		}
 
-		var day DayWithPrescriptionsResponse
-		json.NewDecoder(resp.Body).Decode(&day)
+		var envelope DayWithPrescriptionsEnvelope
+		json.NewDecoder(resp.Body).Decode(&envelope)
+		day := envelope.Data
 
 		if day.ID != createdDay.ID {
 			t.Errorf("Expected ID %s, got %s", createdDay.ID, day.ID)
@@ -254,8 +266,9 @@ func TestGetDayBySlug(t *testing.T) {
 			t.Fatalf("Expected status 200, got %d", resp.StatusCode)
 		}
 
-		var day DayWithPrescriptionsResponse
-		json.NewDecoder(resp.Body).Decode(&day)
+		var envelope DayWithPrescriptionsEnvelope
+		json.NewDecoder(resp.Body).Decode(&envelope)
+		day := envelope.Data
 
 		if day.Slug != "heavy-day" {
 			t.Errorf("Expected slug 'heavy-day', got %s", day.Slug)
@@ -295,8 +308,9 @@ func TestCreateDay(t *testing.T) {
 			t.Fatalf("Expected status 201, got %d: %s", resp.StatusCode, body)
 		}
 
-		var day DayResponse
-		json.NewDecoder(resp.Body).Decode(&day)
+		var envelope DayEnvelope
+		json.NewDecoder(resp.Body).Decode(&envelope)
+		day := envelope.Data
 
 		if day.Name != "Day A" {
 			t.Errorf("Expected name 'Day A', got %s", day.Name)
@@ -322,8 +336,9 @@ func TestCreateDay(t *testing.T) {
 			t.Fatalf("Expected status 201, got %d: %s", resp.StatusCode, bodyBytes)
 		}
 
-		var day DayResponse
-		json.NewDecoder(resp.Body).Decode(&day)
+		var envelope DayEnvelope
+		json.NewDecoder(resp.Body).Decode(&envelope)
+		day := envelope.Data
 
 		if day.Slug != "light-day" {
 			t.Errorf("Expected auto-generated slug 'light-day', got %s", day.Slug)
@@ -377,8 +392,9 @@ func TestUpdateDay(t *testing.T) {
 	// Create a day to update
 	createBody := `{"name": "Update Test", "slug": "update-test"}`
 	createResp, _ := adminPost(ts.URL("/days"), createBody)
-	var createdDay DayResponse
-	json.NewDecoder(createResp.Body).Decode(&createdDay)
+	var createEnvelope DayEnvelope
+	json.NewDecoder(createResp.Body).Decode(&createEnvelope)
+	createdDay := createEnvelope.Data
 	createResp.Body.Close()
 
 	t.Run("updates day name", func(t *testing.T) {
@@ -394,8 +410,9 @@ func TestUpdateDay(t *testing.T) {
 			t.Fatalf("Expected status 200, got %d: %s", resp.StatusCode, bodyBytes)
 		}
 
-		var day DayResponse
-		json.NewDecoder(resp.Body).Decode(&day)
+		var envelope DayEnvelope
+		json.NewDecoder(resp.Body).Decode(&envelope)
+		day := envelope.Data
 
 		if day.Name != "Updated Name" {
 			t.Errorf("Expected name 'Updated Name', got %s", day.Name)
@@ -415,8 +432,9 @@ func TestUpdateDay(t *testing.T) {
 			t.Fatalf("Expected status 200, got %d", resp.StatusCode)
 		}
 
-		var day DayResponse
-		json.NewDecoder(resp.Body).Decode(&day)
+		var envelope DayEnvelope
+		json.NewDecoder(resp.Body).Decode(&envelope)
+		day := envelope.Data
 
 		if day.Slug != "updated-slug" {
 			t.Errorf("Expected slug 'updated-slug', got %s", day.Slug)
@@ -432,8 +450,9 @@ func TestUpdateDay(t *testing.T) {
 			t.Fatalf("Expected status 200, got %d", resp.StatusCode)
 		}
 
-		var day DayResponse
-		json.NewDecoder(resp.Body).Decode(&day)
+		var envelope DayEnvelope
+		json.NewDecoder(resp.Body).Decode(&envelope)
+		day := envelope.Data
 
 		if day.Metadata == nil || day.Metadata["intensityLevel"] != "MEDIUM" {
 			t.Errorf("Expected metadata with intensityLevel MEDIUM, got %v", day.Metadata)
@@ -452,8 +471,9 @@ func TestUpdateDay(t *testing.T) {
 			t.Fatalf("Expected status 200, got %d", resp.StatusCode)
 		}
 
-		var day DayResponse
-		json.NewDecoder(resp.Body).Decode(&day)
+		var envelope DayEnvelope
+		json.NewDecoder(resp.Body).Decode(&envelope)
+		day := envelope.Data
 
 		if day.Metadata != nil && len(day.Metadata) > 0 {
 			t.Errorf("Expected metadata to be nil/empty, got %v", day.Metadata)
@@ -508,8 +528,9 @@ func TestDeleteDay(t *testing.T) {
 		// Create a day to delete
 		createBody := `{"name": "To Delete", "slug": "to-delete"}`
 		createResp, _ := adminPost(ts.URL("/days"), createBody)
-		var createdDay DayResponse
-		json.NewDecoder(createResp.Body).Decode(&createdDay)
+		var createEnvelope DayEnvelope
+		json.NewDecoder(createResp.Body).Decode(&createEnvelope)
+		createdDay := createEnvelope.Data
 		createResp.Body.Close()
 
 		// Delete it
@@ -553,8 +574,9 @@ func TestDayPrescriptionManagement(t *testing.T) {
 	// Create a day
 	createDayBody := `{"name": "Prescription Test Day", "slug": "prescription-test-day"}`
 	dayResp, _ := adminPost(ts.URL("/days"), createDayBody)
-	var createdDay DayResponse
-	json.NewDecoder(dayResp.Body).Decode(&createdDay)
+	var dayEnvelope DayEnvelope
+	json.NewDecoder(dayResp.Body).Decode(&dayEnvelope)
+	createdDay := dayEnvelope.Data
 	dayResp.Body.Close()
 
 	if createdDay.ID == "" {
@@ -568,10 +590,13 @@ func TestDayPrescriptionManagement(t *testing.T) {
 	p1Body, _ := io.ReadAll(p1Resp.Body)
 	p1Resp.Body.Close()
 
-	var p1 PrescriptionResponse
-	if err := json.Unmarshal(p1Body, &p1); err != nil {
+	var p1Envelope struct {
+		Data PrescriptionResponse `json:"data"`
+	}
+	if err := json.Unmarshal(p1Body, &p1Envelope); err != nil {
 		t.Fatalf("Failed to decode prescription 1: %v, body: %s", err, string(p1Body))
 	}
+	p1 := p1Envelope.Data
 	if p1.ID == "" {
 		t.Fatalf("Failed to create prescription 1, response: %s", string(p1Body))
 	}
@@ -581,10 +606,13 @@ func TestDayPrescriptionManagement(t *testing.T) {
 	p2Body, _ := io.ReadAll(p2Resp.Body)
 	p2Resp.Body.Close()
 
-	var p2 PrescriptionResponse
-	if err := json.Unmarshal(p2Body, &p2); err != nil {
+	var p2Envelope struct {
+		Data PrescriptionResponse `json:"data"`
+	}
+	if err := json.Unmarshal(p2Body, &p2Envelope); err != nil {
 		t.Fatalf("Failed to decode prescription 2: %v, body: %s", err, string(p2Body))
 	}
+	p2 := p2Envelope.Data
 	if p2.ID == "" {
 		t.Fatalf("Failed to create prescription 2, response: %s", string(p2Body))
 	}
@@ -602,8 +630,11 @@ func TestDayPrescriptionManagement(t *testing.T) {
 			t.Fatalf("Expected status 201, got %d: %s", resp.StatusCode, bodyBytes)
 		}
 
-		var dp DayPrescriptionResponse
-		json.NewDecoder(resp.Body).Decode(&dp)
+		var dpEnvelope struct {
+			Data DayPrescriptionResponse `json:"data"`
+		}
+		json.NewDecoder(resp.Body).Decode(&dpEnvelope)
+		dp := dpEnvelope.Data
 
 		if dp.PrescriptionID != p1.ID {
 			t.Errorf("Expected prescriptionId %s, got %s", p1.ID, dp.PrescriptionID)
@@ -623,8 +654,11 @@ func TestDayPrescriptionManagement(t *testing.T) {
 			t.Fatalf("Expected status 201, got %d: %s", resp.StatusCode, bodyBytes)
 		}
 
-		var dp DayPrescriptionResponse
-		json.NewDecoder(resp.Body).Decode(&dp)
+		var dpEnvelope struct {
+			Data DayPrescriptionResponse `json:"data"`
+		}
+		json.NewDecoder(resp.Body).Decode(&dpEnvelope)
+		dp := dpEnvelope.Data
 
 		if dp.Order != 1 {
 			t.Errorf("Expected order 1, got %d", dp.Order)
@@ -645,8 +679,9 @@ func TestDayPrescriptionManagement(t *testing.T) {
 		resp, _ := authGet(ts.URL("/days/" + createdDay.ID))
 		defer resp.Body.Close()
 
-		var day DayWithPrescriptionsResponse
-		json.NewDecoder(resp.Body).Decode(&day)
+		var envelope DayWithPrescriptionsEnvelope
+		json.NewDecoder(resp.Body).Decode(&envelope)
+		day := envelope.Data
 
 		if len(day.Prescriptions) != 2 {
 			t.Fatalf("Expected 2 prescriptions, got %d", len(day.Prescriptions))
@@ -672,8 +707,9 @@ func TestDayPrescriptionManagement(t *testing.T) {
 			t.Fatalf("Expected status 200, got %d: %s", resp.StatusCode, bodyBytes)
 		}
 
-		var day DayWithPrescriptionsResponse
-		json.NewDecoder(resp.Body).Decode(&day)
+		var envelope DayWithPrescriptionsEnvelope
+		json.NewDecoder(resp.Body).Decode(&envelope)
+		day := envelope.Data
 
 		if len(day.Prescriptions) != 2 {
 			t.Fatalf("Expected 2 prescriptions, got %d", len(day.Prescriptions))
@@ -712,8 +748,9 @@ func TestDayPrescriptionManagement(t *testing.T) {
 		getResp, _ := authGet(ts.URL("/days/" + createdDay.ID))
 		defer getResp.Body.Close()
 
-		var day DayWithPrescriptionsResponse
-		json.NewDecoder(getResp.Body).Decode(&day)
+		var envelope DayWithPrescriptionsEnvelope
+		json.NewDecoder(getResp.Body).Decode(&envelope)
+		day := envelope.Data
 
 		if len(day.Prescriptions) != 1 {
 			t.Errorf("Expected 1 prescription after removal, got %d", len(day.Prescriptions))
@@ -740,8 +777,9 @@ func TestDayResponseFormat(t *testing.T) {
 	// Create a day with metadata
 	createBody := `{"name": "Format Test", "slug": "format-test", "metadata": {"intensityLevel": "HEAVY", "focus": "squats"}}`
 	createResp, _ := adminPost(ts.URL("/days"), createBody)
-	var createdDay DayResponse
-	json.NewDecoder(createResp.Body).Decode(&createdDay)
+	var createEnvelope DayEnvelope
+	json.NewDecoder(createResp.Body).Decode(&createEnvelope)
+	createdDay := createEnvelope.Data
 	createResp.Body.Close()
 
 	t.Run("response has correct JSON field names", func(t *testing.T) {

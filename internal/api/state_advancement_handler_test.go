@@ -21,6 +21,31 @@ type StateAdvancementTestResponse struct {
 	UpdatedAt             time.Time `json:"updatedAt"`
 }
 
+// StateAdvancementEnvelope wraps state advancement response with standard envelope.
+type StateAdvancementEnvelope struct {
+	Data StateAdvancementTestResponse `json:"data"`
+}
+
+// CycleEnvelopeForAdvancement wraps cycle response with standard envelope.
+type CycleEnvelopeForAdvancement struct {
+	Data CycleTestResponse `json:"data"`
+}
+
+// ProgramEnvelopeForAdvancement wraps program response with standard envelope.
+type ProgramEnvelopeForAdvancement struct {
+	Data ProgramTestResponse `json:"data"`
+}
+
+// WeekEnvelopeForAdvancement wraps week response with standard envelope.
+type WeekEnvelopeForAdvancement struct {
+	Data WeekTestResponse `json:"data"`
+}
+
+// DayEnvelopeForAdvancement wraps day response with standard envelope.
+type DayEnvelopeForAdvancement struct {
+	Data DayTestResponse `json:"data"`
+}
+
 // Helper functions for state advancement tests
 
 func userPostAdvance(url string, userID string) (*http.Response, error) {
@@ -51,9 +76,9 @@ func createAdvancementTestCycle(t *testing.T, ts *testutil.TestServer, name stri
 	}
 	defer resp.Body.Close()
 
-	var cycle CycleTestResponse
-	json.NewDecoder(resp.Body).Decode(&cycle)
-	return cycle.ID
+	var envelope CycleEnvelopeForAdvancement
+	json.NewDecoder(resp.Body).Decode(&envelope)
+	return envelope.Data.ID
 }
 
 // createAdvancementTestProgram creates a test program and returns its ID
@@ -65,9 +90,9 @@ func createAdvancementTestProgram(t *testing.T, ts *testutil.TestServer, name, s
 	}
 	defer resp.Body.Close()
 
-	var program ProgramTestResponse
-	json.NewDecoder(resp.Body).Decode(&program)
-	return program.ID
+	var envelope ProgramEnvelopeForAdvancement
+	json.NewDecoder(resp.Body).Decode(&envelope)
+	return envelope.Data.ID
 }
 
 // createAdvancementTestWeek creates a week for the cycle and returns its ID
@@ -79,9 +104,9 @@ func createAdvancementTestWeek(t *testing.T, ts *testutil.TestServer, cycleID st
 	}
 	defer resp.Body.Close()
 
-	var week WeekTestResponse
-	json.NewDecoder(resp.Body).Decode(&week)
-	return week.ID
+	var envelope WeekEnvelopeForAdvancement
+	json.NewDecoder(resp.Body).Decode(&envelope)
+	return envelope.Data.ID
 }
 
 // createAdvancementTestDay creates a day and returns its ID
@@ -93,9 +118,9 @@ func createAdvancementTestDay(t *testing.T, ts *testutil.TestServer, name, slug 
 	}
 	defer resp.Body.Close()
 
-	var day DayTestResponse
-	json.NewDecoder(resp.Body).Decode(&day)
-	return day.ID
+	var envelope DayEnvelopeForAdvancement
+	json.NewDecoder(resp.Body).Decode(&envelope)
+	return envelope.Data.ID
 }
 
 // addDayToWeek adds a day to a week
@@ -185,10 +210,11 @@ func TestStateAdvancementBasic(t *testing.T) {
 			t.Fatalf("Expected status 200, got %d: %s", resp.StatusCode, bodyBytes)
 		}
 
-		var advResp StateAdvancementTestResponse
-		if err := json.NewDecoder(resp.Body).Decode(&advResp); err != nil {
+		var envelope StateAdvancementEnvelope
+		if err := json.NewDecoder(resp.Body).Decode(&envelope); err != nil {
 			t.Fatalf("Failed to decode response: %v", err)
 		}
+		advResp := envelope.Data
 
 		// First advancement: nil -> day 1, week 1
 		if advResp.CurrentDayIndex == nil || *advResp.CurrentDayIndex != 1 {
@@ -210,8 +236,9 @@ func TestStateAdvancementBasic(t *testing.T) {
 		resp, _ := userPostAdvance(ts.URL("/users/"+userID+"/program-state/advance"), userID)
 		defer resp.Body.Close()
 
-		var advResp StateAdvancementTestResponse
-		json.NewDecoder(resp.Body).Decode(&advResp)
+		var envelope StateAdvancementEnvelope
+		json.NewDecoder(resp.Body).Decode(&envelope)
+		advResp := envelope.Data
 
 		// Second advancement: day 1 -> day 0, week 2
 		if advResp.CurrentDayIndex == nil || *advResp.CurrentDayIndex != 0 {
@@ -230,8 +257,9 @@ func TestStateAdvancementBasic(t *testing.T) {
 		resp, _ := userPostAdvance(ts.URL("/users/"+userID+"/program-state/advance"), userID)
 		defer resp.Body.Close()
 
-		var advResp StateAdvancementTestResponse
-		json.NewDecoder(resp.Body).Decode(&advResp)
+		var envelope StateAdvancementEnvelope
+		json.NewDecoder(resp.Body).Decode(&envelope)
+		advResp := envelope.Data
 
 		// Third advancement: day 0, week 2 -> day 1, week 2
 		if advResp.CurrentDayIndex == nil || *advResp.CurrentDayIndex != 1 {
@@ -250,8 +278,9 @@ func TestStateAdvancementBasic(t *testing.T) {
 		resp, _ := userPostAdvance(ts.URL("/users/"+userID+"/program-state/advance"), userID)
 		defer resp.Body.Close()
 
-		var advResp StateAdvancementTestResponse
-		json.NewDecoder(resp.Body).Decode(&advResp)
+		var envelope StateAdvancementEnvelope
+		json.NewDecoder(resp.Body).Decode(&envelope)
+		advResp := envelope.Data
 
 		// Fourth advancement: day 1, week 2 -> day 0, week 1, cycle 2 (CYCLE COMPLETE!)
 		if advResp.CurrentDayIndex == nil || *advResp.CurrentDayIndex != 0 {
@@ -426,8 +455,9 @@ func TestStateAdvancementNoDaysConfigured(t *testing.T) {
 			t.Fatalf("Expected status 200, got %d: %s", resp.StatusCode, bodyBytes)
 		}
 
-		var advResp StateAdvancementTestResponse
-		json.NewDecoder(resp.Body).Decode(&advResp)
+		var envelope StateAdvancementEnvelope
+		json.NewDecoder(resp.Body).Decode(&envelope)
+		advResp := envelope.Data
 
 		// With 0 days, we default to 1, so first advancement completes day 0 -> moves to next week
 		if advResp.CurrentWeek != 2 {

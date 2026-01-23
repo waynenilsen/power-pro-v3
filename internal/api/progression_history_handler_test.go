@@ -30,12 +30,18 @@ type ProgressionHistoryTestEntry struct {
 	AppliedAt       time.Time       `json:"appliedAt"`
 }
 
+// ProgressionHistoryTestMeta contains pagination metadata for the progression history response.
+type ProgressionHistoryTestMeta struct {
+	Total   int64 `json:"total"`
+	Limit   int   `json:"limit"`
+	Offset  int   `json:"offset"`
+	HasMore bool  `json:"hasMore"`
+}
+
 // ProgressionHistoryTestListResponse wraps the paginated progression history response.
 type ProgressionHistoryTestListResponse struct {
-	Data       []ProgressionHistoryTestEntry `json:"data"`
-	Limit      int                           `json:"limit"`
-	Offset     int                           `json:"offset"`
-	TotalItems int64                         `json:"totalItems"`
+	Data []ProgressionHistoryTestEntry   `json:"data"`
+	Meta *ProgressionHistoryTestMeta     `json:"meta"`
 }
 
 // Helper functions specific to progression history tests
@@ -99,9 +105,9 @@ func createPHTestProgression(t *testing.T, ts *testutil.TestServer, name string,
 		t.Fatalf("Failed to create test progression (status %d): %s", resp.StatusCode, bodyBytes)
 	}
 
-	var prog ProgressionResponse
-	json.NewDecoder(resp.Body).Decode(&prog)
-	return prog.ID
+	var envelope ProgressionEnvelope
+	json.NewDecoder(resp.Body).Decode(&envelope)
+	return envelope.Data.ID
 }
 
 
@@ -132,8 +138,8 @@ func TestProgressionHistoryList(t *testing.T) {
 		if len(result.Data) != 0 {
 			t.Errorf("Expected 0 entries initially, got %d", len(result.Data))
 		}
-		if result.TotalItems != 0 {
-			t.Errorf("Expected totalItems 0, got %d", result.TotalItems)
+		if result.Meta.Total != 0 {
+			t.Errorf("Expected total 0, got %d", result.Meta.Total)
 		}
 	})
 
@@ -194,11 +200,11 @@ func TestProgressionHistoryPagination(t *testing.T) {
 		var result ProgressionHistoryTestListResponse
 		json.NewDecoder(resp.Body).Decode(&result)
 
-		if result.Limit != 20 {
-			t.Errorf("Expected default limit 20, got %d", result.Limit)
+		if result.Meta.Limit != 20 {
+			t.Errorf("Expected default limit 20, got %d", result.Meta.Limit)
 		}
-		if result.Offset != 0 {
-			t.Errorf("Expected default offset 0, got %d", result.Offset)
+		if result.Meta.Offset != 0 {
+			t.Errorf("Expected default offset 0, got %d", result.Meta.Offset)
 		}
 	})
 
@@ -212,8 +218,8 @@ func TestProgressionHistoryPagination(t *testing.T) {
 		var result ProgressionHistoryTestListResponse
 		json.NewDecoder(resp.Body).Decode(&result)
 
-		if result.Limit != 5 {
-			t.Errorf("Expected limit 5, got %d", result.Limit)
+		if result.Meta.Limit != 5 {
+			t.Errorf("Expected limit 5, got %d", result.Meta.Limit)
 		}
 	})
 
@@ -227,8 +233,8 @@ func TestProgressionHistoryPagination(t *testing.T) {
 		var result ProgressionHistoryTestListResponse
 		json.NewDecoder(resp.Body).Decode(&result)
 
-		if result.Limit != 100 {
-			t.Errorf("Expected limit capped at 100, got %d", result.Limit)
+		if result.Meta.Limit != 100 {
+			t.Errorf("Expected limit capped at 100, got %d", result.Meta.Limit)
 		}
 	})
 
@@ -242,8 +248,8 @@ func TestProgressionHistoryPagination(t *testing.T) {
 		var result ProgressionHistoryTestListResponse
 		json.NewDecoder(resp.Body).Decode(&result)
 
-		if result.Offset != 10 {
-			t.Errorf("Expected offset 10, got %d", result.Offset)
+		if result.Meta.Offset != 10 {
+			t.Errorf("Expected offset 10, got %d", result.Meta.Offset)
 		}
 	})
 }
@@ -400,12 +406,14 @@ func TestProgressionHistoryResponseFormat(t *testing.T) {
 		body, _ := io.ReadAll(resp.Body)
 		bodyStr := string(body)
 
-		// Check for expected pagination fields
+		// Check for expected pagination fields in standard envelope format
 		expectedFields := []string{
 			`"data"`,
+			`"meta"`,
+			`"total"`,
 			`"limit"`,
 			`"offset"`,
-			`"totalItems"`,
+			`"hasMore"`,
 		}
 
 		for _, field := range expectedFields {
@@ -448,8 +456,8 @@ func TestProgressionHistoryWithData(t *testing.T) {
 		json.NewDecoder(resp.Body).Decode(&result)
 
 		// Since no logs exist yet for this user, we should get empty data
-		if result.TotalItems != 0 {
-			t.Errorf("Expected 0 items, got %d", result.TotalItems)
+		if result.Meta.Total != 0 {
+			t.Errorf("Expected 0 items, got %d", result.Meta.Total)
 		}
 	})
 
@@ -577,14 +585,14 @@ func TestProgressionHistoryIntegration(t *testing.T) {
 		if result.Data == nil {
 			t.Error("Expected data array to be present")
 		}
-		if result.Limit != 20 {
-			t.Errorf("Expected default limit 20, got %d", result.Limit)
+		if result.Meta.Limit != 20 {
+			t.Errorf("Expected default limit 20, got %d", result.Meta.Limit)
 		}
-		if result.Offset != 0 {
-			t.Errorf("Expected offset 0, got %d", result.Offset)
+		if result.Meta.Offset != 0 {
+			t.Errorf("Expected offset 0, got %d", result.Meta.Offset)
 		}
-		if result.TotalItems != 0 {
-			t.Errorf("Expected totalItems 0, got %d", result.TotalItems)
+		if result.Meta.Total != 0 {
+			t.Errorf("Expected total 0, got %d", result.Meta.Total)
 		}
 	})
 

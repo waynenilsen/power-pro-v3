@@ -15,6 +15,61 @@ import (
 )
 
 // =============================================================================
+// ENVELOPE TYPES FOR API RESPONSE DECODING
+// =============================================================================
+// All API responses are wrapped in {"data": ...} envelopes.
+
+// PrescriptionEnvelopeInteg wraps prescription responses for integration tests.
+type PrescriptionEnvelopeInteg struct {
+	Data PrescriptionResponse `json:"data"`
+}
+
+// ResolvedPrescriptionEnvelopeInteg wraps resolved prescription responses.
+type ResolvedPrescriptionEnvelopeInteg struct {
+	Data ResolvedPrescriptionTestResponse `json:"data"`
+}
+
+// BatchResolveEnvelopeInteg wraps batch resolve responses.
+type BatchResolveEnvelopeInteg struct {
+	Data BatchResolveTestResponse `json:"data"`
+}
+
+// WorkoutEnvelopeInteg wraps workout responses.
+type WorkoutEnvelopeInteg struct {
+	Data WorkoutTestResponse `json:"data"`
+}
+
+// CycleEnvelopeInteg wraps cycle responses.
+type CycleEnvelopeInteg struct {
+	Data CycleTestResponse `json:"data"`
+}
+
+// WeekEnvelopeInteg wraps week responses.
+type WeekEnvelopeInteg struct {
+	Data WeekTestResponse `json:"data"`
+}
+
+// DayEnvelopeInteg wraps day responses.
+type DayEnvelopeInteg struct {
+	Data DayTestResponse `json:"data"`
+}
+
+// ProgramEnvelopeInteg wraps program responses.
+type ProgramEnvelopeInteg struct {
+	Data ProgramTestResponse `json:"data"`
+}
+
+// ProgressionEnvelopeInteg wraps progression responses.
+type ProgressionEnvelopeInteg struct {
+	Data ProgressionResponse `json:"data"`
+}
+
+// ManualTriggerEnvelopeInteg wraps manual trigger responses.
+type ManualTriggerEnvelopeInteg struct {
+	Data ManualTriggerResponse `json:"data"`
+}
+
+// =============================================================================
 // PRESCRIPTION RESOLUTION WORKFLOW INTEGRATION TESTS
 // =============================================================================
 
@@ -57,8 +112,11 @@ func TestPrescriptionResolutionWorkflowIntegration(t *testing.T) {
 			t.Fatalf("Failed to create prescription, status %d: %s", prescResp.StatusCode, body)
 		}
 
-		var prescription PrescriptionResponse
-		json.NewDecoder(prescResp.Body).Decode(&prescription)
+		var prescEnvelope struct {
+			Data PrescriptionResponse `json:"data"`
+		}
+		json.NewDecoder(prescResp.Body).Decode(&prescEnvelope)
+		prescription := prescEnvelope.Data
 
 		// Step 3: Resolve the prescription for the user
 		resolveBody := fmt.Sprintf(`{"userId": "%s"}`, userID)
@@ -73,8 +131,11 @@ func TestPrescriptionResolutionWorkflowIntegration(t *testing.T) {
 			t.Fatalf("Expected status 200, got %d: %s", resolveResp.StatusCode, body)
 		}
 
-		var resolved ResolvedPrescriptionTestResponse
-		json.NewDecoder(resolveResp.Body).Decode(&resolved)
+		var resolveEnvelope struct {
+			Data ResolvedPrescriptionTestResponse `json:"data"`
+		}
+		json.NewDecoder(resolveResp.Body).Decode(&resolveEnvelope)
+		resolved := resolveEnvelope.Data
 
 		// Verify resolved values
 		// 85% of 400 = 340, rounded to nearest 5 = 340
@@ -113,8 +174,11 @@ func TestPrescriptionResolutionWorkflowIntegration(t *testing.T) {
 			"order": 1
 		}`, benchID)
 		prescResp, _ := adminPost(ts.URL("/prescriptions"), prescriptionBody)
-		var prescription PrescriptionResponse
-		json.NewDecoder(prescResp.Body).Decode(&prescription)
+		var prescEnvelope struct {
+			Data PrescriptionResponse `json:"data"`
+		}
+		json.NewDecoder(prescResp.Body).Decode(&prescEnvelope)
+		prescription := prescEnvelope.Data
 		prescResp.Body.Close()
 
 		// Resolve
@@ -127,8 +191,11 @@ func TestPrescriptionResolutionWorkflowIntegration(t *testing.T) {
 			t.Fatalf("Expected status 200, got %d: %s", resolveResp.StatusCode, body)
 		}
 
-		var resolved ResolvedPrescriptionTestResponse
-		json.NewDecoder(resolveResp.Body).Decode(&resolved)
+		var resolveEnvelope struct {
+			Data ResolvedPrescriptionTestResponse `json:"data"`
+		}
+		json.NewDecoder(resolveResp.Body).Decode(&resolveEnvelope)
+		resolved := resolveEnvelope.Data
 
 		// 90% of 250 = 225
 		expectedWeight := 225.0
@@ -152,8 +219,9 @@ func TestPrescriptionResolutionWorkflowIntegration(t *testing.T) {
 			"order": 1
 		}`, deadliftID)
 		prescResp, _ := adminPost(ts.URL("/prescriptions"), prescriptionBody)
-		var prescription PrescriptionResponse
-		json.NewDecoder(prescResp.Body).Decode(&prescription)
+		var prescEnvelope PrescriptionEnvelopeInteg
+		json.NewDecoder(prescResp.Body).Decode(&prescEnvelope)
+		prescription := prescEnvelope.Data
 		prescResp.Body.Close()
 
 		// Resolve
@@ -166,8 +234,9 @@ func TestPrescriptionResolutionWorkflowIntegration(t *testing.T) {
 			t.Fatalf("Expected status 200, got %d: %s", resolveResp.StatusCode, body)
 		}
 
-		var resolved ResolvedPrescriptionTestResponse
-		json.NewDecoder(resolveResp.Body).Decode(&resolved)
+		var resolveEnvelope ResolvedPrescriptionEnvelopeInteg
+		json.NewDecoder(resolveResp.Body).Decode(&resolveEnvelope)
+		resolved := resolveEnvelope.Data
 
 		// Verify RAMP weights: 50% of 500 = 250, 60% = 300, 70% = 350, 80% = 400, 90% = 450
 		expectedWeights := []float64{250, 300, 350, 400, 450}
@@ -202,10 +271,10 @@ func TestPrescriptionResolutionWorkflowIntegration(t *testing.T) {
 				"order": %d
 			}`, squatID, 70+i*5, i)
 			prescResp, _ := adminPost(ts.URL("/prescriptions"), prescriptionBody)
-			var p PrescriptionResponse
-			json.NewDecoder(prescResp.Body).Decode(&p)
+			var pEnvelope PrescriptionEnvelopeInteg
+			json.NewDecoder(prescResp.Body).Decode(&pEnvelope)
 			prescResp.Body.Close()
-			prescriptionIDs = append(prescriptionIDs, p.ID)
+			prescriptionIDs = append(prescriptionIDs, pEnvelope.Data.ID)
 		}
 
 		// Batch resolve
@@ -219,8 +288,9 @@ func TestPrescriptionResolutionWorkflowIntegration(t *testing.T) {
 			t.Fatalf("Expected status 200, got %d: %s", batchResp.StatusCode, body)
 		}
 
-		var batchResult BatchResolveTestResponse
-		json.NewDecoder(batchResp.Body).Decode(&batchResult)
+		var batchEnvelope BatchResolveEnvelopeInteg
+		json.NewDecoder(batchResp.Body).Decode(&batchEnvelope)
+		batchResult := batchEnvelope.Data
 
 		if len(batchResult.Results) != 3 {
 			t.Fatalf("Expected 3 results, got %d", len(batchResult.Results))
@@ -251,8 +321,9 @@ func TestPrescriptionResolutionWorkflowIntegration(t *testing.T) {
 			"setScheme": {"type": "FIXED", "sets": 5, "reps": 5}
 		}`, squatID)
 		prescResp, _ := adminPost(ts.URL("/prescriptions"), prescriptionBody)
-		var prescription PrescriptionResponse
-		json.NewDecoder(prescResp.Body).Decode(&prescription)
+		var prescEnvelope PrescriptionEnvelopeInteg
+		json.NewDecoder(prescResp.Body).Decode(&prescEnvelope)
+		prescription := prescEnvelope.Data
 		prescResp.Body.Close()
 
 		// Try to resolve without a max
@@ -260,9 +331,9 @@ func TestPrescriptionResolutionWorkflowIntegration(t *testing.T) {
 		resolveResp, _ := authPost(ts.URL("/prescriptions/"+prescription.ID+"/resolve"), resolveBody)
 		defer resolveResp.Body.Close()
 
-		if resolveResp.StatusCode != http.StatusUnprocessableEntity {
+		if resolveResp.StatusCode != http.StatusBadRequest {
 			body, _ := io.ReadAll(resolveResp.Body)
-			t.Errorf("Expected status 422, got %d: %s", resolveResp.StatusCode, body)
+			t.Errorf("Expected status 400, got %d: %s", resolveResp.StatusCode, body)
 		}
 	})
 }
@@ -300,8 +371,9 @@ func TestWorkoutGenerationWorkflowIntegration(t *testing.T) {
 			t.Fatalf("Expected status 200, got %d: %s", workoutResp.StatusCode, body)
 		}
 
-		var workout WorkoutTestResponse
-		json.NewDecoder(workoutResp.Body).Decode(&workout)
+		var workoutEnvelope WorkoutEnvelopeInteg
+		json.NewDecoder(workoutResp.Body).Decode(&workoutEnvelope)
+		workout := workoutEnvelope.Data
 
 		// Verify workout structure
 		if workout.UserID != userID {
@@ -361,15 +433,17 @@ func TestWorkoutGenerationWorkflowIntegration(t *testing.T) {
 			"order": 0
 		}`, lift.Data.ID)
 		prescResp, _ := adminPost(ts.URL("/prescriptions"), prescBody)
-		var presc PrescriptionResponse
-		json.NewDecoder(prescResp.Body).Decode(&presc)
+		var prescEnvelope PrescriptionEnvelopeInteg
+		json.NewDecoder(prescResp.Body).Decode(&prescEnvelope)
+		presc := prescEnvelope.Data
 		prescResp.Body.Close()
 
 		// Create day
 		dayBody := fmt.Sprintf(`{"name": "Ramp Day", "slug": "%s"}`, daySlug)
 		dayResp, _ := adminPost(ts.URL("/days"), dayBody)
-		var day DayTestResponse
-		json.NewDecoder(dayResp.Body).Decode(&day)
+		var dayEnvelope DayEnvelopeInteg
+		json.NewDecoder(dayResp.Body).Decode(&dayEnvelope)
+		day := dayEnvelope.Data
 		dayResp.Body.Close()
 
 		addPresc, _ := adminPost(ts.URL("/days/"+day.ID+"/prescriptions"), `{"prescriptionId": "`+presc.ID+`"}`)
@@ -377,21 +451,24 @@ func TestWorkoutGenerationWorkflowIntegration(t *testing.T) {
 
 		// Create cycle, week, program
 		cycleResp, _ := adminPostCycle(ts.URL("/cycles"), `{"name": "Ramp Cycle", "lengthWeeks": 4}`)
-		var cycle CycleTestResponse
-		json.NewDecoder(cycleResp.Body).Decode(&cycle)
+		var cycleEnvelope CycleEnvelopeInteg
+		json.NewDecoder(cycleResp.Body).Decode(&cycleEnvelope)
+		cycle := cycleEnvelope.Data
 		cycleResp.Body.Close()
 
 		weekResp, _ := adminPost(ts.URL("/weeks"), `{"weekNumber": 1, "cycleId": "`+cycle.ID+`"}`)
-		var week WeekTestResponse
-		json.NewDecoder(weekResp.Body).Decode(&week)
+		var weekEnvelope WeekEnvelopeInteg
+		json.NewDecoder(weekResp.Body).Decode(&weekEnvelope)
+		week := weekEnvelope.Data
 		weekResp.Body.Close()
 
 		addDayResp, _ := adminPost(ts.URL("/weeks/"+week.ID+"/days"), `{"dayId": "`+day.ID+`", "dayOfWeek": "TUESDAY"}`)
 		addDayResp.Body.Close()
 
 		programResp, _ := adminPostProgram(ts.URL("/programs"), `{"name": "Ramp Program", "slug": "`+programSlug+`", "cycleId": "`+cycle.ID+`"}`)
-		var program ProgramTestResponse
-		json.NewDecoder(programResp.Body).Decode(&program)
+		var programEnvelope ProgramEnvelopeInteg
+		json.NewDecoder(programResp.Body).Decode(&programEnvelope)
+		program := programEnvelope.Data
 		programResp.Body.Close()
 
 		// Enroll user
@@ -411,8 +488,9 @@ func TestWorkoutGenerationWorkflowIntegration(t *testing.T) {
 			t.Fatalf("Expected status 200, got %d: %s", workoutResp.StatusCode, body)
 		}
 
-		var workout WorkoutTestResponse
-		json.NewDecoder(workoutResp.Body).Decode(&workout)
+		var workoutEnvelope WorkoutEnvelopeInteg
+		json.NewDecoder(workoutResp.Body).Decode(&workoutEnvelope)
+		workout := workoutEnvelope.Data
 
 		if len(workout.Exercises) != 1 {
 			t.Fatalf("Expected 1 exercise, got %d", len(workout.Exercises))
@@ -456,8 +534,9 @@ func TestWorkoutGenerationWorkflowIntegration(t *testing.T) {
 			t.Fatalf("Expected status 200, got %d: %s", previewResp.StatusCode, body)
 		}
 
-		var preview WorkoutTestResponse
-		json.NewDecoder(previewResp.Body).Decode(&preview)
+		var previewEnvelope WorkoutEnvelopeInteg
+		json.NewDecoder(previewResp.Body).Decode(&previewEnvelope)
+		preview := previewEnvelope.Data
 
 		if preview.WeekNumber != 1 {
 			t.Errorf("Expected weekNumber 1, got %d", preview.WeekNumber)
@@ -505,19 +584,22 @@ func TestProgressionEvaluationWorkflowIntegration(t *testing.T) {
 
 		// Step 1: Create cycle and program
 		cycleResp, _ := adminPostCycle(ts.URL("/cycles"), `{"name": "Progression Cycle", "lengthWeeks": 4}`)
-		var cycle CycleTestResponse
-		json.NewDecoder(cycleResp.Body).Decode(&cycle)
+		var cycleEnvelope CycleEnvelopeInteg
+		json.NewDecoder(cycleResp.Body).Decode(&cycleEnvelope)
+		cycle := cycleEnvelope.Data
 		cycleResp.Body.Close()
 
 		programResp, _ := adminPostProgram(ts.URL("/programs"), `{"name": "Progression Program", "slug": "`+programSlug+`", "cycleId": "`+cycle.ID+`"}`)
-		var program ProgramTestResponse
-		json.NewDecoder(programResp.Body).Decode(&program)
+		var programEnvelope ProgramEnvelopeInteg
+		json.NewDecoder(programResp.Body).Decode(&programEnvelope)
+		program := programEnvelope.Data
 		programResp.Body.Close()
 
 		// Step 2: Create a linear progression (5lb increment after session)
 		progressionResp, _ := adminPost(ts.URL("/progressions"), `{"name": "Linear Session Prog", "type": "LINEAR_PROGRESSION", "parameters": {"increment": 5.0, "maxType": "TRAINING_MAX", "triggerType": "AFTER_SESSION"}}`)
-		var progression ProgressionResponse
-		json.NewDecoder(progressionResp.Body).Decode(&progression)
+		var progressionEnvelope ProgressionEnvelopeInteg
+		json.NewDecoder(progressionResp.Body).Decode(&progressionEnvelope)
+		progression := progressionEnvelope.Data
 		progressionResp.Body.Close()
 
 		// Step 3: Link progression to program for squat
@@ -554,8 +636,9 @@ func TestProgressionEvaluationWorkflowIntegration(t *testing.T) {
 			t.Fatalf("Expected status 200, got %d: %s", triggerResp.StatusCode, body)
 		}
 
-		var triggerResult ManualTriggerResponse
-		json.NewDecoder(triggerResp.Body).Decode(&triggerResult)
+		var triggerEnvelope ManualTriggerEnvelopeInteg
+		json.NewDecoder(triggerResp.Body).Decode(&triggerEnvelope)
+		triggerResult := triggerEnvelope.Data
 
 		// Verify progression was applied
 		if triggerResult.TotalApplied != 1 {
@@ -610,19 +693,22 @@ func TestProgressionEvaluationWorkflowIntegration(t *testing.T) {
 
 		// Create cycle and program
 		cycleResp, _ := adminPostCycle(ts.URL("/cycles"), `{"name": "Multi Lift Cycle", "lengthWeeks": 4}`)
-		var cycle CycleTestResponse
-		json.NewDecoder(cycleResp.Body).Decode(&cycle)
+		var cycleEnvelope CycleEnvelopeInteg
+		json.NewDecoder(cycleResp.Body).Decode(&cycleEnvelope)
+		cycle := cycleEnvelope.Data
 		cycleResp.Body.Close()
 
 		programResp, _ := adminPostProgram(ts.URL("/programs"), `{"name": "Multi Lift Program", "slug": "`+programSlug+`", "cycleId": "`+cycle.ID+`"}`)
-		var program ProgramTestResponse
-		json.NewDecoder(programResp.Body).Decode(&program)
+		var programEnvelope ProgramEnvelopeInteg
+		json.NewDecoder(programResp.Body).Decode(&programEnvelope)
+		program := programEnvelope.Data
 		programResp.Body.Close()
 
 		// Create progression
 		progressionResp, _ := adminPost(ts.URL("/progressions"), `{"name": "Multi Lift Prog", "type": "LINEAR_PROGRESSION", "parameters": {"increment": 5.0, "maxType": "TRAINING_MAX", "triggerType": "AFTER_SESSION"}}`)
-		var progression ProgressionResponse
-		json.NewDecoder(progressionResp.Body).Decode(&progression)
+		var progressionEnvelope ProgressionEnvelopeInteg
+		json.NewDecoder(progressionResp.Body).Decode(&progressionEnvelope)
+		progression := progressionEnvelope.Data
 		progressionResp.Body.Close()
 
 		// Link progression to squat (priority 1) and bench (priority 2)
@@ -655,8 +741,9 @@ func TestProgressionEvaluationWorkflowIntegration(t *testing.T) {
 		triggerResp, _ := authPostTrigger(ts.URL("/users/"+userID+"/progressions/trigger"), triggerBody, userID)
 		defer triggerResp.Body.Close()
 
-		var triggerResult ManualTriggerResponse
-		json.NewDecoder(triggerResp.Body).Decode(&triggerResult)
+		var triggerEnvelope ManualTriggerEnvelopeInteg
+		json.NewDecoder(triggerResp.Body).Decode(&triggerEnvelope)
+		triggerResult := triggerEnvelope.Data
 
 		// Should apply to both lifts
 		if triggerResult.TotalApplied != 2 {
@@ -683,19 +770,22 @@ func TestProgressionEvaluationWorkflowIntegration(t *testing.T) {
 
 		// Create cycle and program
 		cycleResp, _ := adminPostCycle(ts.URL("/cycles"), `{"name": "Cycle End Prog Cycle", "lengthWeeks": 4}`)
-		var cycle CycleTestResponse
-		json.NewDecoder(cycleResp.Body).Decode(&cycle)
+		var cycleEnvelope CycleEnvelopeInteg
+		json.NewDecoder(cycleResp.Body).Decode(&cycleEnvelope)
+		cycle := cycleEnvelope.Data
 		cycleResp.Body.Close()
 
 		programResp, _ := adminPostProgram(ts.URL("/programs"), `{"name": "Cycle End Prog Program", "slug": "`+programSlug+`", "cycleId": "`+cycle.ID+`"}`)
-		var program ProgramTestResponse
-		json.NewDecoder(programResp.Body).Decode(&program)
+		var programEnvelope ProgramEnvelopeInteg
+		json.NewDecoder(programResp.Body).Decode(&programEnvelope)
+		program := programEnvelope.Data
 		programResp.Body.Close()
 
 		// Create cycle progression (10lb increment)
 		progressionResp, _ := adminPost(ts.URL("/progressions"), `{"name": "Cycle End Prog", "type": "CYCLE_PROGRESSION", "parameters": {"increment": 10.0, "maxType": "TRAINING_MAX"}}`)
-		var progression ProgressionResponse
-		json.NewDecoder(progressionResp.Body).Decode(&progression)
+		var progressionEnvelope ProgressionEnvelopeInteg
+		json.NewDecoder(progressionResp.Body).Decode(&progressionEnvelope)
+		progression := progressionEnvelope.Data
 		progressionResp.Body.Close()
 
 		// Link to deadlift
@@ -723,8 +813,9 @@ func TestProgressionEvaluationWorkflowIntegration(t *testing.T) {
 		triggerResp, _ := authPostTrigger(ts.URL("/users/"+userID+"/progressions/trigger"), triggerBody, userID)
 		defer triggerResp.Body.Close()
 
-		var triggerResult ManualTriggerResponse
-		json.NewDecoder(triggerResp.Body).Decode(&triggerResult)
+		var triggerEnvelope ManualTriggerEnvelopeInteg
+		json.NewDecoder(triggerResp.Body).Decode(&triggerEnvelope)
+		triggerResult := triggerEnvelope.Data
 
 		// Should apply cycle progression (+10)
 		if triggerResult.TotalApplied != 1 {
@@ -749,19 +840,22 @@ func TestProgressionEvaluationWorkflowIntegration(t *testing.T) {
 
 		// Create cycle and program
 		cycleResp, _ := adminPostCycle(ts.URL("/cycles"), `{"name": "Idempotent Cycle", "lengthWeeks": 4}`)
-		var cycle CycleTestResponse
-		json.NewDecoder(cycleResp.Body).Decode(&cycle)
+		var cycleEnvelope CycleEnvelopeInteg
+		json.NewDecoder(cycleResp.Body).Decode(&cycleEnvelope)
+		cycle := cycleEnvelope.Data
 		cycleResp.Body.Close()
 
 		programResp, _ := adminPostProgram(ts.URL("/programs"), `{"name": "Idempotent Program", "slug": "`+programSlug+`", "cycleId": "`+cycle.ID+`"}`)
-		var program ProgramTestResponse
-		json.NewDecoder(programResp.Body).Decode(&program)
+		var programEnvelope ProgramEnvelopeInteg
+		json.NewDecoder(programResp.Body).Decode(&programEnvelope)
+		program := programEnvelope.Data
 		programResp.Body.Close()
 
 		// Create progression
 		progressionResp, _ := adminPost(ts.URL("/progressions"), `{"name": "Idempotent Prog", "type": "LINEAR_PROGRESSION", "parameters": {"increment": 5.0, "maxType": "TRAINING_MAX", "triggerType": "AFTER_SESSION"}}`)
-		var progression ProgressionResponse
-		json.NewDecoder(progressionResp.Body).Decode(&progression)
+		var progressionEnvelope ProgressionEnvelopeInteg
+		json.NewDecoder(progressionResp.Body).Decode(&progressionEnvelope)
+		progression := progressionEnvelope.Data
 		progressionResp.Body.Close()
 
 		// Link progression
@@ -787,8 +881,9 @@ func TestProgressionEvaluationWorkflowIntegration(t *testing.T) {
 			Force:         true,
 		}
 		trigger1Resp, _ := authPostTrigger(ts.URL("/users/"+userID+"/progressions/trigger"), triggerBody, userID)
-		var result1 ManualTriggerResponse
-		json.NewDecoder(trigger1Resp.Body).Decode(&result1)
+		var result1Envelope ManualTriggerEnvelopeInteg
+		json.NewDecoder(trigger1Resp.Body).Decode(&result1Envelope)
+		result1 := result1Envelope.Data
 		trigger1Resp.Body.Close()
 
 		if result1.TotalApplied != 1 {
@@ -804,8 +899,9 @@ func TestProgressionEvaluationWorkflowIntegration(t *testing.T) {
 
 		// Second trigger with force=true should also apply (bypassing idempotency)
 		trigger2Resp, _ := authPostTrigger(ts.URL("/users/"+userID+"/progressions/trigger"), triggerBody, userID)
-		var result2 ManualTriggerResponse
-		json.NewDecoder(trigger2Resp.Body).Decode(&result2)
+		var result2Envelope ManualTriggerEnvelopeInteg
+		json.NewDecoder(trigger2Resp.Body).Decode(&result2Envelope)
+		result2 := result2Envelope.Data
 		trigger2Resp.Body.Close()
 
 		if result2.TotalApplied != 1 {

@@ -37,6 +37,31 @@ type EnrollmentTestResponse struct {
 	UpdatedAt  time.Time                     `json:"updatedAt"`
 }
 
+// EnrollmentEnvelope wraps single enrollment response with standard envelope.
+type EnrollmentEnvelope struct {
+	Data EnrollmentTestResponse `json:"data"`
+}
+
+// CycleResponseForEnrollment represents cycle data in the API response.
+type CycleResponseForEnrollment struct {
+	ID string `json:"id"`
+}
+
+// CycleEnvelopeForEnrollment wraps cycle response with standard envelope.
+type CycleEnvelopeForEnrollment struct {
+	Data CycleResponseForEnrollment `json:"data"`
+}
+
+// ProgramResponseForEnrollment represents program data in the API response.
+type ProgramResponseForEnrollment struct {
+	ID string `json:"id"`
+}
+
+// ProgramEnvelopeForEnrollment wraps program response with standard envelope.
+type ProgramEnvelopeForEnrollment struct {
+	Data ProgramResponseForEnrollment `json:"data"`
+}
+
 // Helper functions for enrollment tests
 
 func userPostEnrollment(url string, body string, userID string) (*http.Response, error) {
@@ -107,9 +132,9 @@ func createEnrollmentTestCycle(t *testing.T, ts *testutil.TestServer, name strin
 	}
 	defer resp.Body.Close()
 
-	var cycle CycleTestResponse
-	json.NewDecoder(resp.Body).Decode(&cycle)
-	return cycle.ID
+	var envelope CycleEnvelopeForEnrollment
+	json.NewDecoder(resp.Body).Decode(&envelope)
+	return envelope.Data.ID
 }
 
 // createEnrollmentTestProgram creates a test program and returns its ID
@@ -121,9 +146,9 @@ func createEnrollmentTestProgram(t *testing.T, ts *testutil.TestServer, name, sl
 	}
 	defer resp.Body.Close()
 
-	var program ProgramTestResponse
-	json.NewDecoder(resp.Body).Decode(&program)
-	return program.ID
+	var envelope ProgramEnvelopeForEnrollment
+	json.NewDecoder(resp.Body).Decode(&envelope)
+	return envelope.Data.ID
 }
 
 func TestEnrollmentCRUD(t *testing.T) {
@@ -152,10 +177,11 @@ func TestEnrollmentCRUD(t *testing.T) {
 			t.Fatalf("Expected status 201, got %d: %s", resp.StatusCode, bodyBytes)
 		}
 
-		var enrollment EnrollmentTestResponse
-		if err := json.NewDecoder(resp.Body).Decode(&enrollment); err != nil {
+		var envelope EnrollmentEnvelope
+		if err := json.NewDecoder(resp.Body).Decode(&envelope); err != nil {
 			t.Fatalf("Failed to decode response: %v", err)
 		}
+		enrollment := envelope.Data
 
 		if enrollment.ID == "" {
 			t.Error("Expected non-empty ID")
@@ -186,10 +212,11 @@ func TestEnrollmentCRUD(t *testing.T) {
 			t.Fatalf("Expected status 200, got %d: %s", resp.StatusCode, bodyBytes)
 		}
 
-		var enrollment EnrollmentTestResponse
-		if err := json.NewDecoder(resp.Body).Decode(&enrollment); err != nil {
+		var envelope EnrollmentEnvelope
+		if err := json.NewDecoder(resp.Body).Decode(&envelope); err != nil {
 			t.Fatalf("Failed to decode response: %v", err)
 		}
+		enrollment := envelope.Data
 
 		if enrollment.UserID != userID {
 			t.Errorf("Expected userId %s, got %s", userID, enrollment.UserID)
@@ -215,8 +242,9 @@ func TestEnrollmentCRUD(t *testing.T) {
 			t.Fatalf("Expected status 201, got %d: %s", resp.StatusCode, bodyBytes)
 		}
 
-		var enrollment EnrollmentTestResponse
-		json.NewDecoder(resp.Body).Decode(&enrollment)
+		var envelope EnrollmentEnvelope
+		json.NewDecoder(resp.Body).Decode(&envelope)
+		enrollment := envelope.Data
 
 		if enrollment.Program.ID != program2ID {
 			t.Errorf("Expected programId %s after re-enrollment, got %s", program2ID, enrollment.Program.ID)
@@ -501,8 +529,9 @@ func TestEnrollmentResponseFormat(t *testing.T) {
 		resp, _ := userGetEnrollment(ts.URL("/users/"+userID+"/program"), userID)
 		defer resp.Body.Close()
 
-		var enrollment EnrollmentTestResponse
-		json.NewDecoder(resp.Body).Decode(&enrollment)
+		var envelope EnrollmentEnvelope
+		json.NewDecoder(resp.Body).Decode(&envelope)
+		enrollment := envelope.Data
 
 		if enrollment.State.CurrentWeek != 1 {
 			t.Errorf("Expected initial currentWeek 1, got %d", enrollment.State.CurrentWeek)
@@ -519,8 +548,9 @@ func TestEnrollmentResponseFormat(t *testing.T) {
 		resp, _ := userGetEnrollment(ts.URL("/users/"+userID+"/program"), userID)
 		defer resp.Body.Close()
 
-		var enrollment EnrollmentTestResponse
-		json.NewDecoder(resp.Body).Decode(&enrollment)
+		var envelope EnrollmentEnvelope
+		json.NewDecoder(resp.Body).Decode(&envelope)
+		enrollment := envelope.Data
 
 		if enrollment.Program.ID != programID {
 			t.Errorf("Expected program.id %s, got %s", programID, enrollment.Program.ID)

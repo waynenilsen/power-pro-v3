@@ -681,8 +681,28 @@ func TestCircularReferenceDetection(t *testing.T) {
 		var errResp ErrorResponse
 		json.NewDecoder(resp.Body).Decode(&errResp)
 
-		if !strings.Contains(errResp.Error.Message, "circular reference") {
-			t.Errorf("Expected circular reference error message, got %v", errResp.Error.Message)
+		// The circular reference error is in the details, check various formats
+		found := false
+		switch details := errResp.Error.Details.(type) {
+		case []interface{}:
+			for _, detail := range details {
+				if detailStr, ok := detail.(string); ok && strings.Contains(detailStr, "circular reference") {
+					found = true
+					break
+				}
+			}
+		case map[string]interface{}:
+			if validationErrors, ok := details["validationErrors"].([]interface{}); ok {
+				for _, err := range validationErrors {
+					if errStr, ok := err.(string); ok && strings.Contains(errStr, "circular reference") {
+						found = true
+						break
+					}
+				}
+			}
+		}
+		if !found && !strings.Contains(errResp.Error.Message, "circular reference") {
+			t.Errorf("Expected circular reference error message, got %v (details: %v)", errResp.Error.Message, errResp.Error.Details)
 		}
 	})
 }

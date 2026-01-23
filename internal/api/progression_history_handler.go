@@ -67,43 +67,43 @@ func (h *ProgressionHistoryHandler) List(w http.ResponseWriter, r *http.Request)
 		Offset: int64(pg.Offset),
 	}
 
-	// Filter by lift_id
-	filter.LiftID = ParseFilterString(query, "lift_id")
+	// Filter by liftId
+	filter.LiftID = ParseFilterString(query, "liftId")
 
-	// Filter by progression_type (enum validation)
+	// Filter by progressionType (enum validation)
 	progressionTypes := make([]string, 0, len(progression.ValidProgressionTypes))
 	for pt := range progression.ValidProgressionTypes {
 		progressionTypes = append(progressionTypes, string(pt))
 	}
-	progressionType, err := ParseFilterEnum(query, "progression_type", progressionTypes)
+	progressionType, err := ParseFilterEnum(query, "progressionType", progressionTypes)
 	if err != nil {
 		writeDomainError(w, err)
 		return
 	}
 	filter.ProgressionType = progressionType
 
-	// Filter by trigger_type (enum validation)
+	// Filter by triggerType (enum validation)
 	triggerTypes := make([]string, 0, len(progression.ValidTriggerTypes))
 	for tt := range progression.ValidTriggerTypes {
 		triggerTypes = append(triggerTypes, string(tt))
 	}
-	triggerType, err := ParseFilterEnum(query, "trigger_type", triggerTypes)
+	triggerType, err := ParseFilterEnum(query, "triggerType", triggerTypes)
 	if err != nil {
 		writeDomainError(w, err)
 		return
 	}
 	filter.TriggerType = triggerType
 
-	// Filter by start_date (ISO 8601)
-	startDate, err := ParseFilterDate(query, "start_date")
+	// Filter by startDate (ISO 8601)
+	startDate, err := ParseFilterDate(query, "startDate")
 	if err != nil {
 		writeDomainError(w, err)
 		return
 	}
 	filter.StartDate = startDate
 
-	// Filter by end_date (ISO 8601, end of day for date-only format)
-	endDate, err := ParseFilterDateEndOfDay(query, "end_date")
+	// Filter by endDate (ISO 8601, end of day for date-only format)
+	endDate, err := ParseFilterDateEndOfDay(query, "endDate")
 	if err != nil {
 		writeDomainError(w, err)
 		return

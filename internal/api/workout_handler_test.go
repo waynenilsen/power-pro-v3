@@ -69,6 +69,39 @@ type WeekTestResponse struct {
 	UpdatedAt  string  `json:"updatedAt"`
 }
 
+// Envelope types for decoding API responses in workout tests.
+// All API responses are wrapped in {"data": ...} envelopes.
+
+// LiftTestEnvelope wraps lift responses.
+type LiftTestEnvelope struct {
+	Data LiftTestResponse `json:"data"`
+}
+
+// LiftMaxTestEnvelope wraps lift max responses.
+type LiftMaxTestEnvelope struct {
+	Data LiftMaxTestResponse `json:"data"`
+}
+
+// PrescriptionTestEnvelope wraps prescription responses.
+type PrescriptionTestEnvelope struct {
+	Data PrescriptionTestResponse `json:"data"`
+}
+
+// DayTestEnvelope wraps day responses.
+type DayTestEnvelope struct {
+	Data DayTestResponse `json:"data"`
+}
+
+// WeekTestEnvelope wraps week responses.
+type WeekTestEnvelope struct {
+	Data WeekTestResponse `json:"data"`
+}
+
+// WorkoutTestEnvelope wraps workout responses.
+type WorkoutTestEnvelope struct {
+	Data WorkoutTestResponse `json:"data"`
+}
+
 // Helper functions for workout tests
 
 func userPostLiftMax(url string, body string, userID string) (*http.Response, error) {
@@ -169,9 +202,9 @@ func setupWorkoutTest(t *testing.T, ts *testutil.TestServer, userID string) *wor
 	if resp.StatusCode != http.StatusCreated {
 		t.Fatalf("Failed to create lift, status %d: %s", resp.StatusCode, body)
 	}
-	var lift LiftTestResponse
-	json.Unmarshal(body, &lift)
-	setup.LiftID = lift.ID
+	var liftEnvelope LiftTestEnvelope
+	json.Unmarshal(body, &liftEnvelope)
+	setup.LiftID = liftEnvelope.Data.ID
 
 	// 2. Create a lift max for the user (training max)
 	maxBody := `{"liftId": "` + setup.LiftID + `", "type": "TRAINING_MAX", "value": 300}`
@@ -184,9 +217,9 @@ func setupWorkoutTest(t *testing.T, ts *testutil.TestServer, userID string) *wor
 	if resp.StatusCode != http.StatusCreated {
 		t.Fatalf("Failed to create lift max, status %d: %s", resp.StatusCode, body)
 	}
-	var liftMax LiftMaxTestResponse
-	json.Unmarshal(body, &liftMax)
-	setup.MaxID = liftMax.ID
+	var liftMaxEnvelope LiftMaxTestEnvelope
+	json.Unmarshal(body, &liftMaxEnvelope)
+	setup.MaxID = liftMaxEnvelope.Data.ID
 
 	// 3. Create a prescription with PERCENT_OF load strategy and FIXED set scheme
 	prescriptionBody := `{
@@ -214,9 +247,9 @@ func setupWorkoutTest(t *testing.T, ts *testutil.TestServer, userID string) *wor
 	if resp.StatusCode != http.StatusCreated {
 		t.Fatalf("Failed to create prescription, status %d: %s", resp.StatusCode, body)
 	}
-	var prescription PrescriptionTestResponse
-	json.Unmarshal(body, &prescription)
-	setup.PrescriptionID = prescription.ID
+	var prescriptionEnvelope PrescriptionTestEnvelope
+	json.Unmarshal(body, &prescriptionEnvelope)
+	setup.PrescriptionID = prescriptionEnvelope.Data.ID
 
 	// 4. Create a day
 	dayBody := `{"name": "Squat Day", "slug": "` + daySlug + `"}`
@@ -229,9 +262,9 @@ func setupWorkoutTest(t *testing.T, ts *testutil.TestServer, userID string) *wor
 	if resp.StatusCode != http.StatusCreated {
 		t.Fatalf("Failed to create day, status %d: %s", resp.StatusCode, body)
 	}
-	var day DayTestResponse
-	json.Unmarshal(body, &day)
-	setup.DayID = day.ID
+	var dayEnvelope DayTestEnvelope
+	json.Unmarshal(body, &dayEnvelope)
+	setup.DayID = dayEnvelope.Data.ID
 
 	// 5. Add prescription to day
 	addPrescriptionBody := `{"prescriptionId": "` + setup.PrescriptionID + `"}`
@@ -256,9 +289,9 @@ func setupWorkoutTest(t *testing.T, ts *testutil.TestServer, userID string) *wor
 	if resp.StatusCode != http.StatusCreated {
 		t.Fatalf("Failed to create cycle, status %d: %s", resp.StatusCode, body)
 	}
-	var cycle CycleTestResponse
-	json.Unmarshal(body, &cycle)
-	setup.CycleID = cycle.ID
+	var cycleEnvelope CycleEnvelopeInteg
+	json.Unmarshal(body, &cycleEnvelope)
+	setup.CycleID = cycleEnvelope.Data.ID
 
 	// 7. Create a week in the cycle
 	weekBody := `{"weekNumber": 1, "cycleId": "` + setup.CycleID + `"}`
@@ -271,9 +304,9 @@ func setupWorkoutTest(t *testing.T, ts *testutil.TestServer, userID string) *wor
 	if resp.StatusCode != http.StatusCreated {
 		t.Fatalf("Failed to create week, status %d: %s", resp.StatusCode, body)
 	}
-	var week WeekTestResponse
-	json.Unmarshal(body, &week)
-	setup.WeekID = week.ID
+	var weekEnvelope WeekTestEnvelope
+	json.Unmarshal(body, &weekEnvelope)
+	setup.WeekID = weekEnvelope.Data.ID
 
 	// 8. Add day to week
 	addDayBody := `{"dayId": "` + setup.DayID + `", "dayOfWeek": "MONDAY"}`
@@ -298,9 +331,9 @@ func setupWorkoutTest(t *testing.T, ts *testutil.TestServer, userID string) *wor
 	if resp.StatusCode != http.StatusCreated {
 		t.Fatalf("Failed to create program, status %d: %s", resp.StatusCode, body)
 	}
-	var program ProgramTestResponse
-	json.Unmarshal(body, &program)
-	setup.ProgramID = program.ID
+	var programEnvelope ProgramEnvelopeInteg
+	json.Unmarshal(body, &programEnvelope)
+	setup.ProgramID = programEnvelope.Data.ID
 
 	// 10. Enroll user in program
 	enrollBody := `{"programId": "` + setup.ProgramID + `"}`
@@ -342,10 +375,11 @@ func TestWorkoutGenerate(t *testing.T) {
 			t.Fatalf("Expected status 200, got %d: %s", resp.StatusCode, bodyBytes)
 		}
 
-		var workout WorkoutTestResponse
-		if err := json.NewDecoder(resp.Body).Decode(&workout); err != nil {
+		var workoutEnvelope WorkoutTestEnvelope
+		if err := json.NewDecoder(resp.Body).Decode(&workoutEnvelope); err != nil {
 			t.Fatalf("Failed to decode response: %v", err)
 		}
+		workout := workoutEnvelope.Data
 
 		if workout.UserID != userID {
 			t.Errorf("Expected userId %s, got %s", userID, workout.UserID)
@@ -377,8 +411,9 @@ func TestWorkoutGenerate(t *testing.T) {
 		}
 		defer resp.Body.Close()
 
-		var workout WorkoutTestResponse
-		json.NewDecoder(resp.Body).Decode(&workout)
+		var workoutEnvelope WorkoutTestEnvelope
+		json.NewDecoder(resp.Body).Decode(&workoutEnvelope)
+		workout := workoutEnvelope.Data
 
 		if len(workout.Exercises) != 1 {
 			t.Fatalf("Expected 1 exercise, got %d", len(workout.Exercises))
@@ -412,8 +447,9 @@ func TestWorkoutGenerate(t *testing.T) {
 		}
 		defer resp.Body.Close()
 
-		var workout WorkoutTestResponse
-		json.NewDecoder(resp.Body).Decode(&workout)
+		var workoutEnvelope WorkoutTestEnvelope
+		json.NewDecoder(resp.Body).Decode(&workoutEnvelope)
+		workout := workoutEnvelope.Data
 
 		exercise := workout.Exercises[0]
 		if len(exercise.Sets) != 5 {
@@ -451,8 +487,9 @@ func TestWorkoutGenerate(t *testing.T) {
 			t.Fatalf("Expected status 200, got %d: %s", resp.StatusCode, bodyBytes)
 		}
 
-		var workout WorkoutTestResponse
-		json.NewDecoder(resp.Body).Decode(&workout)
+		var workoutEnvelope WorkoutTestEnvelope
+		json.NewDecoder(resp.Body).Decode(&workoutEnvelope)
+		workout := workoutEnvelope.Data
 
 		if workout.WeekNumber != 1 {
 			t.Errorf("Expected weekNumber 1, got %d", workout.WeekNumber)
@@ -471,8 +508,9 @@ func TestWorkoutGenerate(t *testing.T) {
 			t.Fatalf("Expected status 200, got %d: %s", resp.StatusCode, bodyBytes)
 		}
 
-		var workout WorkoutTestResponse
-		json.NewDecoder(resp.Body).Decode(&workout)
+		var workoutEnvelope WorkoutTestEnvelope
+		json.NewDecoder(resp.Body).Decode(&workoutEnvelope)
+		workout := workoutEnvelope.Data
 
 		if workout.DaySlug != daySlug {
 			t.Errorf("Expected daySlug '%s', got %s", daySlug, workout.DaySlug)
@@ -491,8 +529,9 @@ func TestWorkoutGenerate(t *testing.T) {
 			t.Fatalf("Expected status 200, got %d: %s", resp.StatusCode, bodyBytes)
 		}
 
-		var workout WorkoutTestResponse
-		json.NewDecoder(resp.Body).Decode(&workout)
+		var workoutEnvelope WorkoutTestEnvelope
+		json.NewDecoder(resp.Body).Decode(&workoutEnvelope)
+		workout := workoutEnvelope.Data
 
 		if workout.Date != "2024-01-15" {
 			t.Errorf("Expected date '2024-01-15', got %s", workout.Date)
@@ -590,10 +629,11 @@ func TestWorkoutPreview(t *testing.T) {
 			t.Fatalf("Expected status 200, got %d: %s", resp.StatusCode, bodyBytes)
 		}
 
-		var workout WorkoutTestResponse
-		if err := json.NewDecoder(resp.Body).Decode(&workout); err != nil {
+		var workoutEnvelope WorkoutTestEnvelope
+		if err := json.NewDecoder(resp.Body).Decode(&workoutEnvelope); err != nil {
 			t.Fatalf("Failed to decode response: %v", err)
 		}
+		workout := workoutEnvelope.Data
 
 		if workout.UserID != userID {
 			t.Errorf("Expected userId %s, got %s", userID, workout.UserID)

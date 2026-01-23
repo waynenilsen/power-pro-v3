@@ -127,9 +127,11 @@ func createProgramTestCycle(t *testing.T, ts *testutil.TestServer, name string) 
 	}
 	defer resp.Body.Close()
 
-	var cycle CycleTestResponse
-	json.NewDecoder(resp.Body).Decode(&cycle)
-	return cycle.ID
+	var envelope struct {
+		Data CycleTestResponse `json:"data"`
+	}
+	json.NewDecoder(resp.Body).Decode(&envelope)
+	return envelope.Data.ID
 }
 
 func TestProgramCRUD(t *testing.T) {
@@ -157,9 +159,13 @@ func TestProgramCRUD(t *testing.T) {
 			t.Fatalf("Expected status 201, got %d: %s", resp.StatusCode, bodyBytes)
 		}
 
-		if err := json.NewDecoder(resp.Body).Decode(&createdProgram); err != nil {
+		var envelope struct {
+			Data ProgramTestResponse `json:"data"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&envelope); err != nil {
 			t.Fatalf("Failed to decode response: %v", err)
 		}
+		createdProgram = envelope.Data
 
 		if createdProgram.ID == "" {
 			t.Error("Expected non-empty ID")
@@ -194,10 +200,13 @@ func TestProgramCRUD(t *testing.T) {
 			t.Fatalf("Expected status 201, got %d: %s", resp.StatusCode, bodyBytes)
 		}
 
-		var program ProgramTestResponse
-		if err := json.NewDecoder(resp.Body).Decode(&program); err != nil {
+		var envelope struct {
+			Data ProgramTestResponse `json:"data"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&envelope); err != nil {
 			t.Fatalf("Failed to decode response: %v", err)
 		}
+		program := envelope.Data
 
 		if program.Description == nil || *program.Description != "Classic beginner program" {
 			t.Errorf("Expected description 'Classic beginner program', got %v", program.Description)
@@ -219,10 +228,13 @@ func TestProgramCRUD(t *testing.T) {
 			t.Fatalf("Expected status 200, got %d: %s", resp.StatusCode, bodyBytes)
 		}
 
-		var program ProgramDetailTestResponse
-		if err := json.NewDecoder(resp.Body).Decode(&program); err != nil {
+		var envelope struct {
+			Data ProgramDetailTestResponse `json:"data"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&envelope); err != nil {
 			t.Fatalf("Failed to decode response: %v", err)
 		}
+		program := envelope.Data
 
 		if program.ID != createdProgram.ID {
 			t.Errorf("Expected ID %s, got %s", createdProgram.ID, program.ID)
@@ -301,10 +313,13 @@ func TestProgramCRUD(t *testing.T) {
 			t.Fatalf("Expected status 200, got %d: %s", resp.StatusCode, bodyBytes)
 		}
 
-		var updated ProgramTestResponse
-		if err := json.NewDecoder(resp.Body).Decode(&updated); err != nil {
+		var envelope struct {
+			Data ProgramTestResponse `json:"data"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&envelope); err != nil {
 			t.Fatalf("Failed to decode response: %v", err)
 		}
+		updated := envelope.Data
 
 		if updated.Name != "Modified 5/3/1 BBB" {
 			t.Errorf("Expected name 'Modified 5/3/1 BBB', got %s", updated.Name)
@@ -324,10 +339,13 @@ func TestProgramCRUD(t *testing.T) {
 			t.Fatalf("Expected status 200, got %d: %s", resp.StatusCode, bodyBytes)
 		}
 
-		var updated ProgramTestResponse
-		if err := json.NewDecoder(resp.Body).Decode(&updated); err != nil {
+		var envelope struct {
+			Data ProgramTestResponse `json:"data"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&envelope); err != nil {
 			t.Fatalf("Failed to decode response: %v", err)
 		}
+		updated := envelope.Data
 
 		if updated.Slug != "modified-531-bbb" {
 			t.Errorf("Expected slug 'modified-531-bbb', got %s", updated.Slug)
@@ -338,9 +356,12 @@ func TestProgramCRUD(t *testing.T) {
 		// Create a program to delete
 		body := `{"name": "Program To Delete", "slug": "program-to-delete", "cycleId": "` + cycleID + `"}`
 		createResp, _ := adminPostProgram(ts.URL("/programs"), body)
-		var toDelete ProgramTestResponse
-		json.NewDecoder(createResp.Body).Decode(&toDelete)
+		var envelope struct {
+			Data ProgramTestResponse `json:"data"`
+		}
+		json.NewDecoder(createResp.Body).Decode(&envelope)
 		createResp.Body.Close()
+		toDelete := envelope.Data
 
 		resp, err := adminDeleteProgram(ts.URL("/programs/" + toDelete.ID))
 		if err != nil {
@@ -501,9 +522,12 @@ func TestProgramSlugUniqueness(t *testing.T) {
 	// Create first program
 	body := `{"name": "First Program", "slug": "unique-slug", "cycleId": "` + cycleID + `"}`
 	resp, _ := adminPostProgram(ts.URL("/programs"), body)
-	var firstProgram ProgramTestResponse
-	json.NewDecoder(resp.Body).Decode(&firstProgram)
+	var envelope struct {
+		Data ProgramTestResponse `json:"data"`
+	}
+	json.NewDecoder(resp.Body).Decode(&envelope)
 	resp.Body.Close()
+	firstProgram := envelope.Data
 
 	t.Run("rejects duplicate slug on create", func(t *testing.T) {
 		body := `{"name": "Second Program", "slug": "unique-slug", "cycleId": "` + cycleID + `"}`
@@ -523,9 +547,12 @@ func TestProgramSlugUniqueness(t *testing.T) {
 		// Create another program with different slug
 		body := `{"name": "Third Program", "slug": "another-slug", "cycleId": "` + cycleID + `"}`
 		createResp, _ := adminPostProgram(ts.URL("/programs"), body)
-		var secondProgram ProgramTestResponse
-		json.NewDecoder(createResp.Body).Decode(&secondProgram)
+		var envelope struct {
+			Data ProgramTestResponse `json:"data"`
+		}
+		json.NewDecoder(createResp.Body).Decode(&envelope)
 		createResp.Body.Close()
+		secondProgram := envelope.Data
 
 		// Try to update to use the first program's slug
 		updateBody := `{"slug": "unique-slug"}`
@@ -568,9 +595,12 @@ func TestProgramAuthorization(t *testing.T) {
 	// Create program as admin
 	body := `{"name": "Auth Test Program", "slug": "auth-test-program", "cycleId": "` + cycleID + `"}`
 	createResp, _ := adminPostProgram(ts.URL("/programs"), body)
-	var createdProgram ProgramTestResponse
-	json.NewDecoder(createResp.Body).Decode(&createdProgram)
+	var envelope struct {
+		Data ProgramTestResponse `json:"data"`
+	}
+	json.NewDecoder(createResp.Body).Decode(&envelope)
 	createResp.Body.Close()
+	createdProgram := envelope.Data
 
 	t.Run("unauthenticated user gets 401 on GET /programs", func(t *testing.T) {
 		resp, err := http.Get(ts.URL("/programs"))
@@ -671,9 +701,12 @@ func TestProgramResponseFormat(t *testing.T) {
 
 	body := `{"name": "Format Test Program", "slug": "format-test-program", "cycleId": "` + cycleID + `"}`
 	createResp, _ := adminPostProgram(ts.URL("/programs"), body)
-	var createdProgram ProgramTestResponse
-	json.NewDecoder(createResp.Body).Decode(&createdProgram)
+	var envelope struct {
+		Data ProgramTestResponse `json:"data"`
+	}
+	json.NewDecoder(createResp.Body).Decode(&envelope)
 	createResp.Body.Close()
+	createdProgram := envelope.Data
 
 	t.Run("response has correct JSON field names", func(t *testing.T) {
 		resp, _ := authGetProgram(ts.URL("/programs/" + createdProgram.ID))

@@ -28,13 +28,23 @@ type DailyLookupTestResponse struct {
 	UpdatedAt time.Time                      `json:"updatedAt"`
 }
 
+// DailyLookupPaginationMeta contains pagination metadata.
+type DailyLookupPaginationMeta struct {
+	Total   int64 `json:"total"`
+	Limit   int   `json:"limit"`
+	Offset  int   `json:"offset"`
+	HasMore bool  `json:"hasMore"`
+}
+
 // PaginatedDailyLookupsResponse is the paginated list response.
 type PaginatedDailyLookupsResponse struct {
-	Data       []DailyLookupTestResponse `json:"data"`
-	Page       int                       `json:"page"`
-	PageSize   int                       `json:"pageSize"`
-	TotalItems int64                     `json:"totalItems"`
-	TotalPages int64                     `json:"totalPages"`
+	Data []DailyLookupTestResponse  `json:"data"`
+	Meta *DailyLookupPaginationMeta `json:"meta"`
+}
+
+// DailyLookupEnvelope wraps single daily lookup response with standard envelope.
+type DailyLookupEnvelope struct {
+	Data DailyLookupTestResponse `json:"data"`
 }
 
 // authGetDailyLookup performs an authenticated GET request
@@ -111,9 +121,11 @@ func TestDailyLookupCRUD(t *testing.T) {
 			t.Fatalf("Expected status 201, got %d: %s", resp.StatusCode, bodyBytes)
 		}
 
-		if err := json.NewDecoder(resp.Body).Decode(&createdLookup); err != nil {
+		var envelope DailyLookupEnvelope
+		if err := json.NewDecoder(resp.Body).Decode(&envelope); err != nil {
 			t.Fatalf("Failed to decode response: %v", err)
 		}
+		createdLookup = envelope.Data
 
 		if createdLookup.ID == "" {
 			t.Error("Expected non-empty ID")
@@ -145,8 +157,9 @@ func TestDailyLookupCRUD(t *testing.T) {
 			t.Fatalf("Expected status 201, got %d: %s", resp.StatusCode, bodyBytes)
 		}
 
-		var lookup DailyLookupTestResponse
-		json.NewDecoder(resp.Body).Decode(&lookup)
+		var envelope DailyLookupEnvelope
+		json.NewDecoder(resp.Body).Decode(&envelope)
+		lookup := envelope.Data
 
 		// Verify intensity level is nil
 		for _, entry := range lookup.Entries {
@@ -168,10 +181,11 @@ func TestDailyLookupCRUD(t *testing.T) {
 			t.Fatalf("Expected status 200, got %d: %s", resp.StatusCode, bodyBytes)
 		}
 
-		var lookup DailyLookupTestResponse
-		if err := json.NewDecoder(resp.Body).Decode(&lookup); err != nil {
+		var envelope DailyLookupEnvelope
+		if err := json.NewDecoder(resp.Body).Decode(&envelope); err != nil {
 			t.Fatalf("Failed to decode response: %v", err)
 		}
+		lookup := envelope.Data
 
 		if lookup.ID != createdLookup.ID {
 			t.Errorf("Expected ID %s, got %s", createdLookup.ID, lookup.ID)
@@ -210,11 +224,19 @@ func TestDailyLookupCRUD(t *testing.T) {
 			t.Fatalf("Failed to decode response: %v", err)
 		}
 
-		if result.TotalItems < 1 {
-			t.Errorf("Expected at least 1 lookup, got %d", result.TotalItems)
+		if result.Meta == nil || result.Meta.Total < 1 {
+			total := int64(0)
+			if result.Meta != nil {
+				total = result.Meta.Total
+			}
+			t.Errorf("Expected at least 1 lookup, got %d", total)
 		}
-		if result.Page != 1 {
-			t.Errorf("Expected page 1, got %d", result.Page)
+		if result.Meta == nil || result.Meta.Offset != 0 {
+			offset := 0
+			if result.Meta != nil {
+				offset = result.Meta.Offset
+			}
+			t.Errorf("Expected offset 0, got %d", offset)
 		}
 	})
 
@@ -231,10 +253,11 @@ func TestDailyLookupCRUD(t *testing.T) {
 			t.Fatalf("Expected status 200, got %d: %s", resp.StatusCode, bodyBytes)
 		}
 
-		var updated DailyLookupTestResponse
-		if err := json.NewDecoder(resp.Body).Decode(&updated); err != nil {
+		var envelope DailyLookupEnvelope
+		if err := json.NewDecoder(resp.Body).Decode(&envelope); err != nil {
 			t.Fatalf("Failed to decode response: %v", err)
 		}
+		updated := envelope.Data
 
 		if updated.Name != "Modified Bill Starr Intensities" {
 			t.Errorf("Expected name 'Modified Bill Starr Intensities', got %s", updated.Name)
@@ -259,8 +282,9 @@ func TestDailyLookupCRUD(t *testing.T) {
 			t.Fatalf("Expected status 200, got %d: %s", resp.StatusCode, bodyBytes)
 		}
 
-		var updated DailyLookupTestResponse
-		json.NewDecoder(resp.Body).Decode(&updated)
+		var envelope DailyLookupEnvelope
+		json.NewDecoder(resp.Body).Decode(&envelope)
+		updated := envelope.Data
 
 		if len(updated.Entries) != 2 {
 			t.Errorf("Expected 2 entries, got %d", len(updated.Entries))
@@ -274,8 +298,9 @@ func TestDailyLookupCRUD(t *testing.T) {
 			"entries": [{"dayIdentifier": "test", "percentageModifier": 100}]
 		}`
 		createResp, _ := adminPostDailyLookup(ts.URL("/daily-lookups"), body)
-		var toDelete DailyLookupTestResponse
-		json.NewDecoder(createResp.Body).Decode(&toDelete)
+		var createEnvelope DailyLookupEnvelope
+		json.NewDecoder(createResp.Body).Decode(&createEnvelope)
+		toDelete := createEnvelope.Data
 		createResp.Body.Close()
 
 		resp, err := adminDeleteDailyLookup(ts.URL("/daily-lookups/" + toDelete.ID))
@@ -425,8 +450,9 @@ func TestDailyLookupAuthorization(t *testing.T) {
 		"entries": [{"dayIdentifier": "heavy", "percentageModifier": 100}]
 	}`
 	lookupResp, _ := adminPostDailyLookup(ts.URL("/daily-lookups"), lookupBody)
-	var createdLookup DailyLookupTestResponse
-	json.NewDecoder(lookupResp.Body).Decode(&createdLookup)
+	var lookupEnvelope DailyLookupEnvelope
+	json.NewDecoder(lookupResp.Body).Decode(&lookupEnvelope)
+	createdLookup := lookupEnvelope.Data
 	lookupResp.Body.Close()
 
 	t.Run("unauthenticated user gets 401 on GET /daily-lookups", func(t *testing.T) {
