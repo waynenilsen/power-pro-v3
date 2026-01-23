@@ -84,6 +84,7 @@ func TestProgressionTypeConstants(t *testing.T) {
 	}{
 		{"TypeLinear", TypeLinear, "LINEAR_PROGRESSION"},
 		{"TypeCycle", TypeCycle, "CYCLE_PROGRESSION"},
+		{"TypeAMRAP", TypeAMRAP, "AMRAP_PROGRESSION"},
 	}
 
 	for _, tt := range tests {
@@ -105,6 +106,7 @@ func TestTriggerTypeConstants(t *testing.T) {
 		{"TriggerAfterSession", TriggerAfterSession, "AFTER_SESSION"},
 		{"TriggerAfterWeek", TriggerAfterWeek, "AFTER_WEEK"},
 		{"TriggerAfterCycle", TriggerAfterCycle, "AFTER_CYCLE"},
+		{"TriggerAfterSet", TriggerAfterSet, "AFTER_SET"},
 	}
 
 	for _, tt := range tests {
@@ -141,6 +143,7 @@ func TestValidProgressionTypes(t *testing.T) {
 	expectedTypes := []ProgressionType{
 		TypeLinear,
 		TypeCycle,
+		TypeAMRAP,
 	}
 
 	for _, progressionType := range expectedTypes {
@@ -160,6 +163,7 @@ func TestValidTriggerTypes(t *testing.T) {
 		TriggerAfterSession,
 		TriggerAfterWeek,
 		TriggerAfterCycle,
+		TriggerAfterSet,
 	}
 
 	for _, triggerType := range expectedTypes {
@@ -466,6 +470,7 @@ func TestValidateProgressionType(t *testing.T) {
 	}{
 		{"valid LINEAR_PROGRESSION", TypeLinear, false},
 		{"valid CYCLE_PROGRESSION", TypeCycle, false},
+		{"valid AMRAP_PROGRESSION", TypeAMRAP, false},
 		{"empty type", "", true},
 		{"unknown type", "UNKNOWN_TYPE", true},
 		{"lowercase type", "linear_progression", true},
@@ -499,6 +504,7 @@ func TestValidateTriggerType(t *testing.T) {
 		{"valid AFTER_SESSION", TriggerAfterSession, false},
 		{"valid AFTER_WEEK", TriggerAfterWeek, false},
 		{"valid AFTER_CYCLE", TriggerAfterCycle, false},
+		{"valid AFTER_SET", TriggerAfterSet, false},
 		{"empty type", "", true},
 		{"unknown type", "UNKNOWN_TYPE", true},
 	}
