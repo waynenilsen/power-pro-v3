@@ -90,13 +90,13 @@ What actually happened:
 **Unlocks:**
 | Program | Why |
 |---------|-----|
-| Starting Strength | A/B rotation, Fixed 3×5, LinearProgression per session |
-| Bill Starr 5x5 | Heavy/Light/Medium days, Ramp sets, LinearProgression per week |
-| Wendler 5/3/1 BBB | WeeklyLookup for 4-week wave, CycleProgression |
-| Sheiko Beginner | Many Fixed sets at various %, no autoregulation needed |
-| Greg Nuckols High Frequency | DailyLookup + WeeklyLookup, CycleProgression |
+| Starting Strength | Fixed 3×5, LinearProgression per session. A/B alternation is basic Week/Cycle functionality (not Rotation feature). Reset protocols are manual user parameters, not automatic failure tracking. |
+| Bill Starr 5x5 | Heavy/Light/Medium days, Ramp sets, LinearProgression per week. Reset/deload are manual user actions, not system features. |
+| Sheiko Beginner | Many Fixed sets at various %, no autoregulation needed. Prep phase (Weeks 1-3) fully implementable; Comp phase taper would benefit from Phase 10 but not required. |
 
-**Programs unlocked: 5**
+**Programs unlocked: 3**
+
+**Note:** Phases are cumulative - each phase includes all features from previous phases. Programs listed here can be **fully implemented** with Phase 1 features.
 
 ---
 
@@ -110,12 +110,11 @@ What actually happened:
 **Unlocks:**
 | Program | Why |
 |---------|-----|
-| Greyskull LP | AMRAP final set, AMRAPProgression (+weight if hit target) |
-| Reddit PPL 6-Day | AMRAP on compounds, AMRAPProgression |
-| Greg Nuckols Beginner | AMRAP drives weekly TM adjustment |
+| Wendler 5/3/1 BBB | AMRAP final sets (5+, 3+, 1+), WeeklyLookup for 4-week wave, CycleProgression |
+| Greg Nuckols High Frequency | AMAP sets in Week 3, DailyLookup + WeeklyLookup, CycleProgression |
 | nSuns 5/3/1 LP 5-Day | Multiple AMRAP sets, complex AMRAPProgression thresholds |
 
-**Programs unlocked: 4 (Total: 9)**
+**Programs unlocked: 3 (Total: 6)**
 
 ---
 
@@ -128,10 +127,11 @@ What actually happened:
 **Unlocks:**
 | Program | Why |
 |---------|-----|
-| GZCLP | StageProgression (5×3 → 6×2 → 10×1), DeloadOnFailure |
-| Texas Method | Implicit failure handling, reset protocols |
+| GZCLP | StageProgression (5×3 → 6×2 → 10×1), DeloadOnFailure. Requires AMRAP (Phase 2) + Failure Handling (Phase 3). Phases are cumulative, so Phase 3 includes all Phase 2 features. |
+| Texas Method | Implicit failure handling, reset protocols. No AMRAP required. |
+| Greg Nuckols Beginner | AMRAP drives weekly TM adjustment, requires failure handling (Phase 3). Phases are cumulative, so Phase 3 includes all Phase 2 features. |
 
-**Programs unlocked: 2 (Total: 11)**
+**Programs unlocked: 3 (Total: 9)**
 
 ---
 
@@ -143,9 +143,9 @@ What actually happened:
 **Unlocks:**
 | Program | Why |
 |---------|-----|
-| (Reddit PPL accessories) | Already counted - this phase formalizes the mechanic |
+| Reddit PPL 6-Day | Requires double progression for accessories (Phase 4) and failure handling (Phase 3, included in Phase 4). Phases are cumulative, so Phase 4 includes all Phase 2 and Phase 3 features. |
 
-**Programs unlocked: 0 (Total: 11)**
+**Programs unlocked: 1 (Total: 10)**
 
 ---
 
@@ -160,8 +160,9 @@ What actually happened:
 |---------|-----|
 | nSuns CAP3 | 3-week rotation of which lift gets AMRAP focus |
 | Inverted Juggernaut 5/3/1 | 16-week wave rotation (10s/8s/5s/3s phases) |
+| Greyskull LP | AMRAP final set, AMRAPProgression, requires failure handling (Phase 3) and rotation (Phase 5). Phases are cumulative, so Phase 5 includes all Phase 2 and Phase 3 features. |
 
-**Programs unlocked: 2 (Total: 13)**
+**Programs unlocked: 3 (Total: 13)**
 
 ---
 
@@ -250,11 +251,11 @@ What actually happened:
 
 | Phase | Key Features | Programs Unlocked | Running Total |
 |-------|--------------|-------------------|---------------|
-| 1 | Core (%, Fixed, Ramp, Linear) | Starting Strength, Bill Starr, 5/3/1 BBB, Sheiko Beginner, Greg Nuckols HF | 5 |
-| 2 | AMRAP | Greyskull, Reddit PPL, Greg Nuckols Beginner, nSuns 5/3/1 | 9 |
-| 3 | Failure Handling | GZCLP, Texas Method | 11 |
-| 4 | Double Progression | (formalization only) | 11 |
-| 5 | Rotation | nSuns CAP3, Inverted Juggernaut | 13 |
+| 1 | Core (%, Fixed, Ramp, Linear) | Starting Strength, Bill Starr, Sheiko Beginner | 3 |
+| 2 | AMRAP | Wendler 5/3/1 BBB, Greg Nuckols HF, nSuns 5/3/1 | 6 |
+| 3 | Failure Handling | GZCLP, Texas Method, Greg Nuckols Beginner | 9 |
+| 4 | Double Progression | Reddit PPL 6-Day | 10 |
+| 5 | Rotation | nSuns CAP3, Inverted Juggernaut, Greyskull LP | 13 |
 | 6 | RPE | RTS (partial) | 13 |
 | 7 | E1RM | J&T 2.0, Calgary 8wk, Calgary 16wk | 16 |
 | 8 | Fatigue Protocols | GZCL Compendium, RTS (complete) | 18 |
