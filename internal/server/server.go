@@ -41,6 +41,7 @@ type Server struct {
 	progressionRepo            *repository.ProgressionRepository
 	programProgressionRepo     *repository.ProgramProgressionRepository
 	progressionHistoryRepo     *repository.ProgressionHistoryRepository
+	loggedSetRepo              *repository.LoggedSetRepository
 	progressionService         *service.ProgressionService
 	strategyFactory            *loadstrategy.StrategyFactory
 	schemeFactory              *setscheme.SchemeFactory
@@ -72,6 +73,7 @@ func New(cfg Config) *Server {
 	progressionRepo := repository.NewProgressionRepository(cfg.DB)
 	programProgressionRepo := repository.NewProgramProgressionRepository(cfg.DB)
 	progressionHistoryRepo := repository.NewProgressionHistoryRepository(cfg.DB)
+	loggedSetRepo := repository.NewLoggedSetRepository(cfg.DB)
 	progressionFactory := service.GetDefaultFactory()
 	progressionService := service.NewProgressionService(cfg.DB, progressionFactory)
 
@@ -91,6 +93,7 @@ func New(cfg Config) *Server {
 		progressionRepo:            progressionRepo,
 		programProgressionRepo:     programProgressionRepo,
 		progressionHistoryRepo:     progressionHistoryRepo,
+		loggedSetRepo:              loggedSetRepo,
 		progressionService:         progressionService,
 		strategyFactory:            strategyFactory,
 		schemeFactory:              schemeFactory,
@@ -311,6 +314,15 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	// - Handler performs its own authorization check
 	manualTriggerHandler := api.NewManualTriggerHandler(s.progressionService)
 	mux.Handle("POST /users/{userId}/progressions/trigger", withAuth(manualTriggerHandler.Trigger))
+
+	// Logged Set routes:
+	// - Users can log sets for their own sessions
+	// - Users can query their own logged sets
+	// - Handler performs its own authorization check for user-specific data
+	loggedSetHandler := api.NewLoggedSetHandler(s.loggedSetRepo)
+	mux.Handle("POST /sessions/{sessionId}/sets", withAuth(loggedSetHandler.CreateBatch))
+	mux.Handle("GET /sessions/{sessionId}/sets", withAuth(loggedSetHandler.ListBySession))
+	mux.Handle("GET /users/{userId}/logged-sets", withAuth(loggedSetHandler.ListByUser))
 }
 
 // Start starts the HTTP server.

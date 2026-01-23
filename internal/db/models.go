@@ -64,6 +64,20 @@ type LiftMax struct {
 	UpdatedAt     string  `json:"updated_at"`
 }
 
+type LoggedSet struct {
+	ID             string  `json:"id"`
+	UserID         string  `json:"user_id"`
+	SessionID      string  `json:"session_id"`
+	PrescriptionID string  `json:"prescription_id"`
+	LiftID         string  `json:"lift_id"`
+	SetNumber      int64   `json:"set_number"`
+	Weight         float64 `json:"weight"`
+	TargetReps     int64   `json:"target_reps"`
+	RepsPerformed  int64   `json:"reps_performed"`
+	IsAmrap        bool    `json:"is_amrap"`
+	CreatedAt      string  `json:"created_at"`
+}
+
 type Prescription struct {
 	ID           string         `json:"id"`
 	LiftID       string         `json:"lift_id"`

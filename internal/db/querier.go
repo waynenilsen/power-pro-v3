@@ -24,6 +24,7 @@ type Querier interface {
 	CountLiftMaxesByUserFilterType(ctx context.Context, arg CountLiftMaxesByUserFilterTypeParams) (int64, error)
 	CountLifts(ctx context.Context) (int64, error)
 	CountLiftsFilteredByCompetition(ctx context.Context, isCompetitionLift int64) (int64, error)
+	CountLoggedSetsByUser(ctx context.Context, userID string) (int64, error)
 	CountPrescriptions(ctx context.Context) (int64, error)
 	CountPrescriptionsFilterLift(ctx context.Context, liftID string) (int64, error)
 	CountProgramProgressionsByProgram(ctx context.Context, programID string) (int64, error)
@@ -46,6 +47,7 @@ type Querier interface {
 	CreateDayPrescription(ctx context.Context, arg CreateDayPrescriptionParams) error
 	CreateLift(ctx context.Context, arg CreateLiftParams) error
 	CreateLiftMax(ctx context.Context, arg CreateLiftMaxParams) error
+	CreateLoggedSet(ctx context.Context, arg CreateLoggedSetParams) error
 	CreatePrescription(ctx context.Context, arg CreatePrescriptionParams) error
 	CreateProgram(ctx context.Context, arg CreateProgramParams) error
 	CreateProgramProgression(ctx context.Context, arg CreateProgramProgressionParams) error
@@ -70,6 +72,8 @@ type Querier interface {
 	DeleteDayPrescriptionByDayAndPrescription(ctx context.Context, arg DeleteDayPrescriptionByDayAndPrescriptionParams) error
 	DeleteLift(ctx context.Context, id string) error
 	DeleteLiftMax(ctx context.Context, id string) error
+	DeleteLoggedSet(ctx context.Context, id string) error
+	DeleteLoggedSetsBySession(ctx context.Context, sessionID string) error
 	DeletePrescription(ctx context.Context, id string) error
 	DeleteProgram(ctx context.Context, id string) error
 	DeleteProgramProgression(ctx context.Context, id string) error
@@ -98,9 +102,11 @@ type Querier interface {
 	GetDaysForWeek(ctx context.Context, weekID string) ([]GetDaysForWeekRow, error)
 	GetEnrollmentForWorkout(ctx context.Context, userID string) (GetEnrollmentForWorkoutRow, error)
 	GetEnrollmentWithProgram(ctx context.Context, userID string) (GetEnrollmentWithProgramRow, error)
+	GetLatestAMRAPForLift(ctx context.Context, arg GetLatestAMRAPForLiftParams) (LoggedSet, error)
 	GetLift(ctx context.Context, id string) (Lift, error)
 	GetLiftBySlug(ctx context.Context, slug string) (Lift, error)
 	GetLiftMax(ctx context.Context, id string) (LiftMax, error)
+	GetLoggedSet(ctx context.Context, id string) (LoggedSet, error)
 	GetMaxDayPrescriptionOrder(ctx context.Context, dayID string) (interface{}, error)
 	GetPrescription(ctx context.Context, id string) (Prescription, error)
 	GetPrescriptionsForDay(ctx context.Context, dayID string) ([]Prescription, error)
@@ -164,6 +170,8 @@ type Querier interface {
 	ListLiftsFilteredByCompetitionByCreatedAtDesc(ctx context.Context, arg ListLiftsFilteredByCompetitionByCreatedAtDescParams) ([]Lift, error)
 	ListLiftsFilteredByCompetitionByNameAsc(ctx context.Context, arg ListLiftsFilteredByCompetitionByNameAscParams) ([]Lift, error)
 	ListLiftsFilteredByCompetitionByNameDesc(ctx context.Context, arg ListLiftsFilteredByCompetitionByNameDescParams) ([]Lift, error)
+	ListLoggedSetsBySession(ctx context.Context, sessionID string) ([]LoggedSet, error)
+	ListLoggedSetsByUser(ctx context.Context, arg ListLoggedSetsByUserParams) ([]LoggedSet, error)
 	ListPrescriptionsByCreatedAtAsc(ctx context.Context, arg ListPrescriptionsByCreatedAtAscParams) ([]Prescription, error)
 	ListPrescriptionsByCreatedAtDesc(ctx context.Context, arg ListPrescriptionsByCreatedAtDescParams) ([]Prescription, error)
 	ListPrescriptionsByOrderAsc(ctx context.Context, arg ListPrescriptionsByOrderAscParams) ([]Prescription, error)
