@@ -58,7 +58,9 @@ INSERT INTO users (id, created_at, updated_at) VALUES
     -- State advancement test users
     ('auth-test-user-adv', datetime('now'), datetime('now')),
     ('format-test-user-adv', datetime('now'), datetime('now')),
-    ('no-days-user', datetime('now'), datetime('now'));
+    ('no-days-user', datetime('now'), datetime('now')),
+    -- E2E program test users
+    ('bill-starr-test-user', datetime('now'), datetime('now'));
 -- +goose StatementEnd
 
 -- +goose Down
