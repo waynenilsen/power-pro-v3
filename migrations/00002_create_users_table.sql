@@ -60,7 +60,10 @@ INSERT INTO users (id, created_at, updated_at) VALUES
     ('format-test-user-adv', datetime('now'), datetime('now')),
     ('no-days-user', datetime('now'), datetime('now')),
     -- E2E program test users
-    ('bill-starr-test-user', datetime('now'), datetime('now'));
+    ('bill-starr-test-user', datetime('now'), datetime('now')),
+    ('wendler-531-test-user', datetime('now'), datetime('now')),
+    ('nuckols-hf-test-user', datetime('now'), datetime('now')),
+    ('nsuns-lp-test-user', datetime('now'), datetime('now'));
 -- +goose StatementEnd
 
 -- +goose Down

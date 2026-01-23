@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -43,6 +44,19 @@ type LinearProgressionParams struct {
 type CycleProgressionParams struct {
 	Increment float64 `json:"increment"`
 	MaxType   string  `json:"maxType"`
+}
+
+// AMRAPProgressionParams represents the parameters for an AMRAP progression.
+type AMRAPProgressionParams struct {
+	MaxType     string          `json:"maxType"`
+	TriggerType string          `json:"triggerType"`
+	Thresholds  []RepsThreshold `json:"thresholds"`
+}
+
+// RepsThreshold defines a threshold for AMRAP-based progression.
+type RepsThreshold struct {
+	MinReps   int     `json:"minReps"`
+	Increment float64 `json:"increment"`
 }
 
 // CreateProgressionRequest represents the request body for creating a progression.
@@ -319,6 +333,8 @@ func (h *ProgressionHandler) validateProgressionRequest(name, progType string, p
 		errors = append(errors, h.validateLinearParams(params)...)
 	case progression.TypeCycle:
 		errors = append(errors, h.validateCycleParams(params)...)
+	case progression.TypeAMRAP:
+		errors = append(errors, h.validateAMRAPParams(params)...)
 	}
 
 	return errors
@@ -375,6 +391,52 @@ func (h *ProgressionHandler) validateCycleParams(params json.RawMessage) []strin
 	maxType := progression.MaxType(p.MaxType)
 	if err := progression.ValidateMaxType(maxType); err != nil {
 		errors = append(errors, err.Error())
+	}
+
+	return errors
+}
+
+// validateAMRAPParams validates AMRAPProgression parameters.
+func (h *ProgressionHandler) validateAMRAPParams(params json.RawMessage) []string {
+	var errors []string
+	var p AMRAPProgressionParams
+
+	if err := json.Unmarshal(params, &p); err != nil {
+		errors = append(errors, "invalid parameters: failed to parse as AMRAPProgression params")
+		return errors
+	}
+
+	// Validate maxType (required)
+	maxType := progression.MaxType(p.MaxType)
+	if err := progression.ValidateMaxType(maxType); err != nil {
+		errors = append(errors, err.Error())
+	}
+
+	// Validate triggerType (required, must be AFTER_SET)
+	triggerType := progression.TriggerType(p.TriggerType)
+	if err := progression.ValidateTriggerType(triggerType); err != nil {
+		errors = append(errors, err.Error())
+	} else if triggerType != progression.TriggerAfterSet {
+		errors = append(errors, "AMRAP progression requires AFTER_SET trigger type")
+	}
+
+	// Validate thresholds (required, at least one)
+	if len(p.Thresholds) == 0 {
+		errors = append(errors, "at least one threshold is required")
+	}
+
+	// Validate each threshold
+	for i, t := range p.Thresholds {
+		if t.MinReps < 0 {
+			errors = append(errors, fmt.Sprintf("threshold[%d].minReps must be non-negative", i))
+		}
+		if t.Increment <= 0 {
+			errors = append(errors, fmt.Sprintf("threshold[%d].increment must be positive", i))
+		}
+		// Check thresholds are sorted by minReps ascending
+		if i > 0 && t.MinReps <= p.Thresholds[i-1].MinReps {
+			errors = append(errors, fmt.Sprintf("thresholds must be sorted by minReps ascending"))
+		}
 	}
 
 	return errors
