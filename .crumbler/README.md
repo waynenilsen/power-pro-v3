@@ -19,6 +19,8 @@ PowerPro is a headless API for powerlifting programming that enables lifters to 
 ### Technical Debt Cleanup
 Address code quality, test coverage, and documentation alignment from Phase 1 rapid development.
 
+read the prompts/tech debt
+
 ### API & Developer Experience
 Complete API documentation, ensure RESTful consistency, and provide program configuration examples for all 5 unlocked programs.
 
