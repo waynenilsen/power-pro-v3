@@ -50,6 +50,16 @@ type PaginatedCyclesResponse struct {
 	Meta *CyclePaginationMeta `json:"meta"`
 }
 
+// CycleEnvelope wraps single cycle response with standard envelope.
+type CycleEnvelope struct {
+	Data CycleTestResponse `json:"data"`
+}
+
+// CycleWithWeeksEnvelope wraps cycle with weeks response with standard envelope.
+type CycleWithWeeksEnvelope struct {
+	Data CycleWithWeeksTestResponse `json:"data"`
+}
+
 // authGetCycle performs an authenticated GET request
 func authGetCycle(url string) (*http.Response, error) {
 	req, err := http.NewRequest(http.MethodGet, url, nil)
@@ -117,9 +127,11 @@ func TestCycleCRUD(t *testing.T) {
 			t.Fatalf("Expected status 201, got %d: %s", resp.StatusCode, bodyBytes)
 		}
 
-		if err := json.NewDecoder(resp.Body).Decode(&createdCycle); err != nil {
+		var envelope CycleEnvelope
+		if err := json.NewDecoder(resp.Body).Decode(&envelope); err != nil {
 			t.Fatalf("Failed to decode response: %v", err)
 		}
+		createdCycle = envelope.Data
 
 		if createdCycle.ID == "" {
 			t.Error("Expected non-empty ID")
@@ -145,10 +157,11 @@ func TestCycleCRUD(t *testing.T) {
 			t.Fatalf("Expected status 201, got %d: %s", resp.StatusCode, bodyBytes)
 		}
 
-		var cycle CycleTestResponse
-		if err := json.NewDecoder(resp.Body).Decode(&cycle); err != nil {
+		var envelope CycleEnvelope
+		if err := json.NewDecoder(resp.Body).Decode(&envelope); err != nil {
 			t.Fatalf("Failed to decode response: %v", err)
 		}
+		cycle := envelope.Data
 
 		if cycle.LengthWeeks != 1 {
 			t.Errorf("Expected length_weeks 1, got %d", cycle.LengthWeeks)
@@ -167,10 +180,11 @@ func TestCycleCRUD(t *testing.T) {
 			t.Fatalf("Expected status 200, got %d: %s", resp.StatusCode, bodyBytes)
 		}
 
-		var cycle CycleWithWeeksTestResponse
-		if err := json.NewDecoder(resp.Body).Decode(&cycle); err != nil {
+		var envelope CycleWithWeeksEnvelope
+		if err := json.NewDecoder(resp.Body).Decode(&envelope); err != nil {
 			t.Fatalf("Failed to decode response: %v", err)
 		}
+		cycle := envelope.Data
 
 		if cycle.ID != createdCycle.ID {
 			t.Errorf("Expected ID %s, got %s", createdCycle.ID, cycle.ID)
@@ -242,10 +256,11 @@ func TestCycleCRUD(t *testing.T) {
 			t.Fatalf("Expected status 200, got %d: %s", resp.StatusCode, bodyBytes)
 		}
 
-		var updated CycleTestResponse
-		if err := json.NewDecoder(resp.Body).Decode(&updated); err != nil {
+		var envelope CycleEnvelope
+		if err := json.NewDecoder(resp.Body).Decode(&envelope); err != nil {
 			t.Fatalf("Failed to decode response: %v", err)
 		}
+		updated := envelope.Data
 
 		if updated.Name != "Modified 5/3/1 Cycle" {
 			t.Errorf("Expected name 'Modified 5/3/1 Cycle', got %s", updated.Name)
@@ -265,10 +280,11 @@ func TestCycleCRUD(t *testing.T) {
 			t.Fatalf("Expected status 200, got %d: %s", resp.StatusCode, bodyBytes)
 		}
 
-		var updated CycleTestResponse
-		if err := json.NewDecoder(resp.Body).Decode(&updated); err != nil {
+		var envelope CycleEnvelope
+		if err := json.NewDecoder(resp.Body).Decode(&envelope); err != nil {
 			t.Fatalf("Failed to decode response: %v", err)
 		}
+		updated := envelope.Data
 
 		if updated.LengthWeeks != 3 {
 			t.Errorf("Expected length_weeks 3, got %d", updated.LengthWeeks)
@@ -279,9 +295,10 @@ func TestCycleCRUD(t *testing.T) {
 		// Create a cycle to delete
 		body := `{"name": "Cycle To Delete", "lengthWeeks": 2}`
 		createResp, _ := adminPostCycle(ts.URL("/cycles"), body)
-		var toDelete CycleTestResponse
-		json.NewDecoder(createResp.Body).Decode(&toDelete)
+		var toDeleteEnvelope CycleEnvelope
+		json.NewDecoder(createResp.Body).Decode(&toDeleteEnvelope)
 		createResp.Body.Close()
+		toDelete := toDeleteEnvelope.Data
 
 		resp, err := adminDeleteCycle(ts.URL("/cycles/" + toDelete.ID))
 		if err != nil {
@@ -413,9 +430,10 @@ func TestCycleWithWeeks(t *testing.T) {
 	// Create a cycle
 	cycleBody := `{"name": "Week Test Cycle", "lengthWeeks": 4}`
 	cycleResp, _ := adminPostCycle(ts.URL("/cycles"), cycleBody)
-	var createdCycle CycleTestResponse
-	json.NewDecoder(cycleResp.Body).Decode(&createdCycle)
+	var cycleEnvelope CycleEnvelope
+	json.NewDecoder(cycleResp.Body).Decode(&cycleEnvelope)
 	cycleResp.Body.Close()
+	createdCycle := cycleEnvelope.Data
 
 	// Create weeks for the cycle
 	for i := 1; i <= 4; i++ {
@@ -436,10 +454,11 @@ func TestCycleWithWeeks(t *testing.T) {
 			t.Fatalf("Expected status 200, got %d: %s", resp.StatusCode, bodyBytes)
 		}
 
-		var cycle CycleWithWeeksTestResponse
-		if err := json.NewDecoder(resp.Body).Decode(&cycle); err != nil {
+		var envelope CycleWithWeeksEnvelope
+		if err := json.NewDecoder(resp.Body).Decode(&envelope); err != nil {
 			t.Fatalf("Failed to decode response: %v", err)
 		}
+		cycle := envelope.Data
 
 		if len(cycle.Weeks) != 4 {
 			t.Errorf("Expected 4 weeks, got %d", len(cycle.Weeks))
@@ -465,9 +484,10 @@ func TestCycleAuthorization(t *testing.T) {
 	// Create cycle as admin
 	cycleBody := `{"name": "Auth Test Cycle", "lengthWeeks": 4}`
 	cycleResp, _ := adminPostCycle(ts.URL("/cycles"), cycleBody)
-	var createdCycle CycleTestResponse
-	json.NewDecoder(cycleResp.Body).Decode(&createdCycle)
+	var cycleEnvelope CycleEnvelope
+	json.NewDecoder(cycleResp.Body).Decode(&cycleEnvelope)
 	cycleResp.Body.Close()
+	createdCycle := cycleEnvelope.Data
 
 	t.Run("unauthenticated user gets 401 on GET /cycles", func(t *testing.T) {
 		resp, err := http.Get(ts.URL("/cycles"))
@@ -567,9 +587,10 @@ func TestCycleResponseFormat(t *testing.T) {
 	// Create cycle
 	cycleBody := `{"name": "Format Test Cycle", "lengthWeeks": 4}`
 	cycleResp, _ := adminPostCycle(ts.URL("/cycles"), cycleBody)
-	var createdCycle CycleTestResponse
-	json.NewDecoder(cycleResp.Body).Decode(&createdCycle)
+	var cycleEnvelope CycleEnvelope
+	json.NewDecoder(cycleResp.Body).Decode(&cycleEnvelope)
 	cycleResp.Body.Close()
+	createdCycle := cycleEnvelope.Data
 
 	t.Run("response has correct JSON field names", func(t *testing.T) {
 		resp, _ := authGetCycle(ts.URL("/cycles/" + createdCycle.ID))
