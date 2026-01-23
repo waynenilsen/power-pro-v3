@@ -2,6 +2,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"log"
 	"os"
@@ -42,7 +43,7 @@ func main() {
 		<-sigChan
 
 		log.Println("Shutting down server...")
-		srv.Stop(nil)
+		_ = srv.Stop(context.Background())
 	}()
 
 	log.Printf("Starting server on port %d", *port)

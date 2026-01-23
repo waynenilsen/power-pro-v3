@@ -88,9 +88,9 @@ func NewTestServer() (*TestServer, error) {
 		dbPath:  dbPath,
 		db:      db,
 		cleanups: []func(){
-			func() { srv.Stop(context.Background()) },
+			func() { _ = srv.Stop(context.Background()) },
 			func() { db.Close() },
-			func() { os.Remove(dbPath) },
+			func() { _ = os.Remove(dbPath) },
 		},
 	}
 

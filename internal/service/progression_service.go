@@ -11,7 +11,6 @@ import (
 	"fmt"
 
 	"github.com/waynenilsen/power-pro-v3/internal/db"
-	"github.com/waynenilsen/power-pro-v3/internal/domain/liftmax"
 	"github.com/waynenilsen/power-pro-v3/internal/domain/progression"
 )
 
@@ -175,10 +174,8 @@ func (s *ProgressionService) processProgressions(ctx context.Context, event *pro
 
 	// Build lift filter set for O(1) lookup during per-progression processing
 	liftsFilterSet := make(map[string]bool)
-	if liftsFilter != nil {
-		for _, liftID := range liftsFilter {
-			liftsFilterSet[liftID] = true
-		}
+	for _, liftID := range liftsFilter {
+		liftsFilterSet[liftID] = true
 	}
 
 	result := &AggregateResult{
@@ -294,17 +291,6 @@ func GetDefaultFactory() *progression.ProgressionFactory {
 	return factory
 }
 
-// MaxType conversion helper for the service layer
-func maxTypeToLiftMaxType(mt progression.MaxType) liftmax.MaxType {
-	switch mt {
-	case progression.OneRM:
-		return liftmax.OneRM
-	case progression.TrainingMax:
-		return liftmax.TrainingMax
-	default:
-		return liftmax.OneRM
-	}
-}
 
 // wrapError creates a formatted error with context.
 func wrapError(context string, err error) error {

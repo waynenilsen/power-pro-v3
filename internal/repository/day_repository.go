@@ -444,7 +444,7 @@ func dbDayToDomain(dbDay db.Day) *day.Day {
 
 	var metadata map[string]interface{}
 	if dbDay.Metadata.Valid && dbDay.Metadata.String != "" {
-		json.Unmarshal([]byte(dbDay.Metadata.String), &metadata)
+		_ = json.Unmarshal([]byte(dbDay.Metadata.String), &metadata)
 	}
 
 	return &day.Day{

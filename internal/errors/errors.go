@@ -64,10 +64,7 @@ func (e *DomainError) Unwrap() error {
 
 // Is implements error comparison for errors.Is support.
 func (e *DomainError) Is(target error) bool {
-	if target == e.Category {
-		return true
-	}
-	return false
+	return target == e.Category
 }
 
 // NewNotFound creates a not found error.

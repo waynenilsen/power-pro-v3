@@ -36,7 +36,7 @@ func (s *ProgressionService) applyProgressionWithTransaction(
 	}
 	defer func() {
 		if err != nil {
-			tx.Rollback()
+			_ = tx.Rollback()
 		}
 	}()
 
@@ -60,7 +60,7 @@ func (s *ProgressionService) applyProgressionWithTransaction(
 		}
 	}
 	if alreadyApplied == 1 {
-		tx.Rollback()
+		_ = tx.Rollback()
 		return TriggerResult{
 			ProgressionID: pp.ProgressionID,
 			LiftID:        liftID,
@@ -97,7 +97,7 @@ func (s *ProgressionService) applyProgressionWithTransactionForce(
 	}
 	defer func() {
 		if err != nil {
-			tx.Rollback()
+			_ = tx.Rollback()
 		}
 	}()
 
@@ -141,7 +141,7 @@ func (s *ProgressionService) applyProgressionCore(
 	})
 	if err != nil {
 		if err == sql.ErrNoRows {
-			tx.Rollback()
+			_ = tx.Rollback()
 			return TriggerResult{
 				ProgressionID: pp.ProgressionID,
 				LiftID:        liftID,
@@ -190,7 +190,7 @@ func (s *ProgressionService) applyProgressionCore(
 	}
 
 	if !progressionResult.Applied {
-		tx.Rollback()
+		_ = tx.Rollback()
 		return TriggerResult{
 			ProgressionID: pp.ProgressionID,
 			LiftID:        liftID,
