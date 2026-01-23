@@ -58,6 +58,7 @@ func New(cfg Config) *Server {
 	schemeFactory := setscheme.NewSchemeFactory()
 	setscheme.RegisterFixedScheme(schemeFactory)
 	setscheme.RegisterRampScheme(schemeFactory)
+	setscheme.RegisterAMRAPScheme(schemeFactory)
 
 	prescriptionRepo := repository.NewPrescriptionRepository(cfg.DB, strategyFactory, schemeFactory)
 	dayRepo := repository.NewDayRepository(cfg.DB)
