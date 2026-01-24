@@ -57,6 +57,9 @@ type Querier interface {
 	CreateProgressionLog(ctx context.Context, arg CreateProgressionLogParams) error
 	CreateUser(ctx context.Context, arg CreateUserParams) error
 	CreateUserProgramState(ctx context.Context, arg CreateUserProgramStateParams) error
+	// User Progression States Queries
+	// Used to track per-user, per-lift, per-progression state (e.g., current stage)
+	CreateUserProgressionState(ctx context.Context, arg CreateUserProgressionStateParams) error
 	CreateWeek(ctx context.Context, arg CreateWeekParams) error
 	CreateWeekDay(ctx context.Context, arg CreateWeekDayParams) error
 	CreateWeeklyLookup(ctx context.Context, arg CreateWeeklyLookupParams) error
@@ -85,6 +88,7 @@ type Querier interface {
 	DeleteProgression(ctx context.Context, id string) error
 	DeleteProgressionLog(ctx context.Context, id string) error
 	DeleteUserProgramStateByUserID(ctx context.Context, userID string) error
+	DeleteUserProgressionState(ctx context.Context, arg DeleteUserProgressionStateParams) error
 	DeleteWeek(ctx context.Context, id string) error
 	DeleteWeekDay(ctx context.Context, id string) error
 	DeleteWeekDayByWeekAndDay(ctx context.Context, arg DeleteWeekDayByWeekAndDayParams) error
@@ -127,6 +131,7 @@ type Querier interface {
 	GetUser(ctx context.Context, id string) (User, error)
 	GetUserProgramStateByID(ctx context.Context, id string) (UserProgramState, error)
 	GetUserProgramStateByUserID(ctx context.Context, userID string) (UserProgramState, error)
+	GetUserProgressionState(ctx context.Context, arg GetUserProgressionStateParams) (UserProgressionState, error)
 	GetWeek(ctx context.Context, id string) (Week, error)
 	// Workout Generation Queries
 	// These queries support the workout generation API endpoint.
@@ -203,6 +208,8 @@ type Querier interface {
 	ListProgressionLogsByUserAndLift(ctx context.Context, arg ListProgressionLogsByUserAndLiftParams) ([]ProgressionLog, error)
 	ListProgressions(ctx context.Context, arg ListProgressionsParams) ([]Progression, error)
 	ListProgressionsByType(ctx context.Context, arg ListProgressionsByTypeParams) ([]Progression, error)
+	ListUserProgressionStatesByProgression(ctx context.Context, progressionID string) ([]UserProgressionState, error)
+	ListUserProgressionStatesByUser(ctx context.Context, userID string) ([]UserProgressionState, error)
 	ListWeekDays(ctx context.Context, weekID string) ([]WeekDay, error)
 	ListWeeklyLookupsByCreatedAtAsc(ctx context.Context, arg ListWeeklyLookupsByCreatedAtAscParams) ([]WeeklyLookup, error)
 	ListWeeklyLookupsByCreatedAtDesc(ctx context.Context, arg ListWeeklyLookupsByCreatedAtDescParams) ([]WeeklyLookup, error)
@@ -237,10 +244,12 @@ type Querier interface {
 	UpdateProgramProgression(ctx context.Context, arg UpdateProgramProgressionParams) error
 	UpdateProgression(ctx context.Context, arg UpdateProgressionParams) error
 	UpdateUserProgramState(ctx context.Context, arg UpdateUserProgramStateParams) error
+	UpdateUserProgressionStateStage(ctx context.Context, arg UpdateUserProgressionStateStageParams) error
 	UpdateWeek(ctx context.Context, arg UpdateWeekParams) error
 	UpdateWeeklyLookup(ctx context.Context, arg UpdateWeeklyLookupParams) error
 	UpsertFailureCounterOnFailure(ctx context.Context, arg UpsertFailureCounterOnFailureParams) error
 	UpsertFailureCounterOnSuccess(ctx context.Context, arg UpsertFailureCounterOnSuccessParams) error
+	UpsertUserProgressionState(ctx context.Context, arg UpsertUserProgressionStateParams) error
 	UserIsEnrolled(ctx context.Context, userID string) (int64, error)
 	WeekIsUsedInActiveCycle(ctx context.Context, id string) (int64, error)
 	WeekNumberExistsInCycle(ctx context.Context, arg WeekNumberExistsInCycleParams) (int64, error)

@@ -3,6 +3,7 @@ package api_test
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -685,7 +686,7 @@ func directDBInsertProgressionLog(ctx context.Context, queries *db.Queries, user
 		NewValue:       newValue,
 		Delta:          delta,
 		TriggerType:    triggerType,
-		TriggerContext: triggerContext,
+		TriggerContext: sql.NullString{String: triggerContext, Valid: true},
 		AppliedAt:      appliedAt.Format(time.RFC3339),
 	})
 

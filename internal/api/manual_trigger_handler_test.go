@@ -919,8 +919,9 @@ func TestManualTriggerWithTestServer(t *testing.T) {
 		}
 
 		// Verify trigger context contains manual marker
-		if !containsSubstring(logs[0].TriggerContext, `"manual":true`) && !containsSubstring(logs[0].TriggerContext, `"manual": true`) {
-			t.Errorf("Expected trigger_context to contain 'manual:true', got: %s", logs[0].TriggerContext)
+		triggerCtx := logs[0].TriggerContext.String
+		if !containsSubstring(triggerCtx, `"manual":true`) && !containsSubstring(triggerCtx, `"manual": true`) {
+			t.Errorf("Expected trigger_context to contain 'manual:true', got: %s", triggerCtx)
 		}
 	})
 }

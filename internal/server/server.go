@@ -43,6 +43,7 @@ type Server struct {
 	progressionHistoryRepo     *repository.ProgressionHistoryRepository
 	loggedSetRepo              *repository.LoggedSetRepository
 	progressionService         *service.ProgressionService
+	failureService             *service.FailureService
 	strategyFactory            *loadstrategy.StrategyFactory
 	schemeFactory              *setscheme.SchemeFactory
 }
@@ -76,6 +77,7 @@ func New(cfg Config) *Server {
 	loggedSetRepo := repository.NewLoggedSetRepository(cfg.DB)
 	progressionFactory := service.GetDefaultFactory()
 	progressionService := service.NewProgressionService(cfg.DB, progressionFactory)
+	failureService := service.NewFailureService(cfg.DB, progressionFactory)
 
 	s := &Server{
 		config:               cfg,
@@ -95,6 +97,7 @@ func New(cfg Config) *Server {
 		progressionHistoryRepo:     progressionHistoryRepo,
 		loggedSetRepo:              loggedSetRepo,
 		progressionService:         progressionService,
+		failureService:             failureService,
 		strategyFactory:            strategyFactory,
 		schemeFactory:              schemeFactory,
 	}
@@ -319,10 +322,17 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	// - Users can log sets for their own sessions
 	// - Users can query their own logged sets
 	// - Handler performs its own authorization check for user-specific data
-	loggedSetHandler := api.NewLoggedSetHandler(s.loggedSetRepo)
+	loggedSetHandler := api.NewLoggedSetHandler(s.loggedSetRepo, s.failureService)
 	mux.Handle("POST /sessions/{sessionId}/sets", withAuth(loggedSetHandler.CreateBatch))
 	mux.Handle("GET /sessions/{sessionId}/sets", withAuth(loggedSetHandler.ListBySession))
 	mux.Handle("GET /users/{userId}/logged-sets", withAuth(loggedSetHandler.ListByUser))
+
+	// Failure Counter routes:
+	// - Users can query their own failure counters
+	// - Admins can query any user's failure counters
+	// - Handler performs its own authorization check
+	failureCounterHandler := api.NewFailureCounterHandler(s.failureService)
+	mux.Handle("GET /users/{userId}/failure-counters", withAuth(failureCounterHandler.Get))
 }
 
 // Start starts the HTTP server.

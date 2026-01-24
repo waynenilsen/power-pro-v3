@@ -1119,7 +1119,7 @@ func TestProgressionService_ApplyProgressionManually(t *testing.T) {
 		}
 
 		// Verify trigger_context contains "manual": true and "force": true
-		triggerContext := logs[0].TriggerContext
+		triggerContext := logs[0].TriggerContext.String
 		if !contains(triggerContext, `"manual":true`) {
 			t.Errorf("expected trigger_context to contain 'manual:true', got: %s", triggerContext)
 		}

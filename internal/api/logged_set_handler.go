@@ -9,16 +9,18 @@ import (
 	apperrors "github.com/waynenilsen/power-pro-v3/internal/errors"
 	"github.com/waynenilsen/power-pro-v3/internal/middleware"
 	"github.com/waynenilsen/power-pro-v3/internal/repository"
+	"github.com/waynenilsen/power-pro-v3/internal/service"
 )
 
 // LoggedSetHandler handles HTTP requests for logged set operations.
 type LoggedSetHandler struct {
-	repo *repository.LoggedSetRepository
+	repo           *repository.LoggedSetRepository
+	failureService *service.FailureService
 }
 
 // NewLoggedSetHandler creates a new LoggedSetHandler.
-func NewLoggedSetHandler(repo *repository.LoggedSetRepository) *LoggedSetHandler {
-	return &LoggedSetHandler{repo: repo}
+func NewLoggedSetHandler(repo *repository.LoggedSetRepository, failureService *service.FailureService) *LoggedSetHandler {
+	return &LoggedSetHandler{repo: repo, failureService: failureService}
 }
 
 // LoggedSetResponse represents the API response format for a logged set.
@@ -124,6 +126,14 @@ func (h *LoggedSetHandler) CreateBatch(w http.ResponseWriter, r *http.Request) {
 		if err := h.repo.Create(newSet); err != nil {
 			writeDomainError(w, apperrors.NewInternal("failed to create logged set", err))
 			return
+		}
+
+		// Process the logged set for failure tracking (if FailureService is configured)
+		if h.failureService != nil {
+			_, _ = h.failureService.ProcessLoggedSet(r.Context(), newSet)
+			// Note: We don't fail the request if failure processing fails,
+			// as the set has been successfully logged. Failure processing is
+			// best-effort and logged separately.
 		}
 
 		responses = append(responses, loggedSetToResponse(newSet))

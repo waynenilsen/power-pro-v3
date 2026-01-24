@@ -147,6 +147,33 @@ func (s *ProgressionService) applyManualProgressionToLift(
 			NewCycle:       2,
 			TotalWeeks:     4,
 		}
+	case progression.TriggerOnFailure:
+		// For ON_FAILURE triggers, we need to get the current failure count
+		// from the failure counter repository and create a synthetic failure context.
+		// Since this is a manual trigger, we use synthetic values for logged set info.
+		consecutiveFailures := 1 // Default if no counter exists
+		counter, err := s.queries.GetFailureCounterByKey(ctx, db.GetFailureCounterByKeyParams{
+			UserID:        userID,
+			LiftID:        liftID,
+			ProgressionID: progressionID,
+		})
+		if err == nil {
+			consecutiveFailures = int(counter.ConsecutiveFailures)
+		}
+		// If force mode is enabled, ensure at least 1 failure is reported
+		if force && consecutiveFailures < 1 {
+			consecutiveFailures = 1
+		}
+		underlyingContext = progression.FailureTriggerContext{
+			LoggedSetID:         "manual-trigger",
+			LiftID:              liftID,
+			TargetReps:          5,              // Synthetic - doesn't affect progression logic
+			RepsPerformed:       0,              // Synthetic - indicates failure
+			RepsDifference:      -5,             // Synthetic
+			ConsecutiveFailures: consecutiveFailures,
+			Weight:              0,              // Will be looked up during progression application
+			ProgressionID:       progressionID,
+		}
 	}
 
 	// Wrap with ManualTriggerContext for audit purposes

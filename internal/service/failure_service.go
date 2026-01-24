@@ -131,7 +131,7 @@ func (s *FailureService) ProcessLoggedSet(ctx context.Context, ls *loggedset.Log
 		}
 
 		// Parse the progression to check its trigger type
-		prog, err := s.factory.CreateFromJSON([]byte(progressionDef.Parameters))
+		prog, err := s.factory.Create(progression.ProgressionType(progressionDef.Type), []byte(progressionDef.Parameters))
 		if err != nil {
 			continue // Skip progressions that can't be parsed
 		}

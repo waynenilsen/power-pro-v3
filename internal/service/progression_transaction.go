@@ -174,6 +174,27 @@ func (s *ProgressionService) applyProgressionCore(
 		TriggerEvent: triggerEvent,
 	}
 
+	// For StageProgression, load the current stage from persistent storage
+	// This is necessary because the progression is re-created from stored params each time
+	var stageProg *progression.StageProgression
+	if sp, ok := prog.(*progression.StageProgression); ok {
+		stageProg = sp
+		// Look up current stage from user_progression_states
+		state, err := txQueries.GetUserProgressionState(ctx, db.GetUserProgressionStateParams{
+			UserID:        event.UserID,
+			LiftID:        liftID,
+			ProgressionID: pp.ProgressionID,
+		})
+		if err == nil {
+			// Found existing state, set the current stage
+			if setErr := stageProg.SetCurrentStage(int(state.CurrentStage)); setErr != nil {
+				// Stage out of bounds, reset to 0
+				_ = stageProg.SetCurrentStage(0)
+			}
+		}
+		// If not found (sql.ErrNoRows), use default stage 0
+	}
+
 	// Apply the progression
 	var progressionResult progression.ProgressionResult
 
@@ -266,7 +287,7 @@ func (s *ProgressionService) applyProgressionCore(
 		NewValue:       progressionResult.NewValue,
 		Delta:          progressionResult.Delta,
 		TriggerType:    string(event.Type),
-		TriggerContext: string(triggerContextJSON),
+		TriggerContext: sql.NullString{String: string(triggerContextJSON), Valid: true},
 		AppliedAt:      appliedAtStr,
 	})
 	if err != nil {
@@ -275,6 +296,28 @@ func (s *ProgressionService) applyProgressionCore(
 			LiftID:        liftID,
 			Applied:       false,
 			Error:         fmt.Sprintf("failed to create progression log: %v", err),
+		}
+	}
+
+	// For StageProgression, persist the new stage after successful application
+	// The stageProg.CurrentStage was updated in-memory by Apply()
+	if stageProg != nil {
+		stateID := uuid.New().String()
+		err = txQueries.UpsertUserProgressionState(ctx, db.UpsertUserProgressionStateParams{
+			ID:            stateID,
+			UserID:        event.UserID,
+			LiftID:        liftID,
+			ProgressionID: pp.ProgressionID,
+			CurrentStage:  int64(stageProg.CurrentStage),
+			StateData:     sql.NullString{}, // No additional state data needed
+		})
+		if err != nil {
+			return TriggerResult{
+				ProgressionID: pp.ProgressionID,
+				LiftID:        liftID,
+				Applied:       false,
+				Error:         fmt.Sprintf("failed to persist stage state: %v", err),
+			}
 		}
 	}
 
@@ -303,8 +346,14 @@ func getMaxTypeFromProgression(prog progression.Progression) (progression.MaxTyp
 		return p.MaxTypeValue, nil
 	case *progression.CycleProgression:
 		return p.MaxTypeValue, nil
+	case *progression.AMRAPProgression:
+		return p.MaxTypeValue, nil
+	case *progression.DeloadOnFailure:
+		return p.MaxTypeValue, nil
+	case *progression.StageProgression:
+		return p.MaxTypeValue, nil
 	default:
-		return "", fmt.Errorf("unknown progression type")
+		return "", fmt.Errorf("unknown progression type: %T", prog)
 	}
 }
 
@@ -327,6 +376,19 @@ func buildTriggerEvent(event *progression.TriggerEventV2) progression.TriggerEve
 		triggerEvent.CycleIteration = &ctx.CycleIteration
 	case progression.CycleTriggerContext:
 		triggerEvent.CycleIteration = &ctx.CompletedCycle
+	case progression.FailureTriggerContext:
+		triggerEvent.ConsecutiveFailures = &ctx.ConsecutiveFailures
+		triggerEvent.RepsPerformed = &ctx.RepsPerformed
+		triggerEvent.TargetReps = &ctx.TargetReps
+	case *progression.ManualTriggerContext:
+		// For manual triggers, extract from the underlying context
+		underlyingEvent := &progression.TriggerEventV2{
+			Type:      ctx.InnerTriggerType,
+			UserID:    event.UserID,
+			Timestamp: event.Timestamp,
+			Context:   ctx.UnderlyingContext,
+		}
+		return buildTriggerEvent(underlyingEvent)
 	}
 
 	return triggerEvent

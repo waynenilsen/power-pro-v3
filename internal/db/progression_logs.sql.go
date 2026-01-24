@@ -7,6 +7,7 @@ package db
 
 import (
 	"context"
+	"database/sql"
 )
 
 const checkIdempotency = `-- name: CheckIdempotency :one
@@ -82,16 +83,16 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `
 
 type CreateProgressionLogParams struct {
-	ID             string  `json:"id"`
-	UserID         string  `json:"user_id"`
-	ProgressionID  string  `json:"progression_id"`
-	LiftID         string  `json:"lift_id"`
-	PreviousValue  float64 `json:"previous_value"`
-	NewValue       float64 `json:"new_value"`
-	Delta          float64 `json:"delta"`
-	TriggerType    string  `json:"trigger_type"`
-	TriggerContext string  `json:"trigger_context"`
-	AppliedAt      string  `json:"applied_at"`
+	ID             string         `json:"id"`
+	UserID         string         `json:"user_id"`
+	ProgressionID  string         `json:"progression_id"`
+	LiftID         string         `json:"lift_id"`
+	PreviousValue  float64        `json:"previous_value"`
+	NewValue       float64        `json:"new_value"`
+	Delta          float64        `json:"delta"`
+	TriggerType    string         `json:"trigger_type"`
+	TriggerContext sql.NullString `json:"trigger_context"`
+	AppliedAt      string         `json:"applied_at"`
 }
 
 func (q *Queries) CreateProgressionLog(ctx context.Context, arg CreateProgressionLogParams) error {
@@ -173,19 +174,19 @@ type ListProgressionHistoryBaseParams struct {
 }
 
 type ListProgressionHistoryBaseRow struct {
-	ID              string  `json:"id"`
-	UserID          string  `json:"user_id"`
-	ProgressionID   string  `json:"progression_id"`
-	LiftID          string  `json:"lift_id"`
-	PreviousValue   float64 `json:"previous_value"`
-	NewValue        float64 `json:"new_value"`
-	Delta           float64 `json:"delta"`
-	TriggerType     string  `json:"trigger_type"`
-	TriggerContext  string  `json:"trigger_context"`
-	AppliedAt       string  `json:"applied_at"`
-	ProgressionName string  `json:"progression_name"`
-	ProgressionType string  `json:"progression_type"`
-	LiftName        string  `json:"lift_name"`
+	ID              string         `json:"id"`
+	UserID          string         `json:"user_id"`
+	ProgressionID   string         `json:"progression_id"`
+	LiftID          string         `json:"lift_id"`
+	PreviousValue   float64        `json:"previous_value"`
+	NewValue        float64        `json:"new_value"`
+	Delta           float64        `json:"delta"`
+	TriggerType     string         `json:"trigger_type"`
+	TriggerContext  sql.NullString `json:"trigger_context"`
+	AppliedAt       string         `json:"applied_at"`
+	ProgressionName string         `json:"progression_name"`
+	ProgressionType string         `json:"progression_type"`
+	LiftName        string         `json:"lift_name"`
 }
 
 func (q *Queries) ListProgressionHistoryBase(ctx context.Context, arg ListProgressionHistoryBaseParams) ([]ListProgressionHistoryBaseRow, error) {

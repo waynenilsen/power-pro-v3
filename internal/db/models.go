@@ -137,16 +137,16 @@ type Progression struct {
 }
 
 type ProgressionLog struct {
-	ID             string  `json:"id"`
-	UserID         string  `json:"user_id"`
-	ProgressionID  string  `json:"progression_id"`
-	LiftID         string  `json:"lift_id"`
-	PreviousValue  float64 `json:"previous_value"`
-	NewValue       float64 `json:"new_value"`
-	Delta          float64 `json:"delta"`
-	TriggerType    string  `json:"trigger_type"`
-	TriggerContext string  `json:"trigger_context"`
-	AppliedAt      string  `json:"applied_at"`
+	ID             string         `json:"id"`
+	UserID         string         `json:"user_id"`
+	ProgressionID  string         `json:"progression_id"`
+	LiftID         string         `json:"lift_id"`
+	PreviousValue  float64        `json:"previous_value"`
+	NewValue       float64        `json:"new_value"`
+	Delta          float64        `json:"delta"`
+	TriggerType    string         `json:"trigger_type"`
+	TriggerContext sql.NullString `json:"trigger_context"`
+	AppliedAt      string         `json:"applied_at"`
 }
 
 type User struct {
@@ -164,6 +164,17 @@ type UserProgramState struct {
 	CurrentDayIndex       sql.NullInt64 `json:"current_day_index"`
 	EnrolledAt            string        `json:"enrolled_at"`
 	UpdatedAt             string        `json:"updated_at"`
+}
+
+type UserProgressionState struct {
+	ID            string         `json:"id"`
+	UserID        string         `json:"user_id"`
+	LiftID        string         `json:"lift_id"`
+	ProgressionID string         `json:"progression_id"`
+	CurrentStage  int64          `json:"current_stage"`
+	StateData     sql.NullString `json:"state_data"`
+	CreatedAt     string         `json:"created_at"`
+	UpdatedAt     string         `json:"updated_at"`
 }
 
 type Week struct {
