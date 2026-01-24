@@ -186,6 +186,7 @@ type Querier interface {
 	ListLiftsFilteredByCompetitionByNameAsc(ctx context.Context, arg ListLiftsFilteredByCompetitionByNameAscParams) ([]Lift, error)
 	ListLiftsFilteredByCompetitionByNameDesc(ctx context.Context, arg ListLiftsFilteredByCompetitionByNameDescParams) ([]Lift, error)
 	ListLoggedSetsBySession(ctx context.Context, sessionID string) ([]ListLoggedSetsBySessionRow, error)
+	ListLoggedSetsBySessionAndPrescription(ctx context.Context, arg ListLoggedSetsBySessionAndPrescriptionParams) ([]ListLoggedSetsBySessionAndPrescriptionRow, error)
 	ListLoggedSetsByUser(ctx context.Context, arg ListLoggedSetsByUserParams) ([]ListLoggedSetsByUserRow, error)
 	ListPrescriptionsByCreatedAtAsc(ctx context.Context, arg ListPrescriptionsByCreatedAtAscParams) ([]Prescription, error)
 	ListPrescriptionsByCreatedAtDesc(ctx context.Context, arg ListPrescriptionsByCreatedAtDescParams) ([]Prescription, error)

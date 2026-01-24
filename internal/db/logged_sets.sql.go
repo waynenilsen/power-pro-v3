@@ -224,6 +224,69 @@ func (q *Queries) ListLoggedSetsBySession(ctx context.Context, sessionID string)
 	return items, nil
 }
 
+const listLoggedSetsBySessionAndPrescription = `-- name: ListLoggedSetsBySessionAndPrescription :many
+SELECT id, user_id, session_id, prescription_id, lift_id, set_number, weight, target_reps, reps_performed, is_amrap, rpe, created_at
+FROM logged_sets
+WHERE session_id = ? AND prescription_id = ?
+ORDER BY set_number ASC
+`
+
+type ListLoggedSetsBySessionAndPrescriptionParams struct {
+	SessionID      string `json:"session_id"`
+	PrescriptionID string `json:"prescription_id"`
+}
+
+type ListLoggedSetsBySessionAndPrescriptionRow struct {
+	ID             string          `json:"id"`
+	UserID         string          `json:"user_id"`
+	SessionID      string          `json:"session_id"`
+	PrescriptionID string          `json:"prescription_id"`
+	LiftID         string          `json:"lift_id"`
+	SetNumber      int64           `json:"set_number"`
+	Weight         float64         `json:"weight"`
+	TargetReps     int64           `json:"target_reps"`
+	RepsPerformed  int64           `json:"reps_performed"`
+	IsAmrap        bool            `json:"is_amrap"`
+	Rpe            sql.NullFloat64 `json:"rpe"`
+	CreatedAt      string          `json:"created_at"`
+}
+
+func (q *Queries) ListLoggedSetsBySessionAndPrescription(ctx context.Context, arg ListLoggedSetsBySessionAndPrescriptionParams) ([]ListLoggedSetsBySessionAndPrescriptionRow, error) {
+	rows, err := q.db.QueryContext(ctx, listLoggedSetsBySessionAndPrescription, arg.SessionID, arg.PrescriptionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListLoggedSetsBySessionAndPrescriptionRow{}
+	for rows.Next() {
+		var i ListLoggedSetsBySessionAndPrescriptionRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.SessionID,
+			&i.PrescriptionID,
+			&i.LiftID,
+			&i.SetNumber,
+			&i.Weight,
+			&i.TargetReps,
+			&i.RepsPerformed,
+			&i.IsAmrap,
+			&i.Rpe,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listLoggedSetsByUser = `-- name: ListLoggedSetsByUser :many
 SELECT id, user_id, session_id, prescription_id, lift_id, set_number, weight, target_reps, reps_performed, is_amrap, rpe, created_at
 FROM logged_sets

@@ -154,6 +154,24 @@ func (r *LoggedSetRepository) DeleteBySession(sessionID string) error {
 	return nil
 }
 
+// ListBySessionAndPrescription retrieves all logged sets for a session and prescription.
+func (r *LoggedSetRepository) ListBySessionAndPrescription(sessionID, prescriptionID string) ([]loggedset.LoggedSet, error) {
+	ctx := context.Background()
+	dbSets, err := r.queries.ListLoggedSetsBySessionAndPrescription(ctx, db.ListLoggedSetsBySessionAndPrescriptionParams{
+		SessionID:      sessionID,
+		PrescriptionID: prescriptionID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list logged sets by session and prescription: %w", err)
+	}
+
+	sets := make([]loggedset.LoggedSet, len(dbSets))
+	for i, dbSet := range dbSets {
+		sets[i] = *dbListLoggedSetsBySessionAndPrescriptionRowToDomain(dbSet)
+	}
+	return sets, nil
+}
+
 // Helper functions
 
 // nullFloat64ToPtr converts a sql.NullFloat64 to a *float64.
@@ -222,6 +240,25 @@ func dbListLoggedSetsByUserRowToDomain(dbSet db.ListLoggedSetsByUserRow) *logged
 }
 
 func dbGetLatestAMRAPForLiftRowToDomain(dbSet db.GetLatestAMRAPForLiftRow) *loggedset.LoggedSet {
+	createdAt, _ := time.Parse(time.RFC3339, dbSet.CreatedAt)
+
+	return &loggedset.LoggedSet{
+		ID:             dbSet.ID,
+		UserID:         dbSet.UserID,
+		SessionID:      dbSet.SessionID,
+		PrescriptionID: dbSet.PrescriptionID,
+		LiftID:         dbSet.LiftID,
+		SetNumber:      int(dbSet.SetNumber),
+		Weight:         dbSet.Weight,
+		TargetReps:     int(dbSet.TargetReps),
+		RepsPerformed:  int(dbSet.RepsPerformed),
+		IsAMRAP:        dbSet.IsAmrap,
+		RPE:            nullFloat64ToPtr(dbSet.Rpe),
+		CreatedAt:      createdAt,
+	}
+}
+
+func dbListLoggedSetsBySessionAndPrescriptionRowToDomain(dbSet db.ListLoggedSetsBySessionAndPrescriptionRow) *loggedset.LoggedSet {
 	createdAt, _ := time.Parse(time.RFC3339, dbSet.CreatedAt)
 
 	return &loggedset.LoggedSet{

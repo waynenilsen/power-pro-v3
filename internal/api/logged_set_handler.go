@@ -35,18 +35,20 @@ type LoggedSetResponse struct {
 	TargetReps     int       `json:"targetReps"`
 	RepsPerformed  int       `json:"repsPerformed"`
 	IsAMRAP        bool      `json:"isAmrap"`
+	RPE            *float64  `json:"rpe,omitempty"`
 	CreatedAt      time.Time `json:"createdAt"`
 }
 
 // CreateLoggedSetRequest represents a single logged set in the batch request.
 type CreateLoggedSetRequest struct {
-	PrescriptionID string  `json:"prescriptionId"`
-	LiftID         string  `json:"liftId"`
-	SetNumber      int     `json:"setNumber"`
-	Weight         float64 `json:"weight"`
-	TargetReps     int     `json:"targetReps"`
-	RepsPerformed  int     `json:"repsPerformed"`
-	IsAMRAP        bool    `json:"isAmrap"`
+	PrescriptionID string   `json:"prescriptionId"`
+	LiftID         string   `json:"liftId"`
+	SetNumber      int      `json:"setNumber"`
+	Weight         float64  `json:"weight"`
+	TargetReps     int      `json:"targetReps"`
+	RepsPerformed  int      `json:"repsPerformed"`
+	IsAMRAP        bool     `json:"isAmrap"`
+	RPE            *float64 `json:"rpe,omitempty"`
 }
 
 // CreateLoggedSetsBatchRequest represents the request body for creating logged sets.
@@ -66,6 +68,7 @@ func loggedSetToResponse(ls *loggedset.LoggedSet) LoggedSetResponse {
 		TargetReps:     ls.TargetReps,
 		RepsPerformed:  ls.RepsPerformed,
 		IsAMRAP:        ls.IsAMRAP,
+		RPE:            ls.RPE,
 		CreatedAt:      ls.CreatedAt,
 	}
 }
@@ -111,6 +114,7 @@ func (h *LoggedSetHandler) CreateBatch(w http.ResponseWriter, r *http.Request) {
 			TargetReps:     setReq.TargetReps,
 			RepsPerformed:  setReq.RepsPerformed,
 			IsAMRAP:        setReq.IsAMRAP,
+			RPE:            setReq.RPE,
 		}
 
 		newSet, result := loggedset.NewLoggedSet(input, id)

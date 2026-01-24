@@ -44,6 +44,7 @@ type Server struct {
 	loggedSetRepo              *repository.LoggedSetRepository
 	progressionService         *service.ProgressionService
 	failureService             *service.FailureService
+	sessionService             *service.SessionService
 	strategyFactory            *loadstrategy.StrategyFactory
 	schemeFactory              *setscheme.SchemeFactory
 }
@@ -63,6 +64,8 @@ func New(cfg Config) *Server {
 	setscheme.RegisterRampScheme(schemeFactory)
 	setscheme.RegisterAMRAPScheme(schemeFactory)
 	setscheme.RegisterGreySkullScheme(schemeFactory)
+	setscheme.RegisterFatigueDrop(schemeFactory)
+	setscheme.RegisterMRS(schemeFactory)
 
 	prescriptionRepo := repository.NewPrescriptionRepository(cfg.DB, strategyFactory, schemeFactory)
 	dayRepo := repository.NewDayRepository(cfg.DB)
@@ -80,6 +83,7 @@ func New(cfg Config) *Server {
 	progressionFactory := service.GetDefaultFactory()
 	progressionService := service.NewProgressionService(cfg.DB, progressionFactory)
 	failureService := service.NewFailureService(cfg.DB, progressionFactory)
+	sessionService := service.NewSessionService(prescriptionRepo, loggedSetRepo)
 
 	s := &Server{
 		config:               cfg,
@@ -100,6 +104,7 @@ func New(cfg Config) *Server {
 		loggedSetRepo:              loggedSetRepo,
 		progressionService:         progressionService,
 		failureService:             failureService,
+		sessionService:             sessionService,
 		strategyFactory:            strategyFactory,
 		schemeFactory:              schemeFactory,
 	}
@@ -335,6 +340,12 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	// - Handler performs its own authorization check
 	failureCounterHandler := api.NewFailureCounterHandler(s.failureService)
 	mux.Handle("GET /users/{userId}/failure-counters", withAuth(failureCounterHandler.Get))
+
+	// Session routes (variable scheme next-set generation):
+	// - Users can query their next set for variable schemes during a session
+	// - Session ID is user-provided (client generates UUID)
+	sessionHandler := api.NewSessionHandler(s.sessionService)
+	mux.Handle("GET /sessions/{sessionId}/prescriptions/{prescriptionId}/next-set", withAuth(sessionHandler.GetNextSet))
 }
 
 // Start starts the HTTP server.

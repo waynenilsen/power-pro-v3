@@ -930,6 +930,312 @@ func TestProgressionEvaluationWorkflowIntegration(t *testing.T) {
 }
 
 // =============================================================================
+// VARIABLE SCHEME SESSION HANDLING INTEGRATION TESTS
+// =============================================================================
+
+// NextSetTestResponse represents the API response for next set requests.
+type NextSetTestResponse struct {
+	NextSet            *NextSetInfoTest `json:"nextSet,omitempty"`
+	IsComplete         bool             `json:"isComplete"`
+	TotalSetsCompleted int              `json:"totalSetsCompleted"`
+	TotalRepsCompleted int              `json:"totalRepsCompleted"`
+	TerminationReason  string           `json:"terminationReason,omitempty"`
+}
+
+// NextSetInfoTest represents a generated set in the API response.
+type NextSetInfoTest struct {
+	SetNumber  int     `json:"setNumber"`
+	Weight     float64 `json:"weight"`
+	TargetReps int     `json:"targetReps"`
+	IsWorkSet  bool    `json:"isWorkSet"`
+}
+
+// NextSetEnvelopeInteg wraps next set responses.
+type NextSetEnvelopeInteg struct {
+	Data NextSetTestResponse `json:"data"`
+}
+
+// TestVariableSchemeSessionHandling tests the dynamic set generation for MRS and FatigueDrop schemes.
+func TestVariableSchemeSessionHandling(t *testing.T) {
+	ts, err := testutil.NewTestServer()
+	if err != nil {
+		t.Fatalf("Failed to create test server: %v", err)
+	}
+	defer ts.Close()
+
+	squatID := "00000000-0000-0000-0000-000000000001"
+	userID := testutil.TestUserID
+
+	t.Run("MRS scheme generates next set until target total reps reached", func(t *testing.T) {
+		sessionID := uuid.New().String()
+
+		// Create an MRS prescription: target 25 total reps, min 3 reps per set
+		prescBody := fmt.Sprintf(`{
+			"liftId": "%s",
+			"loadStrategy": {"type": "PERCENT_OF", "referenceType": "TRAINING_MAX", "percentage": 75},
+			"setScheme": {"type": "MRS", "target_total_reps": 25, "min_reps_per_set": 3, "max_sets": 10},
+			"order": 0
+		}`, squatID)
+		prescResp, err := adminPost(ts.URL("/prescriptions"), prescBody)
+		if err != nil {
+			t.Fatalf("Failed to create prescription: %v", err)
+		}
+		var prescEnvelope PrescriptionEnvelopeInteg
+		json.NewDecoder(prescResp.Body).Decode(&prescEnvelope)
+		prescResp.Body.Close()
+		prescriptionID := prescEnvelope.Data.ID
+
+		// Ensure user has a training max
+		createMax(t, ts, userID, squatID, "TRAINING_MAX", 400.0, nil)
+
+		// Before logging any sets, requesting next-set should fail
+		t.Run("returns error before any sets logged", func(t *testing.T) {
+			resp, err := authGetLoggedSets(ts.URL("/sessions/"+sessionID+"/prescriptions/"+prescriptionID+"/next-set"), userID)
+			if err != nil {
+				t.Fatalf("Failed to make request: %v", err)
+			}
+			defer resp.Body.Close()
+
+			// Should return 400 because no sets have been logged
+			if resp.StatusCode != http.StatusBadRequest {
+				body, _ := io.ReadAll(resp.Body)
+				t.Errorf("Expected status 400, got %d: %s", resp.StatusCode, body)
+			}
+		})
+
+		// Log first set: 10 reps
+		loggedSetBody := fmt.Sprintf(`{
+			"sets": [
+				{
+					"prescriptionId": "%s",
+					"liftId": "%s",
+					"setNumber": 1,
+					"weight": 300.0,
+					"targetReps": 3,
+					"repsPerformed": 10,
+					"isAmrap": false
+				}
+			]
+		}`, prescriptionID, squatID)
+		logResp, _ := authPostLoggedSets(ts.URL("/sessions/"+sessionID+"/sets"), loggedSetBody, userID)
+		logResp.Body.Close()
+
+		t.Run("returns next set after first set logged", func(t *testing.T) {
+			resp, err := authGetLoggedSets(ts.URL("/sessions/"+sessionID+"/prescriptions/"+prescriptionID+"/next-set"), userID)
+			if err != nil {
+				t.Fatalf("Failed to make request: %v", err)
+			}
+			defer resp.Body.Close()
+
+			if resp.StatusCode != http.StatusOK {
+				body, _ := io.ReadAll(resp.Body)
+				t.Fatalf("Expected status 200, got %d: %s", resp.StatusCode, body)
+			}
+
+			var envelope NextSetEnvelopeInteg
+			json.NewDecoder(resp.Body).Decode(&envelope)
+			result := envelope.Data
+
+			if result.IsComplete {
+				t.Error("Expected exercise to not be complete yet")
+			}
+			if result.NextSet == nil {
+				t.Fatal("Expected next set to be returned")
+			}
+			if result.NextSet.SetNumber != 2 {
+				t.Errorf("Expected set number 2, got %d", result.NextSet.SetNumber)
+			}
+			if result.TotalSetsCompleted != 1 {
+				t.Errorf("Expected 1 set completed, got %d", result.TotalSetsCompleted)
+			}
+			if result.TotalRepsCompleted != 10 {
+				t.Errorf("Expected 10 reps completed, got %d", result.TotalRepsCompleted)
+			}
+		})
+
+		// Log more sets until target reached
+		loggedSetBody2 := fmt.Sprintf(`{
+			"sets": [
+				{
+					"prescriptionId": "%s",
+					"liftId": "%s",
+					"setNumber": 2,
+					"weight": 300.0,
+					"targetReps": 3,
+					"repsPerformed": 8,
+					"isAmrap": false
+				}
+			]
+		}`, prescriptionID, squatID)
+		logResp2, _ := authPostLoggedSets(ts.URL("/sessions/"+sessionID+"/sets"), loggedSetBody2, userID)
+		logResp2.Body.Close()
+
+		loggedSetBody3 := fmt.Sprintf(`{
+			"sets": [
+				{
+					"prescriptionId": "%s",
+					"liftId": "%s",
+					"setNumber": 3,
+					"weight": 300.0,
+					"targetReps": 3,
+					"repsPerformed": 7,
+					"isAmrap": false
+				}
+			]
+		}`, prescriptionID, squatID)
+		logResp3, _ := authPostLoggedSets(ts.URL("/sessions/"+sessionID+"/sets"), loggedSetBody3, userID)
+		logResp3.Body.Close()
+
+		t.Run("returns complete when target total reps reached", func(t *testing.T) {
+			resp, err := authGetLoggedSets(ts.URL("/sessions/"+sessionID+"/prescriptions/"+prescriptionID+"/next-set"), userID)
+			if err != nil {
+				t.Fatalf("Failed to make request: %v", err)
+			}
+			defer resp.Body.Close()
+
+			if resp.StatusCode != http.StatusOK {
+				body, _ := io.ReadAll(resp.Body)
+				t.Fatalf("Expected status 200, got %d: %s", resp.StatusCode, body)
+			}
+
+			var envelope NextSetEnvelopeInteg
+			json.NewDecoder(resp.Body).Decode(&envelope)
+			result := envelope.Data
+
+			// Total reps: 10 + 8 + 7 = 25 (matches target)
+			if !result.IsComplete {
+				t.Error("Expected exercise to be complete (25 total reps)")
+			}
+			if result.NextSet != nil {
+				t.Error("Expected next set to be nil when complete")
+			}
+			if result.TotalRepsCompleted != 25 {
+				t.Errorf("Expected 25 reps completed, got %d", result.TotalRepsCompleted)
+			}
+			if result.TerminationReason == "" {
+				t.Error("Expected termination reason to be set")
+			}
+		})
+	})
+
+	t.Run("returns error for non-variable scheme", func(t *testing.T) {
+		sessionID := uuid.New().String()
+
+		// Create a FIXED prescription (not variable)
+		prescBody := fmt.Sprintf(`{
+			"liftId": "%s",
+			"loadStrategy": {"type": "PERCENT_OF", "referenceType": "TRAINING_MAX", "percentage": 75},
+			"setScheme": {"type": "FIXED", "sets": 5, "reps": 5},
+			"order": 0
+		}`, squatID)
+		prescResp, _ := adminPost(ts.URL("/prescriptions"), prescBody)
+		var prescEnvelope PrescriptionEnvelopeInteg
+		json.NewDecoder(prescResp.Body).Decode(&prescEnvelope)
+		prescResp.Body.Close()
+		prescriptionID := prescEnvelope.Data.ID
+
+		// Log a set
+		loggedSetBody := fmt.Sprintf(`{
+			"sets": [
+				{
+					"prescriptionId": "%s",
+					"liftId": "%s",
+					"setNumber": 1,
+					"weight": 300.0,
+					"targetReps": 5,
+					"repsPerformed": 5,
+					"isAmrap": false
+				}
+			]
+		}`, prescriptionID, squatID)
+		logResp, _ := authPostLoggedSets(ts.URL("/sessions/"+sessionID+"/sets"), loggedSetBody, userID)
+		logResp.Body.Close()
+
+		resp, err := authGetLoggedSets(ts.URL("/sessions/"+sessionID+"/prescriptions/"+prescriptionID+"/next-set"), userID)
+		if err != nil {
+			t.Fatalf("Failed to make request: %v", err)
+		}
+		defer resp.Body.Close()
+
+		// Should return 400 because FIXED is not a variable scheme
+		if resp.StatusCode != http.StatusBadRequest {
+			body, _ := io.ReadAll(resp.Body)
+			t.Errorf("Expected status 400, got %d: %s", resp.StatusCode, body)
+		}
+	})
+
+	t.Run("returns error for non-existent prescription", func(t *testing.T) {
+		sessionID := uuid.New().String()
+		fakePrescriptionID := uuid.New().String()
+
+		resp, err := authGetLoggedSets(ts.URL("/sessions/"+sessionID+"/prescriptions/"+fakePrescriptionID+"/next-set"), userID)
+		if err != nil {
+			t.Fatalf("Failed to make request: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusNotFound {
+			body, _ := io.ReadAll(resp.Body)
+			t.Errorf("Expected status 404, got %d: %s", resp.StatusCode, body)
+		}
+	})
+
+	t.Run("logged sets with RPE are returned correctly", func(t *testing.T) {
+		sessionID := uuid.New().String()
+
+		// Log a set with RPE
+		loggedSetBody := fmt.Sprintf(`{
+			"sets": [
+				{
+					"prescriptionId": "%s",
+					"liftId": "%s",
+					"setNumber": 1,
+					"weight": 300.0,
+					"targetReps": 5,
+					"repsPerformed": 5,
+					"isAmrap": false,
+					"rpe": 8.5
+				}
+			]
+		}`, uuid.New().String(), squatID)
+		logResp, _ := authPostLoggedSets(ts.URL("/sessions/"+sessionID+"/sets"), loggedSetBody, userID)
+		if logResp.StatusCode != http.StatusCreated {
+			body, _ := io.ReadAll(logResp.Body)
+			t.Fatalf("Failed to create logged set: %d: %s", logResp.StatusCode, body)
+		}
+
+		var loggedSetEnvelope LoggedSetTestListResponse
+		json.NewDecoder(logResp.Body).Decode(&loggedSetEnvelope)
+		logResp.Body.Close()
+
+		// Verify the logged set response
+		if len(loggedSetEnvelope.Data) != 1 {
+			t.Fatalf("Expected 1 logged set, got %d", len(loggedSetEnvelope.Data))
+		}
+		// RPE should be included in response (check via Get endpoint)
+		resp, _ := authGetLoggedSets(ts.URL("/sessions/"+sessionID+"/sets"), userID)
+		defer resp.Body.Close()
+
+		// Verify RPE is returned
+		var listResponse struct {
+			Data []struct {
+				RPE *float64 `json:"rpe"`
+			} `json:"data"`
+		}
+		json.NewDecoder(resp.Body).Decode(&listResponse)
+
+		if len(listResponse.Data) == 0 {
+			t.Fatal("Expected logged sets in response")
+		}
+		if listResponse.Data[0].RPE == nil {
+			t.Error("Expected RPE to be returned in logged set response")
+		} else if *listResponse.Data[0].RPE != 8.5 {
+			t.Errorf("Expected RPE 8.5, got %f", *listResponse.Data[0].RPE)
+		}
+	})
+}
+
+// =============================================================================
 // HELPER FUNCTIONS
 // =============================================================================
 

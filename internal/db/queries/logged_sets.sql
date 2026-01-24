@@ -35,3 +35,9 @@ DELETE FROM logged_sets WHERE id = ?;
 
 -- name: DeleteLoggedSetsBySession :exec
 DELETE FROM logged_sets WHERE session_id = ?;
+
+-- name: ListLoggedSetsBySessionAndPrescription :many
+SELECT id, user_id, session_id, prescription_id, lift_id, set_number, weight, target_reps, reps_performed, is_amrap, rpe, created_at
+FROM logged_sets
+WHERE session_id = ? AND prescription_id = ?
+ORDER BY set_number ASC;
