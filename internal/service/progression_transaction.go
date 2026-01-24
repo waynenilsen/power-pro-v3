@@ -105,7 +105,12 @@ func (s *ProgressionService) applyProgressionWithTransactionForce(
 
 	// SKIP idempotency check for force mode
 	// Use unique timestamp for force mode
-	now := time.Now()
+	// NOTE: Add 1 second to ensure RFC3339Nano timestamps sort AFTER RFC3339 timestamps
+	// SQLite sorts strings lexicographically. When comparing same-second timestamps:
+	// - "2024-01-01T00:00:00Z" (RFC3339)
+	// - "2024-01-01T00:00:00.123456789Z" (RFC3339Nano at same second)
+	// The 'Z' > '.' so RFC3339 sorts higher! Adding 1 second fixes this.
+	now := time.Now().Add(time.Second)
 	appliedAtStr := now.Format(time.RFC3339Nano)
 
 	return s.applyProgressionCore(ctx, tx, txQueries, event, pp, prog, liftID, appliedAtStr)
@@ -202,13 +207,22 @@ func (s *ProgressionService) applyProgressionCore(
 	}
 
 	// Create new LiftMax entry
-	now := time.Now()
+	// NOTE on timestamp formats and SQLite sorting:
+	// SQLite sorts strings lexicographically. When comparing timestamps:
+	// - "2024-01-01T00:00:00Z" (RFC3339)
+	// - "2024-01-01T00:00:00.123456789Z" (RFC3339Nano at same second)
+	// The 'Z' (ASCII 90) > '.' (ASCII 46), so RFC3339 sorts HIGHER than RFC3339Nano at same second!
+	// This would cause GetCurrentMax (ORDER BY effective_date DESC) to return stale values.
+	//
+	// Solution: For force mode (which uses RFC3339Nano), we add 1 second to the timestamp.
+	// This ensures "2024-01-01T00:00:01.xxx" sorts AFTER "2024-01-01T00:00:00Z".
+	now := time.Now().Add(time.Second)
 	nowStr := now.Format(time.RFC3339Nano)
 	effectiveDateStr := event.Timestamp.Format(time.RFC3339)
 
-	// For force mode, use unique timestamp
+	// For force mode, use the unique RFC3339Nano timestamp (which has +1 second offset applied)
 	if appliedAtStr != event.Timestamp.Format(time.RFC3339) {
-		effectiveDateStr = now.Format(time.RFC3339Nano)
+		effectiveDateStr = appliedAtStr
 	}
 
 	newMaxID := uuid.New().String()
