@@ -19,6 +19,7 @@ type MaxType string
 const (
 	OneRM       MaxType = "ONE_RM"
 	TrainingMax MaxType = "TRAINING_MAX"
+	E1RM        MaxType = "E1RM"
 )
 
 // Default TM percentage when converting between 1RM and TM
@@ -36,7 +37,7 @@ var (
 	ErrValueNotPositive     = errors.New("lift max value must be positive")
 	ErrValueInvalidPrecision = errors.New("lift max value must have precision of 0.25 (e.g., 315, 315.25, 315.5, 315.75)")
 	ErrTypeRequired         = errors.New("max type is required")
-	ErrTypeInvalid          = errors.New("max type must be ONE_RM or TRAINING_MAX")
+	ErrTypeInvalid          = errors.New("max type must be ONE_RM, TRAINING_MAX, or E1RM")
 	ErrEffectiveDateRequired = errors.New("effective date is required")
 	ErrUserIDRequired       = errors.New("user ID is required")
 	ErrLiftIDRequired       = errors.New("lift ID is required")
@@ -94,7 +95,7 @@ func ValidateType(maxType MaxType) error {
 	if maxType == "" {
 		return ErrTypeRequired
 	}
-	if maxType != OneRM && maxType != TrainingMax {
+	if maxType != OneRM && maxType != TrainingMax && maxType != E1RM {
 		return ErrTypeInvalid
 	}
 	return nil

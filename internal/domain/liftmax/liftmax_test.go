@@ -98,6 +98,7 @@ func TestValidateType_Valid(t *testing.T) {
 	}{
 		{"ONE_RM", OneRM},
 		{"TRAINING_MAX", TrainingMax},
+		{"E1RM", E1RM},
 	}
 
 	for _, tt := range tests {
@@ -376,6 +377,36 @@ func TestCreateLiftMax_DefaultEffectiveDate(t *testing.T) {
 	}
 	if liftMax.EffectiveDate.Before(before) || liftMax.EffectiveDate.After(after) {
 		t.Errorf("liftMax.EffectiveDate should be between %v and %v, got %v", before, after, liftMax.EffectiveDate)
+	}
+}
+
+func TestCreateLiftMax_E1RM(t *testing.T) {
+	repo := newMockRepository()
+
+	input := CreateLiftMaxInput{
+		UserID: "user-123",
+		LiftID: "lift-456",
+		Type:   E1RM,
+		Value:  320.5,
+	}
+
+	liftMax, result := CreateLiftMax(input, "max-id", repo)
+
+	if !result.Valid {
+		t.Errorf("CreateLiftMax returned invalid result: %v", result.Errors)
+	}
+	if liftMax == nil {
+		t.Fatal("CreateLiftMax returned nil liftMax")
+	}
+	if liftMax.Type != E1RM {
+		t.Errorf("liftMax.Type = %q, want %q", liftMax.Type, E1RM)
+	}
+	if liftMax.Value != 320.5 {
+		t.Errorf("liftMax.Value = %v, want %v", liftMax.Value, 320.5)
+	}
+	// E1RM should not trigger TM-related warnings
+	if result.HasWarnings() {
+		t.Errorf("CreateLiftMax with E1RM should not have warnings: %v", result.Warnings)
 	}
 }
 
@@ -1368,6 +1399,9 @@ func TestMaxTypeConstants(t *testing.T) {
 	}
 	if TrainingMax != "TRAINING_MAX" {
 		t.Errorf("TrainingMax = %q, want %q", TrainingMax, "TRAINING_MAX")
+	}
+	if E1RM != "E1RM" {
+		t.Errorf("E1RM = %q, want %q", E1RM, "E1RM")
 	}
 }
 

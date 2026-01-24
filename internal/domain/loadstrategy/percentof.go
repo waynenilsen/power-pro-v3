@@ -16,18 +16,22 @@ const (
 	ReferenceOneRM ReferenceType = "ONE_RM"
 	// ReferenceTrainingMax uses the lifter's Training Max as the reference.
 	ReferenceTrainingMax ReferenceType = "TRAINING_MAX"
+	// ReferenceE1RM uses the lifter's estimated 1 rep max as the reference.
+	ReferenceE1RM ReferenceType = "E1RM"
 )
 
 // Alias constants for backwards compatibility and convenience.
 const (
 	OneRM       = ReferenceOneRM
 	TrainingMax = ReferenceTrainingMax
+	E1RM        = ReferenceE1RM
 )
 
 // ValidReferenceTypes contains all valid reference type values.
 var ValidReferenceTypes = map[ReferenceType]bool{
 	ReferenceOneRM:       true,
 	ReferenceTrainingMax: true,
+	ReferenceE1RM:        true,
 }
 
 // PercentOf validation errors.
@@ -35,7 +39,7 @@ var (
 	ErrPercentageRequired    = errors.New("percentage is required")
 	ErrPercentageNotPositive = errors.New("percentage must be greater than 0")
 	ErrReferenceTypeRequired = errors.New("reference type is required")
-	ErrReferenceTypeInvalid  = errors.New("reference type must be ONE_RM or TRAINING_MAX")
+	ErrReferenceTypeInvalid  = errors.New("reference type must be ONE_RM, TRAINING_MAX, or E1RM")
 )
 
 // PercentOfLoadStrategy calculates load as a percentage of a reference max.

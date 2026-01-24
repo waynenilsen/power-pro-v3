@@ -99,6 +99,14 @@ func TestPercentOfLoadStrategy_Validate(t *testing.T) {
 			wantErr: nil,
 		},
 		{
+			name: "valid with E1RM",
+			strategy: PercentOfLoadStrategy{
+				ReferenceType: ReferenceE1RM,
+				Percentage:    90.0,
+			},
+			wantErr: nil,
+		},
+		{
 			name: "valid with percentage over 100 (overload)",
 			strategy: PercentOfLoadStrategy{
 				ReferenceType: ReferenceTrainingMax,
@@ -229,6 +237,23 @@ func TestPercentOfLoadStrategy_CalculateLoad(t *testing.T) {
 				m.SetMax("user-123", "deadlift-789", "ONE_RM", 400.0, "2024-01-15")
 			},
 			expected: 360.0,
+		},
+		{
+			name: "85% of E1RM (350) = 297.5 -> 300",
+			strategy: PercentOfLoadStrategy{
+				ReferenceType:     ReferenceE1RM,
+				Percentage:        85.0,
+				RoundingIncrement: 5.0,
+				RoundingDirection: RoundNearest,
+			},
+			params: LoadCalculationParams{
+				UserID: "user-123",
+				LiftID: "squat-456",
+			},
+			setupMaxes: func(m *mockMaxLookup) {
+				m.SetMax("user-123", "squat-456", "E1RM", 350.0, "2024-01-15")
+			},
+			expected: 300.0,
 		},
 		{
 			name: "105% of TM (overload) = 330.75 -> 330",
@@ -594,6 +619,21 @@ func TestUnmarshalPercentOf(t *testing.T) {
 			},
 		},
 		{
+			name: "valid with E1RM",
+			json: `{
+				"type": "PERCENT_OF",
+				"referenceType": "E1RM",
+				"percentage": 85
+			}`,
+			wantErr: false,
+			check: func(t *testing.T, s LoadStrategy) {
+				ps := s.(*PercentOfLoadStrategy)
+				if ps.ReferenceType != ReferenceE1RM {
+					t.Errorf("expected referenceType %s, got %s", ReferenceE1RM, ps.ReferenceType)
+				}
+			},
+		},
+		{
 			name: "valid with rounding DOWN",
 			json: `{
 				"type": "PERCENT_OF",
@@ -703,6 +743,9 @@ func TestReferenceTypeConstants(t *testing.T) {
 	if string(ReferenceTrainingMax) != "TRAINING_MAX" {
 		t.Errorf("expected ReferenceTrainingMax to be 'TRAINING_MAX', got %s", ReferenceTrainingMax)
 	}
+	if string(ReferenceE1RM) != "E1RM" {
+		t.Errorf("expected ReferenceE1RM to be 'E1RM', got %s", ReferenceE1RM)
+	}
 
 	// Verify aliases
 	if OneRM != ReferenceOneRM {
@@ -711,12 +754,16 @@ func TestReferenceTypeConstants(t *testing.T) {
 	if TrainingMax != ReferenceTrainingMax {
 		t.Error("TrainingMax alias should equal ReferenceTrainingMax")
 	}
+	if E1RM != ReferenceE1RM {
+		t.Error("E1RM alias should equal ReferenceE1RM")
+	}
 }
 
 func TestValidReferenceTypes(t *testing.T) {
 	expectedTypes := []ReferenceType{
 		ReferenceOneRM,
 		ReferenceTrainingMax,
+		ReferenceE1RM,
 	}
 
 	for _, refType := range expectedTypes {
@@ -740,7 +787,7 @@ func TestPercentOfErrors(t *testing.T) {
 		{"ErrPercentageRequired", ErrPercentageRequired, "percentage is required"},
 		{"ErrPercentageNotPositive", ErrPercentageNotPositive, "percentage must be greater than 0"},
 		{"ErrReferenceTypeRequired", ErrReferenceTypeRequired, "reference type is required"},
-		{"ErrReferenceTypeInvalid", ErrReferenceTypeInvalid, "reference type must be ONE_RM or TRAINING_MAX"},
+		{"ErrReferenceTypeInvalid", ErrReferenceTypeInvalid, "reference type must be ONE_RM, TRAINING_MAX, or E1RM"},
 	}
 
 	for _, tt := range tests {
