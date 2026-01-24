@@ -43,12 +43,24 @@ main() {
   while true; do
     ITERATION=$((ITERATION + 1))
 
+    # Check for stop signal
+    if [ -f "$SCRIPT_DIR/.stop" ]; then
+      rm -f "$SCRIPT_DIR/.stop"
+      echo -e "${CYAN}Stop signal received. Exiting gracefully.${RESET}"
+      exit 0
+    fi
+
     echo -e "${CYAN}━━━ iteration ${ITERATION} ━━━${RESET}"
     echo ""
 
     # Get prompt from crumbler and execute
     PROMPT=$("$SCRIPT_DIR/crumbler" prompt 2>&1)
     if [ $? -eq 0 ] && [ -n "$PROMPT" ]; then
+      # Check if crumbler is done
+      if echo "$PROMPT" | grep -q "^# DONE"; then
+        echo -e "${CYAN}All crumbs completed. Exiting.${RESET}"
+        break
+      fi
       "$SCRIPT_DIR/claude-wrapper.sh" "$PROMPT"
     else
       echo -e "${CYAN}No work available or crumbler error${RESET}"
