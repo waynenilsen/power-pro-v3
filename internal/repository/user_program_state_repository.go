@@ -33,7 +33,7 @@ func (r *UserProgramStateRepository) GetByUserID(userID string) (*userprogramsta
 		}
 		return nil, fmt.Errorf("failed to get user program state: %w", err)
 	}
-	return dbUserProgramStateToDomain(dbState), nil
+	return dbGetUserProgramStateByUserIDRowToDomain(dbState), nil
 }
 
 // GetByID retrieves a user's program state by its ID.
@@ -46,7 +46,7 @@ func (r *UserProgramStateRepository) GetByID(id string) (*userprogramstate.UserP
 		}
 		return nil, fmt.Errorf("failed to get user program state by ID: %w", err)
 	}
-	return dbUserProgramStateToDomain(dbState), nil
+	return dbGetUserProgramStateByIDRowToDomain(dbState), nil
 }
 
 // GetEnrollmentWithProgram retrieves a user's enrollment along with program details.
@@ -145,7 +145,23 @@ func (r *UserProgramStateRepository) UserIsEnrolled(userID string) (bool, error)
 
 // Helper functions
 
-func dbUserProgramStateToDomain(dbState db.UserProgramState) *userprogramstate.UserProgramState {
+func dbGetUserProgramStateByUserIDRowToDomain(dbState db.GetUserProgramStateByUserIDRow) *userprogramstate.UserProgramState {
+	enrolledAt, _ := time.Parse(time.RFC3339, dbState.EnrolledAt)
+	updatedAt, _ := time.Parse(time.RFC3339, dbState.UpdatedAt)
+
+	return &userprogramstate.UserProgramState{
+		ID:                    dbState.ID,
+		UserID:                dbState.UserID,
+		ProgramID:             dbState.ProgramID,
+		CurrentWeek:           int(dbState.CurrentWeek),
+		CurrentCycleIteration: int(dbState.CurrentCycleIteration),
+		CurrentDayIndex:       nullInt64ToIntPtr(dbState.CurrentDayIndex),
+		EnrolledAt:            enrolledAt,
+		UpdatedAt:             updatedAt,
+	}
+}
+
+func dbGetUserProgramStateByIDRowToDomain(dbState db.GetUserProgramStateByIDRow) *userprogramstate.UserProgramState {
 	enrolledAt, _ := time.Parse(time.RFC3339, dbState.EnrolledAt)
 	updatedAt, _ := time.Parse(time.RFC3339, dbState.UpdatedAt)
 

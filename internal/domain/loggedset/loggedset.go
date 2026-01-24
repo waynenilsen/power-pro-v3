@@ -17,6 +17,7 @@ var (
 	ErrWeightInvalid          = errors.New("weight must be non-negative")
 	ErrTargetRepsInvalid      = errors.New("target_reps must be positive")
 	ErrRepsPerformedInvalid   = errors.New("reps_performed must be non-negative")
+	ErrRPEInvalid             = errors.New("rpe must be between 5.0 and 10.0")
 )
 
 // LoggedSet represents a single logged set from a workout session.
@@ -31,7 +32,10 @@ type LoggedSet struct {
 	TargetReps     int
 	RepsPerformed  int
 	IsAMRAP        bool
-	CreatedAt      time.Time
+	// RPE is the rate of perceived exertion (5.0-10.0).
+	// Optional - nil means RPE was not recorded.
+	RPE       *float64
+	CreatedAt time.Time
 }
 
 // CreateLoggedSetInput contains the input data for creating a new logged set.
@@ -45,6 +49,7 @@ type CreateLoggedSetInput struct {
 	TargetReps     int
 	RepsPerformed  int
 	IsAMRAP        bool
+	RPE            *float64
 }
 
 // ValidationResult holds validation errors.
@@ -128,6 +133,16 @@ func ValidateRepsPerformed(repsPerformed int) error {
 	return nil
 }
 
+// ValidateRPE validates that RPE is within the valid range (5.0-10.0) if provided.
+func ValidateRPE(rpe *float64) error {
+	if rpe != nil {
+		if *rpe < 5.0 || *rpe > 10.0 {
+			return ErrRPEInvalid
+		}
+	}
+	return nil
+}
+
 // NewLoggedSet validates input and creates a new LoggedSet domain entity.
 // Returns a validation result with errors if validation fails.
 func NewLoggedSet(input CreateLoggedSetInput, id string) (*LoggedSet, *ValidationResult) {
@@ -165,6 +180,10 @@ func NewLoggedSet(input CreateLoggedSetInput, id string) (*LoggedSet, *Validatio
 		result.AddError(err)
 	}
 
+	if err := ValidateRPE(input.RPE); err != nil {
+		result.AddError(err)
+	}
+
 	if !result.Valid {
 		return nil, result
 	}
@@ -180,6 +199,7 @@ func NewLoggedSet(input CreateLoggedSetInput, id string) (*LoggedSet, *Validatio
 		TargetReps:     input.TargetReps,
 		RepsPerformed:  input.RepsPerformed,
 		IsAMRAP:        input.IsAMRAP,
+		RPE:            input.RPE,
 		CreatedAt:      time.Now(),
 	}, result
 }
@@ -217,6 +237,10 @@ func (l *LoggedSet) Validate() *ValidationResult {
 	}
 
 	if err := ValidateRepsPerformed(l.RepsPerformed); err != nil {
+		result.AddError(err)
+	}
+
+	if err := ValidateRPE(l.RPE); err != nil {
 		result.AddError(err)
 	}
 

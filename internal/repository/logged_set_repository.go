@@ -33,7 +33,7 @@ func (r *LoggedSetRepository) GetByID(id string) (*loggedset.LoggedSet, error) {
 		}
 		return nil, fmt.Errorf("failed to get logged set: %w", err)
 	}
-	return dbLoggedSetToDomain(dbSet), nil
+	return dbGetLoggedSetRowToDomain(dbSet), nil
 }
 
 // ListBySession retrieves all logged sets for a session.
@@ -46,7 +46,7 @@ func (r *LoggedSetRepository) ListBySession(sessionID string) ([]loggedset.Logge
 
 	sets := make([]loggedset.LoggedSet, len(dbSets))
 	for i, dbSet := range dbSets {
-		sets[i] = *dbLoggedSetToDomain(dbSet)
+		sets[i] = *dbListLoggedSetsBySessionRowToDomain(dbSet)
 	}
 	return sets, nil
 }
@@ -82,7 +82,7 @@ func (r *LoggedSetRepository) ListByUser(params LoggedSetListParams) ([]loggedse
 
 	sets := make([]loggedset.LoggedSet, len(dbSets))
 	for i, dbSet := range dbSets {
-		sets[i] = *dbLoggedSetToDomain(dbSet)
+		sets[i] = *dbListLoggedSetsByUserRowToDomain(dbSet)
 	}
 	return sets, total, nil
 }
@@ -100,12 +100,17 @@ func (r *LoggedSetRepository) GetLatestAMRAPForLift(userID, liftID string) (*log
 		}
 		return nil, fmt.Errorf("failed to get latest AMRAP for lift: %w", err)
 	}
-	return dbLoggedSetToDomain(dbSet), nil
+	return dbGetLatestAMRAPForLiftRowToDomain(dbSet), nil
 }
 
 // Create persists a new logged set to the database.
 func (r *LoggedSetRepository) Create(ls *loggedset.LoggedSet) error {
 	ctx := context.Background()
+
+	var rpe sql.NullFloat64
+	if ls.RPE != nil {
+		rpe = sql.NullFloat64{Float64: *ls.RPE, Valid: true}
+	}
 
 	err := r.queries.CreateLoggedSet(ctx, db.CreateLoggedSetParams{
 		ID:             ls.ID,
@@ -118,6 +123,7 @@ func (r *LoggedSetRepository) Create(ls *loggedset.LoggedSet) error {
 		TargetReps:     int64(ls.TargetReps),
 		RepsPerformed:  int64(ls.RepsPerformed),
 		IsAmrap:        ls.IsAMRAP,
+		Rpe:            rpe,
 		CreatedAt:      ls.CreatedAt.Format(time.RFC3339),
 	})
 	if err != nil {
@@ -150,7 +156,15 @@ func (r *LoggedSetRepository) DeleteBySession(sessionID string) error {
 
 // Helper functions
 
-func dbLoggedSetToDomain(dbSet db.LoggedSet) *loggedset.LoggedSet {
+// nullFloat64ToPtr converts a sql.NullFloat64 to a *float64.
+func nullFloat64ToPtr(nf sql.NullFloat64) *float64 {
+	if nf.Valid {
+		return &nf.Float64
+	}
+	return nil
+}
+
+func dbGetLoggedSetRowToDomain(dbSet db.GetLoggedSetRow) *loggedset.LoggedSet {
 	createdAt, _ := time.Parse(time.RFC3339, dbSet.CreatedAt)
 
 	return &loggedset.LoggedSet{
@@ -164,6 +178,64 @@ func dbLoggedSetToDomain(dbSet db.LoggedSet) *loggedset.LoggedSet {
 		TargetReps:     int(dbSet.TargetReps),
 		RepsPerformed:  int(dbSet.RepsPerformed),
 		IsAMRAP:        dbSet.IsAmrap,
+		RPE:            nullFloat64ToPtr(dbSet.Rpe),
+		CreatedAt:      createdAt,
+	}
+}
+
+func dbListLoggedSetsBySessionRowToDomain(dbSet db.ListLoggedSetsBySessionRow) *loggedset.LoggedSet {
+	createdAt, _ := time.Parse(time.RFC3339, dbSet.CreatedAt)
+
+	return &loggedset.LoggedSet{
+		ID:             dbSet.ID,
+		UserID:         dbSet.UserID,
+		SessionID:      dbSet.SessionID,
+		PrescriptionID: dbSet.PrescriptionID,
+		LiftID:         dbSet.LiftID,
+		SetNumber:      int(dbSet.SetNumber),
+		Weight:         dbSet.Weight,
+		TargetReps:     int(dbSet.TargetReps),
+		RepsPerformed:  int(dbSet.RepsPerformed),
+		IsAMRAP:        dbSet.IsAmrap,
+		RPE:            nullFloat64ToPtr(dbSet.Rpe),
+		CreatedAt:      createdAt,
+	}
+}
+
+func dbListLoggedSetsByUserRowToDomain(dbSet db.ListLoggedSetsByUserRow) *loggedset.LoggedSet {
+	createdAt, _ := time.Parse(time.RFC3339, dbSet.CreatedAt)
+
+	return &loggedset.LoggedSet{
+		ID:             dbSet.ID,
+		UserID:         dbSet.UserID,
+		SessionID:      dbSet.SessionID,
+		PrescriptionID: dbSet.PrescriptionID,
+		LiftID:         dbSet.LiftID,
+		SetNumber:      int(dbSet.SetNumber),
+		Weight:         dbSet.Weight,
+		TargetReps:     int(dbSet.TargetReps),
+		RepsPerformed:  int(dbSet.RepsPerformed),
+		IsAMRAP:        dbSet.IsAmrap,
+		RPE:            nullFloat64ToPtr(dbSet.Rpe),
+		CreatedAt:      createdAt,
+	}
+}
+
+func dbGetLatestAMRAPForLiftRowToDomain(dbSet db.GetLatestAMRAPForLiftRow) *loggedset.LoggedSet {
+	createdAt, _ := time.Parse(time.RFC3339, dbSet.CreatedAt)
+
+	return &loggedset.LoggedSet{
+		ID:             dbSet.ID,
+		UserID:         dbSet.UserID,
+		SessionID:      dbSet.SessionID,
+		PrescriptionID: dbSet.PrescriptionID,
+		LiftID:         dbSet.LiftID,
+		SetNumber:      int(dbSet.SetNumber),
+		Weight:         dbSet.Weight,
+		TargetReps:     int(dbSet.TargetReps),
+		RepsPerformed:  int(dbSet.RepsPerformed),
+		IsAMRAP:        dbSet.IsAmrap,
+		RPE:            nullFloat64ToPtr(dbSet.Rpe),
 		CreatedAt:      createdAt,
 	}
 }

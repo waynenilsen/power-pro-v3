@@ -143,6 +143,35 @@ func TestValidateRepsPerformed_Invalid(t *testing.T) {
 	}
 }
 
+func TestValidateRPE_Valid(t *testing.T) {
+	tests := []float64{5.0, 6.0, 7.0, 7.5, 8.0, 8.5, 9.0, 9.5, 10.0}
+	for _, rpe := range tests {
+		rpePtr := &rpe
+		err := ValidateRPE(rpePtr)
+		if err != nil {
+			t.Errorf("ValidateRPE(%v) = %v, want nil", rpe, err)
+		}
+	}
+}
+
+func TestValidateRPE_Nil(t *testing.T) {
+	err := ValidateRPE(nil)
+	if err != nil {
+		t.Errorf("ValidateRPE(nil) = %v, want nil", err)
+	}
+}
+
+func TestValidateRPE_Invalid(t *testing.T) {
+	tests := []float64{4.9, 4.0, 0.0, -1.0, 10.1, 11.0, 100.0}
+	for _, rpe := range tests {
+		rpePtr := &rpe
+		err := ValidateRPE(rpePtr)
+		if !errors.Is(err, ErrRPEInvalid) {
+			t.Errorf("ValidateRPE(%v) = %v, want %v", rpe, err, ErrRPEInvalid)
+		}
+	}
+}
+
 // ==================== NewLoggedSet Tests ====================
 
 func TestNewLoggedSet_ValidInput(t *testing.T) {
@@ -196,8 +225,66 @@ func TestNewLoggedSet_ValidInput(t *testing.T) {
 	if !ls.IsAMRAP {
 		t.Error("ls.IsAMRAP = false, want true")
 	}
+	if ls.RPE != nil {
+		t.Errorf("ls.RPE = %v, want nil", *ls.RPE)
+	}
 	if ls.CreatedAt.IsZero() {
 		t.Error("ls.CreatedAt is zero time")
+	}
+}
+
+func TestNewLoggedSet_WithRPE(t *testing.T) {
+	rpe := 8.5
+	input := CreateLoggedSetInput{
+		UserID:         "user-123",
+		SessionID:      "session-456",
+		PrescriptionID: "prescription-789",
+		LiftID:         "lift-abc",
+		SetNumber:      1,
+		Weight:         225.0,
+		TargetReps:     5,
+		RepsPerformed:  7,
+		IsAMRAP:        true,
+		RPE:            &rpe,
+	}
+
+	ls, result := NewLoggedSet(input, "test-id")
+
+	if !result.Valid {
+		t.Errorf("NewLoggedSet with RPE returned invalid result: %v", result.Errors)
+	}
+	if ls == nil {
+		t.Fatal("NewLoggedSet returned nil logged set")
+	}
+	if ls.RPE == nil {
+		t.Fatal("ls.RPE is nil, want 8.5")
+	}
+	if *ls.RPE != 8.5 {
+		t.Errorf("ls.RPE = %v, want 8.5", *ls.RPE)
+	}
+}
+
+func TestNewLoggedSet_InvalidRPE(t *testing.T) {
+	rpe := 4.0 // Below minimum
+	input := CreateLoggedSetInput{
+		UserID:         "user-123",
+		SessionID:      "session-456",
+		PrescriptionID: "prescription-789",
+		LiftID:         "lift-abc",
+		SetNumber:      1,
+		Weight:         225.0,
+		TargetReps:     5,
+		RepsPerformed:  5,
+		RPE:            &rpe,
+	}
+
+	ls, result := NewLoggedSet(input, "test-id")
+
+	if result.Valid {
+		t.Error("NewLoggedSet with invalid RPE returned valid result")
+	}
+	if ls != nil {
+		t.Error("NewLoggedSet with invalid input returned non-nil logged set")
 	}
 }
 
@@ -292,15 +379,17 @@ func TestNewLoggedSet_EmptySessionID(t *testing.T) {
 }
 
 func TestNewLoggedSet_MultipleErrors(t *testing.T) {
+	invalidRPE := 4.0
 	input := CreateLoggedSetInput{
-		UserID:         "",  // Invalid
-		SessionID:      "",  // Invalid
-		PrescriptionID: "",  // Invalid
-		LiftID:         "",  // Invalid
-		SetNumber:      0,   // Invalid
-		Weight:         -1,  // Invalid
-		TargetReps:     0,   // Invalid
-		RepsPerformed:  -1,  // Invalid
+		UserID:         "",          // Invalid
+		SessionID:      "",          // Invalid
+		PrescriptionID: "",          // Invalid
+		LiftID:         "",          // Invalid
+		SetNumber:      0,           // Invalid
+		Weight:         -1,          // Invalid
+		TargetReps:     0,           // Invalid
+		RepsPerformed:  -1,          // Invalid
+		RPE:            &invalidRPE, // Invalid
 	}
 
 	ls, result := NewLoggedSet(input, "test-id")
@@ -311,8 +400,8 @@ func TestNewLoggedSet_MultipleErrors(t *testing.T) {
 	if ls != nil {
 		t.Error("NewLoggedSet with invalid input returned non-nil logged set")
 	}
-	if len(result.Errors) != 8 {
-		t.Errorf("Expected 8 errors, got %d", len(result.Errors))
+	if len(result.Errors) != 9 {
+		t.Errorf("Expected 9 errors, got %d", len(result.Errors))
 	}
 }
 
@@ -355,6 +444,50 @@ func TestLoggedSet_Validate_Invalid(t *testing.T) {
 
 	if result.Valid {
 		t.Error("Validate returned valid result for logged set with empty user ID")
+	}
+}
+
+func TestLoggedSet_Validate_WithValidRPE(t *testing.T) {
+	rpe := 8.0
+	ls := &LoggedSet{
+		ID:             "test-id",
+		UserID:         "user-123",
+		SessionID:      "session-456",
+		PrescriptionID: "prescription-789",
+		LiftID:         "lift-abc",
+		SetNumber:      1,
+		Weight:         225.0,
+		TargetReps:     5,
+		RepsPerformed:  5,
+		RPE:            &rpe,
+	}
+
+	result := ls.Validate()
+
+	if !result.Valid {
+		t.Errorf("Validate returned invalid result for logged set with valid RPE: %v", result.Errors)
+	}
+}
+
+func TestLoggedSet_Validate_WithInvalidRPE(t *testing.T) {
+	rpe := 11.0
+	ls := &LoggedSet{
+		ID:             "test-id",
+		UserID:         "user-123",
+		SessionID:      "session-456",
+		PrescriptionID: "prescription-789",
+		LiftID:         "lift-abc",
+		SetNumber:      1,
+		Weight:         225.0,
+		TargetReps:     5,
+		RepsPerformed:  5,
+		RPE:            &rpe,
+	}
+
+	result := ls.Validate()
+
+	if result.Valid {
+		t.Error("Validate returned valid result for logged set with invalid RPE")
 	}
 }
 

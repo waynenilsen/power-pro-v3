@@ -167,9 +167,20 @@ FROM user_program_states
 WHERE id = ?
 `
 
-func (q *Queries) GetUserProgramStateByID(ctx context.Context, id string) (UserProgramState, error) {
+type GetUserProgramStateByIDRow struct {
+	ID                    string        `json:"id"`
+	UserID                string        `json:"user_id"`
+	ProgramID             string        `json:"program_id"`
+	CurrentWeek           int64         `json:"current_week"`
+	CurrentCycleIteration int64         `json:"current_cycle_iteration"`
+	CurrentDayIndex       sql.NullInt64 `json:"current_day_index"`
+	EnrolledAt            string        `json:"enrolled_at"`
+	UpdatedAt             string        `json:"updated_at"`
+}
+
+func (q *Queries) GetUserProgramStateByID(ctx context.Context, id string) (GetUserProgramStateByIDRow, error) {
 	row := q.db.QueryRowContext(ctx, getUserProgramStateByID, id)
-	var i UserProgramState
+	var i GetUserProgramStateByIDRow
 	err := row.Scan(
 		&i.ID,
 		&i.UserID,
@@ -189,9 +200,20 @@ FROM user_program_states
 WHERE user_id = ?
 `
 
-func (q *Queries) GetUserProgramStateByUserID(ctx context.Context, userID string) (UserProgramState, error) {
+type GetUserProgramStateByUserIDRow struct {
+	ID                    string        `json:"id"`
+	UserID                string        `json:"user_id"`
+	ProgramID             string        `json:"program_id"`
+	CurrentWeek           int64         `json:"current_week"`
+	CurrentCycleIteration int64         `json:"current_cycle_iteration"`
+	CurrentDayIndex       sql.NullInt64 `json:"current_day_index"`
+	EnrolledAt            string        `json:"enrolled_at"`
+	UpdatedAt             string        `json:"updated_at"`
+}
+
+func (q *Queries) GetUserProgramStateByUserID(ctx context.Context, userID string) (GetUserProgramStateByUserIDRow, error) {
 	row := q.db.QueryRowContext(ctx, getUserProgramStateByUserID, userID)
-	var i UserProgramState
+	var i GetUserProgramStateByUserIDRow
 	err := row.Scan(
 		&i.ID,
 		&i.UserID,

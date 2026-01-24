@@ -77,17 +77,18 @@ type LiftMax struct {
 }
 
 type LoggedSet struct {
-	ID             string  `json:"id"`
-	UserID         string  `json:"user_id"`
-	SessionID      string  `json:"session_id"`
-	PrescriptionID string  `json:"prescription_id"`
-	LiftID         string  `json:"lift_id"`
-	SetNumber      int64   `json:"set_number"`
-	Weight         float64 `json:"weight"`
-	TargetReps     int64   `json:"target_reps"`
-	RepsPerformed  int64   `json:"reps_performed"`
-	IsAmrap        bool    `json:"is_amrap"`
-	CreatedAt      string  `json:"created_at"`
+	ID             string          `json:"id"`
+	UserID         string          `json:"user_id"`
+	SessionID      string          `json:"session_id"`
+	PrescriptionID string          `json:"prescription_id"`
+	LiftID         string          `json:"lift_id"`
+	SetNumber      int64           `json:"set_number"`
+	Weight         float64         `json:"weight"`
+	TargetReps     int64           `json:"target_reps"`
+	RepsPerformed  int64           `json:"reps_performed"`
+	IsAmrap        bool            `json:"is_amrap"`
+	CreatedAt      string          `json:"created_at"`
+	Rpe            sql.NullFloat64 `json:"rpe"`
 }
 
 type Prescription struct {
@@ -149,6 +150,15 @@ type ProgressionLog struct {
 	AppliedAt      string         `json:"applied_at"`
 }
 
+type RotationLookup struct {
+	ID        string         `json:"id"`
+	Name      string         `json:"name"`
+	Entries   string         `json:"entries"`
+	ProgramID sql.NullString `json:"program_id"`
+	CreatedAt string         `json:"created_at"`
+	UpdatedAt string         `json:"updated_at"`
+}
+
 type User struct {
 	ID        string `json:"id"`
 	CreatedAt string `json:"created_at"`
@@ -164,6 +174,8 @@ type UserProgramState struct {
 	CurrentDayIndex       sql.NullInt64 `json:"current_day_index"`
 	EnrolledAt            string        `json:"enrolled_at"`
 	UpdatedAt             string        `json:"updated_at"`
+	RotationPosition      int64         `json:"rotation_position"`
+	CyclesSinceStart      int64         `json:"cycles_since_start"`
 }
 
 type UserProgressionState struct {

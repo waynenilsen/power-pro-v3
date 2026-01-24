@@ -7,6 +7,7 @@ package db
 
 import (
 	"context"
+	"database/sql"
 )
 
 const countLoggedSetsByUser = `-- name: CountLoggedSetsByUser :one
@@ -21,22 +22,23 @@ func (q *Queries) CountLoggedSetsByUser(ctx context.Context, userID string) (int
 }
 
 const createLoggedSet = `-- name: CreateLoggedSet :exec
-INSERT INTO logged_sets (id, user_id, session_id, prescription_id, lift_id, set_number, weight, target_reps, reps_performed, is_amrap, created_at)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+INSERT INTO logged_sets (id, user_id, session_id, prescription_id, lift_id, set_number, weight, target_reps, reps_performed, is_amrap, rpe, created_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `
 
 type CreateLoggedSetParams struct {
-	ID             string  `json:"id"`
-	UserID         string  `json:"user_id"`
-	SessionID      string  `json:"session_id"`
-	PrescriptionID string  `json:"prescription_id"`
-	LiftID         string  `json:"lift_id"`
-	SetNumber      int64   `json:"set_number"`
-	Weight         float64 `json:"weight"`
-	TargetReps     int64   `json:"target_reps"`
-	RepsPerformed  int64   `json:"reps_performed"`
-	IsAmrap        bool    `json:"is_amrap"`
-	CreatedAt      string  `json:"created_at"`
+	ID             string          `json:"id"`
+	UserID         string          `json:"user_id"`
+	SessionID      string          `json:"session_id"`
+	PrescriptionID string          `json:"prescription_id"`
+	LiftID         string          `json:"lift_id"`
+	SetNumber      int64           `json:"set_number"`
+	Weight         float64         `json:"weight"`
+	TargetReps     int64           `json:"target_reps"`
+	RepsPerformed  int64           `json:"reps_performed"`
+	IsAmrap        bool            `json:"is_amrap"`
+	Rpe            sql.NullFloat64 `json:"rpe"`
+	CreatedAt      string          `json:"created_at"`
 }
 
 func (q *Queries) CreateLoggedSet(ctx context.Context, arg CreateLoggedSetParams) error {
@@ -51,6 +53,7 @@ func (q *Queries) CreateLoggedSet(ctx context.Context, arg CreateLoggedSetParams
 		arg.TargetReps,
 		arg.RepsPerformed,
 		arg.IsAmrap,
+		arg.Rpe,
 		arg.CreatedAt,
 	)
 	return err
@@ -75,7 +78,7 @@ func (q *Queries) DeleteLoggedSetsBySession(ctx context.Context, sessionID strin
 }
 
 const getLatestAMRAPForLift = `-- name: GetLatestAMRAPForLift :one
-SELECT id, user_id, session_id, prescription_id, lift_id, set_number, weight, target_reps, reps_performed, is_amrap, created_at
+SELECT id, user_id, session_id, prescription_id, lift_id, set_number, weight, target_reps, reps_performed, is_amrap, rpe, created_at
 FROM logged_sets
 WHERE user_id = ? AND lift_id = ? AND is_amrap = TRUE
 ORDER BY created_at DESC
@@ -87,9 +90,24 @@ type GetLatestAMRAPForLiftParams struct {
 	LiftID string `json:"lift_id"`
 }
 
-func (q *Queries) GetLatestAMRAPForLift(ctx context.Context, arg GetLatestAMRAPForLiftParams) (LoggedSet, error) {
+type GetLatestAMRAPForLiftRow struct {
+	ID             string          `json:"id"`
+	UserID         string          `json:"user_id"`
+	SessionID      string          `json:"session_id"`
+	PrescriptionID string          `json:"prescription_id"`
+	LiftID         string          `json:"lift_id"`
+	SetNumber      int64           `json:"set_number"`
+	Weight         float64         `json:"weight"`
+	TargetReps     int64           `json:"target_reps"`
+	RepsPerformed  int64           `json:"reps_performed"`
+	IsAmrap        bool            `json:"is_amrap"`
+	Rpe            sql.NullFloat64 `json:"rpe"`
+	CreatedAt      string          `json:"created_at"`
+}
+
+func (q *Queries) GetLatestAMRAPForLift(ctx context.Context, arg GetLatestAMRAPForLiftParams) (GetLatestAMRAPForLiftRow, error) {
 	row := q.db.QueryRowContext(ctx, getLatestAMRAPForLift, arg.UserID, arg.LiftID)
-	var i LoggedSet
+	var i GetLatestAMRAPForLiftRow
 	err := row.Scan(
 		&i.ID,
 		&i.UserID,
@@ -101,20 +119,36 @@ func (q *Queries) GetLatestAMRAPForLift(ctx context.Context, arg GetLatestAMRAPF
 		&i.TargetReps,
 		&i.RepsPerformed,
 		&i.IsAmrap,
+		&i.Rpe,
 		&i.CreatedAt,
 	)
 	return i, err
 }
 
 const getLoggedSet = `-- name: GetLoggedSet :one
-SELECT id, user_id, session_id, prescription_id, lift_id, set_number, weight, target_reps, reps_performed, is_amrap, created_at
+SELECT id, user_id, session_id, prescription_id, lift_id, set_number, weight, target_reps, reps_performed, is_amrap, rpe, created_at
 FROM logged_sets
 WHERE id = ?
 `
 
-func (q *Queries) GetLoggedSet(ctx context.Context, id string) (LoggedSet, error) {
+type GetLoggedSetRow struct {
+	ID             string          `json:"id"`
+	UserID         string          `json:"user_id"`
+	SessionID      string          `json:"session_id"`
+	PrescriptionID string          `json:"prescription_id"`
+	LiftID         string          `json:"lift_id"`
+	SetNumber      int64           `json:"set_number"`
+	Weight         float64         `json:"weight"`
+	TargetReps     int64           `json:"target_reps"`
+	RepsPerformed  int64           `json:"reps_performed"`
+	IsAmrap        bool            `json:"is_amrap"`
+	Rpe            sql.NullFloat64 `json:"rpe"`
+	CreatedAt      string          `json:"created_at"`
+}
+
+func (q *Queries) GetLoggedSet(ctx context.Context, id string) (GetLoggedSetRow, error) {
 	row := q.db.QueryRowContext(ctx, getLoggedSet, id)
-	var i LoggedSet
+	var i GetLoggedSetRow
 	err := row.Scan(
 		&i.ID,
 		&i.UserID,
@@ -126,27 +160,43 @@ func (q *Queries) GetLoggedSet(ctx context.Context, id string) (LoggedSet, error
 		&i.TargetReps,
 		&i.RepsPerformed,
 		&i.IsAmrap,
+		&i.Rpe,
 		&i.CreatedAt,
 	)
 	return i, err
 }
 
 const listLoggedSetsBySession = `-- name: ListLoggedSetsBySession :many
-SELECT id, user_id, session_id, prescription_id, lift_id, set_number, weight, target_reps, reps_performed, is_amrap, created_at
+SELECT id, user_id, session_id, prescription_id, lift_id, set_number, weight, target_reps, reps_performed, is_amrap, rpe, created_at
 FROM logged_sets
 WHERE session_id = ?
 ORDER BY created_at ASC, set_number ASC
 `
 
-func (q *Queries) ListLoggedSetsBySession(ctx context.Context, sessionID string) ([]LoggedSet, error) {
+type ListLoggedSetsBySessionRow struct {
+	ID             string          `json:"id"`
+	UserID         string          `json:"user_id"`
+	SessionID      string          `json:"session_id"`
+	PrescriptionID string          `json:"prescription_id"`
+	LiftID         string          `json:"lift_id"`
+	SetNumber      int64           `json:"set_number"`
+	Weight         float64         `json:"weight"`
+	TargetReps     int64           `json:"target_reps"`
+	RepsPerformed  int64           `json:"reps_performed"`
+	IsAmrap        bool            `json:"is_amrap"`
+	Rpe            sql.NullFloat64 `json:"rpe"`
+	CreatedAt      string          `json:"created_at"`
+}
+
+func (q *Queries) ListLoggedSetsBySession(ctx context.Context, sessionID string) ([]ListLoggedSetsBySessionRow, error) {
 	rows, err := q.db.QueryContext(ctx, listLoggedSetsBySession, sessionID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []LoggedSet{}
+	items := []ListLoggedSetsBySessionRow{}
 	for rows.Next() {
-		var i LoggedSet
+		var i ListLoggedSetsBySessionRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.UserID,
@@ -158,6 +208,7 @@ func (q *Queries) ListLoggedSetsBySession(ctx context.Context, sessionID string)
 			&i.TargetReps,
 			&i.RepsPerformed,
 			&i.IsAmrap,
+			&i.Rpe,
 			&i.CreatedAt,
 		); err != nil {
 			return nil, err
@@ -174,7 +225,7 @@ func (q *Queries) ListLoggedSetsBySession(ctx context.Context, sessionID string)
 }
 
 const listLoggedSetsByUser = `-- name: ListLoggedSetsByUser :many
-SELECT id, user_id, session_id, prescription_id, lift_id, set_number, weight, target_reps, reps_performed, is_amrap, created_at
+SELECT id, user_id, session_id, prescription_id, lift_id, set_number, weight, target_reps, reps_performed, is_amrap, rpe, created_at
 FROM logged_sets
 WHERE user_id = ?
 ORDER BY created_at DESC
@@ -187,15 +238,30 @@ type ListLoggedSetsByUserParams struct {
 	Offset int64  `json:"offset"`
 }
 
-func (q *Queries) ListLoggedSetsByUser(ctx context.Context, arg ListLoggedSetsByUserParams) ([]LoggedSet, error) {
+type ListLoggedSetsByUserRow struct {
+	ID             string          `json:"id"`
+	UserID         string          `json:"user_id"`
+	SessionID      string          `json:"session_id"`
+	PrescriptionID string          `json:"prescription_id"`
+	LiftID         string          `json:"lift_id"`
+	SetNumber      int64           `json:"set_number"`
+	Weight         float64         `json:"weight"`
+	TargetReps     int64           `json:"target_reps"`
+	RepsPerformed  int64           `json:"reps_performed"`
+	IsAmrap        bool            `json:"is_amrap"`
+	Rpe            sql.NullFloat64 `json:"rpe"`
+	CreatedAt      string          `json:"created_at"`
+}
+
+func (q *Queries) ListLoggedSetsByUser(ctx context.Context, arg ListLoggedSetsByUserParams) ([]ListLoggedSetsByUserRow, error) {
 	rows, err := q.db.QueryContext(ctx, listLoggedSetsByUser, arg.UserID, arg.Limit, arg.Offset)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []LoggedSet{}
+	items := []ListLoggedSetsByUserRow{}
 	for rows.Next() {
-		var i LoggedSet
+		var i ListLoggedSetsByUserRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.UserID,
@@ -207,6 +273,7 @@ func (q *Queries) ListLoggedSetsByUser(ctx context.Context, arg ListLoggedSetsBy
 			&i.TargetReps,
 			&i.RepsPerformed,
 			&i.IsAmrap,
+			&i.Rpe,
 			&i.CreatedAt,
 		); err != nil {
 			return nil, err
