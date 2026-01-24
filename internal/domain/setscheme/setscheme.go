@@ -56,6 +56,9 @@ type GeneratedSet struct {
 	TargetReps int `json:"targetReps"`
 	// IsWorkSet is true if this is a work set, false if warmup.
 	IsWorkSet bool `json:"isWorkSet"`
+	// IsProvisional is true for variable schemes until the set is logged.
+	// When true, more sets may be added based on session performance.
+	IsProvisional bool `json:"isProvisional,omitempty"`
 }
 
 // SetGenerationContext provides additional context for set generation.
@@ -91,6 +94,21 @@ type SetScheme interface {
 	// Validate validates the scheme's configuration parameters.
 	// Returns an error if the scheme is misconfigured.
 	Validate() error
+}
+
+// VariableSetScheme is optionally implemented by schemes with dynamic set counts.
+// These schemes generate sets one at a time based on session performance,
+// unlike fixed schemes that generate all sets upfront.
+type VariableSetScheme interface {
+	SetScheme
+	// IsVariableCount returns true if this scheme has variable set counts.
+	IsVariableCount() bool
+	// GetTerminationCondition returns the condition that ends set generation.
+	GetTerminationCondition() TerminationCondition
+	// GenerateNextSet generates the next set based on history and termination context.
+	// Returns the next set and true if generation should continue,
+	// or nil and false if the termination condition is met.
+	GenerateNextSet(ctx SetGenerationContext, history []GeneratedSet, termCtx TerminationContext) (*GeneratedSet, bool)
 }
 
 // SchemeEnvelope is the JSON wrapper for polymorphic SetScheme serialization.
