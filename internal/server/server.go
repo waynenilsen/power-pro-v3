@@ -66,6 +66,7 @@ func New(cfg Config) *Server {
 	setscheme.RegisterGreySkullScheme(schemeFactory)
 	setscheme.RegisterFatigueDrop(schemeFactory)
 	setscheme.RegisterMRS(schemeFactory)
+	setscheme.RegisterTotalRepsScheme(schemeFactory)
 
 	prescriptionRepo := repository.NewPrescriptionRepository(cfg.DB, strategyFactory, schemeFactory)
 	dayRepo := repository.NewDayRepository(cfg.DB)

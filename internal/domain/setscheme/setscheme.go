@@ -30,6 +30,8 @@ const (
 	TypeFatigueDrop SetSchemeType = "FATIGUE_DROP"
 	// TypeMRS generates max rep sets until total rep target is reached (GZCL-style).
 	TypeMRS SetSchemeType = "MRS"
+	// TypeTotalReps generates sets until a cumulative rep target is reached (e.g., 100 chin-ups).
+	TypeTotalReps SetSchemeType = "TOTAL_REPS"
 )
 
 // ValidSchemeTypes contains all valid scheme types for validation.
@@ -42,6 +44,7 @@ var ValidSchemeTypes = map[SetSchemeType]bool{
 	TypeGreySkull:   true,
 	TypeFatigueDrop: true,
 	TypeMRS:         true,
+	TypeTotalReps:   true,
 }
 
 // Errors for set scheme operations.
