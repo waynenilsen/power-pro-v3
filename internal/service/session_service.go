@@ -135,6 +135,8 @@ func (s *SessionService) GetNextSet(ctx context.Context, req NextSetRequest) (*N
 		termCtx.TargetReps = mrs.MinRepsPerSet
 	} else if fd, ok := variableScheme.(*setscheme.FatigueDrop); ok {
 		termCtx.TargetReps = fd.TargetReps
+	} else if tr, ok := variableScheme.(*setscheme.TotalRepsScheme); ok {
+		termCtx.TargetReps = tr.SuggestedRepsPerSet
 	}
 
 	// Generate next set using the variable scheme
@@ -179,6 +181,17 @@ func determineTerminationReason(scheme setscheme.VariableSetScheme, termCtx sets
 		maxSets := v.MaxSets
 		if maxSets == 0 {
 			maxSets = setscheme.DefaultMaxSets
+		}
+		if termCtx.TotalSets >= maxSets {
+			return "Maximum sets reached (safety limit)"
+		}
+	case *setscheme.TotalRepsScheme:
+		if termCtx.TotalReps >= v.TargetTotalReps {
+			return fmt.Sprintf("Target total reps reached (%d/%d)", termCtx.TotalReps, v.TargetTotalReps)
+		}
+		maxSets := v.MaxSets
+		if maxSets == 0 {
+			maxSets = setscheme.DefaultTotalRepsMaxSets
 		}
 		if termCtx.TotalSets >= maxSets {
 			return "Maximum sets reached (safety limit)"
