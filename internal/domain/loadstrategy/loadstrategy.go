@@ -23,6 +23,8 @@ const (
 	TypeFixedWeight LoadStrategyType = "FIXED_WEIGHT"
 	// TypeRelativeTo calculates load relative to another lift (future implementation).
 	TypeRelativeTo LoadStrategyType = "RELATIVE_TO"
+	// TypeFindRM indicates the user works up to find their rep max (no prescribed weight).
+	TypeFindRM LoadStrategyType = "FIND_RM"
 )
 
 // ValidStrategyTypes contains all valid strategy types for validation.
@@ -31,6 +33,7 @@ var ValidStrategyTypes = map[LoadStrategyType]bool{
 	TypeRPETarget:   true,
 	TypeFixedWeight: true,
 	TypeRelativeTo:  true,
+	TypeFindRM:      true,
 }
 
 // Errors for load strategy operations.

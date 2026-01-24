@@ -54,6 +54,7 @@ func TestLoadStrategyTypeConstants(t *testing.T) {
 		{"TypeRPETarget", TypeRPETarget, "RPE_TARGET"},
 		{"TypeFixedWeight", TypeFixedWeight, "FIXED_WEIGHT"},
 		{"TypeRelativeTo", TypeRelativeTo, "RELATIVE_TO"},
+		{"TypeFindRM", TypeFindRM, "FIND_RM"},
 	}
 
 	for _, tt := range tests {
@@ -72,6 +73,7 @@ func TestValidStrategyTypes(t *testing.T) {
 		TypeRPETarget,
 		TypeFixedWeight,
 		TypeRelativeTo,
+		TypeFindRM,
 	}
 
 	for _, strategyType := range expectedTypes {
