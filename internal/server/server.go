@@ -56,6 +56,7 @@ func New(cfg Config) *Server {
 	// Create strategy and scheme factories with registered types
 	strategyFactory := loadstrategy.NewStrategyFactory()
 	loadstrategy.RegisterPercentOf(strategyFactory)
+	loadstrategy.RegisterRPETarget(strategyFactory)
 
 	schemeFactory := setscheme.NewSchemeFactory()
 	setscheme.RegisterFixedScheme(schemeFactory)
