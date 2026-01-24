@@ -24,6 +24,7 @@ const (
 	TypeAMRAP ProgressionType = "AMRAP_PROGRESSION"
 	// TypeDeloadOnFailure reduces weight after repeated failures (e.g., GZCLP, Texas Method).
 	TypeDeloadOnFailure ProgressionType = "DELOAD_ON_FAILURE"
+	// TypeStage is defined in stage.go - changes set/rep schemes on failure (e.g., GZCLP T1/T2).
 	// Future types documented for extensibility:
 	// TypeRPEBased ProgressionType = "RPE_BASED_PROGRESSION" - adjusts based on RPE targets
 	// TypeDouble ProgressionType = "DOUBLE_PROGRESSION" - increases reps first, then weight
@@ -35,6 +36,7 @@ var ValidProgressionTypes = map[ProgressionType]bool{
 	TypeCycle:           true,
 	TypeAMRAP:           true,
 	TypeDeloadOnFailure: true,
+	TypeStage:           true,
 }
 
 // TriggerType identifies what event causes a progression to evaluate/apply.
