@@ -11,13 +11,25 @@ import (
 	"github.com/waynenilsen/power-pro-v3/internal/validation"
 )
 
+// ScheduleType represents how a program's schedule is determined.
+type ScheduleType string
+
+const (
+	// ScheduleTypeRotation means the program follows a rotating schedule (default).
+	ScheduleTypeRotation ScheduleType = "rotation"
+	// ScheduleTypeDaysOut means the program schedule is determined by days until meet date.
+	ScheduleTypeDaysOut ScheduleType = "days_out"
+)
+
 // Validation errors
 var (
-	ErrUserIDRequired            = errors.New("user_id is required")
-	ErrProgramIDRequired         = errors.New("program_id is required")
-	ErrCurrentWeekInvalid        = errors.New("current_week must be at least 1")
+	ErrUserIDRequired               = errors.New("user_id is required")
+	ErrProgramIDRequired            = errors.New("program_id is required")
+	ErrCurrentWeekInvalid           = errors.New("current_week must be at least 1")
 	ErrCurrentCycleIterationInvalid = errors.New("current_cycle_iteration must be at least 1")
-	ErrCurrentDayIndexInvalid    = errors.New("current_day_index must be at least 0 if provided")
+	ErrCurrentDayIndexInvalid       = errors.New("current_day_index must be at least 0 if provided")
+	ErrMeetDateInPast               = errors.New("meet_date must be in the future")
+	ErrInvalidScheduleType          = errors.New("schedule_type must be 'rotation' or 'days_out'")
 )
 
 // UserProgramState represents a user's enrollment in a program with their current position.
@@ -28,8 +40,10 @@ type UserProgramState struct {
 	CurrentWeek           int
 	CurrentCycleIteration int
 	CurrentDayIndex       *int
-	RotationPosition      int // 0-based position in rotation for programs like Conjugate/Westside
-	CyclesSinceStart      int // Number of complete cycles since enrollment
+	RotationPosition      int          // 0-based position in rotation for programs like Conjugate/Westside
+	CyclesSinceStart      int          // Number of complete cycles since enrollment
+	MeetDate              *time.Time   // Optional meet date for peaking programs
+	ScheduleType          ScheduleType // "rotation" (default) or "days_out"
 	EnrolledAt            time.Time
 	UpdatedAt             time.Time
 }
@@ -91,10 +105,29 @@ func ValidateCurrentDayIndex(dayIndex *int) error {
 	return nil
 }
 
+// ValidateMeetDate validates the meet date field.
+// If provided, the meet date must be in the future.
+func ValidateMeetDate(meetDate *time.Time) error {
+	if meetDate != nil && !meetDate.After(time.Now()) {
+		return ErrMeetDateInPast
+	}
+	return nil
+}
+
+// ValidateScheduleType validates the schedule type field.
+func ValidateScheduleType(scheduleType ScheduleType) error {
+	if scheduleType != ScheduleTypeRotation && scheduleType != ScheduleTypeDaysOut {
+		return ErrInvalidScheduleType
+	}
+	return nil
+}
+
 // EnrollUserInput contains the input data for enrolling a user in a program.
 type EnrollUserInput struct {
-	UserID    string
-	ProgramID string
+	UserID       string
+	ProgramID    string
+	MeetDate     *time.Time   // Optional meet date for peaking programs
+	ScheduleType ScheduleType // Optional; defaults to "rotation" if empty
 }
 
 // EnrollUser validates input and creates a new UserProgramState for enrollment.
@@ -112,6 +145,22 @@ func EnrollUser(input EnrollUserInput, id string) (*UserProgramState, *Validatio
 		result.AddError(err)
 	}
 
+	// Validate meet_date if provided
+	if err := ValidateMeetDate(input.MeetDate); err != nil {
+		result.AddError(err)
+	}
+
+	// Default schedule type to rotation if not specified
+	scheduleType := input.ScheduleType
+	if scheduleType == "" {
+		scheduleType = ScheduleTypeRotation
+	}
+
+	// Validate schedule type
+	if err := ValidateScheduleType(scheduleType); err != nil {
+		result.AddError(err)
+	}
+
 	if !result.Valid {
 		return nil, result
 	}
@@ -124,8 +173,10 @@ func EnrollUser(input EnrollUserInput, id string) (*UserProgramState, *Validatio
 		CurrentWeek:           1, // Initial state
 		CurrentCycleIteration: 1, // Initial state
 		CurrentDayIndex:       nil,
-		RotationPosition:      0, // Start at first position in rotation
-		CyclesSinceStart:      0, // No cycles completed yet
+		RotationPosition:      0,            // Start at first position in rotation
+		CyclesSinceStart:      0,            // No cycles completed yet
+		MeetDate:              input.MeetDate,
+		ScheduleType:          scheduleType,
 		EnrolledAt:            now,
 		UpdatedAt:             now,
 	}, result
@@ -198,6 +249,17 @@ func (s *UserProgramState) Validate() *ValidationResult {
 		result.AddError(err)
 	}
 
+	if err := ValidateMeetDate(s.MeetDate); err != nil {
+		result.AddError(err)
+	}
+
+	// Validate schedule type only if set (empty is treated as rotation)
+	if s.ScheduleType != "" {
+		if err := ValidateScheduleType(s.ScheduleType); err != nil {
+			result.AddError(err)
+		}
+	}
+
 	return result
 }
 
@@ -241,6 +303,8 @@ func AdvanceState(state *UserProgramState, ctx AdvancementContext) (*Advancement
 		CurrentDayIndex:       copyIntPtr(state.CurrentDayIndex),
 		RotationPosition:      state.RotationPosition,
 		CyclesSinceStart:      state.CyclesSinceStart,
+		MeetDate:              copyTimePtr(state.MeetDate),
+		ScheduleType:          state.ScheduleType,
 		EnrolledAt:            state.EnrolledAt,
 		UpdatedAt:             time.Now(),
 	}
@@ -291,6 +355,15 @@ func AdvanceState(state *UserProgramState, ctx AdvancementContext) (*Advancement
 
 // copyIntPtr creates a copy of an int pointer.
 func copyIntPtr(p *int) *int {
+	if p == nil {
+		return nil
+	}
+	v := *p
+	return &v
+}
+
+// copyTimePtr creates a copy of a time.Time pointer.
+func copyTimePtr(p *time.Time) *time.Time {
 	if p == nil {
 		return nil
 	}

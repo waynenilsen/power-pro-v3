@@ -166,16 +166,18 @@ type User struct {
 }
 
 type UserProgramState struct {
-	ID                    string        `json:"id"`
-	UserID                string        `json:"user_id"`
-	ProgramID             string        `json:"program_id"`
-	CurrentWeek           int64         `json:"current_week"`
-	CurrentCycleIteration int64         `json:"current_cycle_iteration"`
-	CurrentDayIndex       sql.NullInt64 `json:"current_day_index"`
-	EnrolledAt            string        `json:"enrolled_at"`
-	UpdatedAt             string        `json:"updated_at"`
-	RotationPosition      int64         `json:"rotation_position"`
-	CyclesSinceStart      int64         `json:"cycles_since_start"`
+	ID                    string         `json:"id"`
+	UserID                string         `json:"user_id"`
+	ProgramID             string         `json:"program_id"`
+	CurrentWeek           int64          `json:"current_week"`
+	CurrentCycleIteration int64          `json:"current_cycle_iteration"`
+	CurrentDayIndex       sql.NullInt64  `json:"current_day_index"`
+	EnrolledAt            string         `json:"enrolled_at"`
+	UpdatedAt             string         `json:"updated_at"`
+	RotationPosition      int64          `json:"rotation_position"`
+	CyclesSinceStart      int64          `json:"cycles_since_start"`
+	MeetDate              sql.NullString `json:"meet_date"`
+	ScheduleType          sql.NullString `json:"schedule_type"`
 }
 
 type UserProgressionState struct {

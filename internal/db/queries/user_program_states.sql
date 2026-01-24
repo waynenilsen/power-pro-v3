@@ -1,20 +1,20 @@
 -- name: GetUserProgramStateByUserID :one
-SELECT id, user_id, program_id, current_week, current_cycle_iteration, current_day_index, enrolled_at, updated_at
+SELECT id, user_id, program_id, current_week, current_cycle_iteration, current_day_index, meet_date, schedule_type, enrolled_at, updated_at
 FROM user_program_states
 WHERE user_id = ?;
 
 -- name: GetUserProgramStateByID :one
-SELECT id, user_id, program_id, current_week, current_cycle_iteration, current_day_index, enrolled_at, updated_at
+SELECT id, user_id, program_id, current_week, current_cycle_iteration, current_day_index, meet_date, schedule_type, enrolled_at, updated_at
 FROM user_program_states
 WHERE id = ?;
 
 -- name: CreateUserProgramState :exec
-INSERT INTO user_program_states (id, user_id, program_id, current_week, current_cycle_iteration, current_day_index, enrolled_at, updated_at)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+INSERT INTO user_program_states (id, user_id, program_id, current_week, current_cycle_iteration, current_day_index, meet_date, schedule_type, enrolled_at, updated_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 -- name: UpdateUserProgramState :exec
 UPDATE user_program_states
-SET program_id = ?, current_week = ?, current_cycle_iteration = ?, current_day_index = ?, updated_at = ?
+SET program_id = ?, current_week = ?, current_cycle_iteration = ?, current_day_index = ?, meet_date = ?, schedule_type = ?, updated_at = ?
 WHERE user_id = ?;
 
 -- name: DeleteUserProgramStateByUserID :exec
@@ -33,6 +33,8 @@ SELECT
     ups.current_week,
     ups.current_cycle_iteration,
     ups.current_day_index,
+    ups.meet_date,
+    ups.schedule_type,
     ups.enrolled_at,
     ups.updated_at,
     p.name AS program_name,
@@ -52,6 +54,8 @@ SELECT
     ups.current_week,
     ups.current_cycle_iteration,
     ups.current_day_index,
+    ups.meet_date,
+    ups.schedule_type,
     ups.enrolled_at,
     ups.updated_at,
     c.id AS cycle_id,

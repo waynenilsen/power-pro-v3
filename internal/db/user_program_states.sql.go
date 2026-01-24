@@ -11,19 +11,21 @@ import (
 )
 
 const createUserProgramState = `-- name: CreateUserProgramState :exec
-INSERT INTO user_program_states (id, user_id, program_id, current_week, current_cycle_iteration, current_day_index, enrolled_at, updated_at)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+INSERT INTO user_program_states (id, user_id, program_id, current_week, current_cycle_iteration, current_day_index, meet_date, schedule_type, enrolled_at, updated_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `
 
 type CreateUserProgramStateParams struct {
-	ID                    string        `json:"id"`
-	UserID                string        `json:"user_id"`
-	ProgramID             string        `json:"program_id"`
-	CurrentWeek           int64         `json:"current_week"`
-	CurrentCycleIteration int64         `json:"current_cycle_iteration"`
-	CurrentDayIndex       sql.NullInt64 `json:"current_day_index"`
-	EnrolledAt            string        `json:"enrolled_at"`
-	UpdatedAt             string        `json:"updated_at"`
+	ID                    string         `json:"id"`
+	UserID                string         `json:"user_id"`
+	ProgramID             string         `json:"program_id"`
+	CurrentWeek           int64          `json:"current_week"`
+	CurrentCycleIteration int64          `json:"current_cycle_iteration"`
+	CurrentDayIndex       sql.NullInt64  `json:"current_day_index"`
+	MeetDate              sql.NullString `json:"meet_date"`
+	ScheduleType          sql.NullString `json:"schedule_type"`
+	EnrolledAt            string         `json:"enrolled_at"`
+	UpdatedAt             string         `json:"updated_at"`
 }
 
 func (q *Queries) CreateUserProgramState(ctx context.Context, arg CreateUserProgramStateParams) error {
@@ -34,6 +36,8 @@ func (q *Queries) CreateUserProgramState(ctx context.Context, arg CreateUserProg
 		arg.CurrentWeek,
 		arg.CurrentCycleIteration,
 		arg.CurrentDayIndex,
+		arg.MeetDate,
+		arg.ScheduleType,
 		arg.EnrolledAt,
 		arg.UpdatedAt,
 	)
@@ -57,6 +61,8 @@ SELECT
     ups.current_week,
     ups.current_cycle_iteration,
     ups.current_day_index,
+    ups.meet_date,
+    ups.schedule_type,
     ups.enrolled_at,
     ups.updated_at,
     p.name AS program_name,
@@ -76,6 +82,8 @@ type GetEnrollmentWithProgramRow struct {
 	CurrentWeek           int64          `json:"current_week"`
 	CurrentCycleIteration int64          `json:"current_cycle_iteration"`
 	CurrentDayIndex       sql.NullInt64  `json:"current_day_index"`
+	MeetDate              sql.NullString `json:"meet_date"`
+	ScheduleType          sql.NullString `json:"schedule_type"`
 	EnrolledAt            string         `json:"enrolled_at"`
 	UpdatedAt             string         `json:"updated_at"`
 	ProgramName           string         `json:"program_name"`
@@ -94,6 +102,8 @@ func (q *Queries) GetEnrollmentWithProgram(ctx context.Context, userID string) (
 		&i.CurrentWeek,
 		&i.CurrentCycleIteration,
 		&i.CurrentDayIndex,
+		&i.MeetDate,
+		&i.ScheduleType,
 		&i.EnrolledAt,
 		&i.UpdatedAt,
 		&i.ProgramName,
@@ -112,6 +122,8 @@ SELECT
     ups.current_week,
     ups.current_cycle_iteration,
     ups.current_day_index,
+    ups.meet_date,
+    ups.schedule_type,
     ups.enrolled_at,
     ups.updated_at,
     c.id AS cycle_id,
@@ -129,17 +141,19 @@ WHERE ups.user_id = ?
 `
 
 type GetStateAdvancementContextRow struct {
-	ID                    string        `json:"id"`
-	UserID                string        `json:"user_id"`
-	ProgramID             string        `json:"program_id"`
-	CurrentWeek           int64         `json:"current_week"`
-	CurrentCycleIteration int64         `json:"current_cycle_iteration"`
-	CurrentDayIndex       sql.NullInt64 `json:"current_day_index"`
-	EnrolledAt            string        `json:"enrolled_at"`
-	UpdatedAt             string        `json:"updated_at"`
-	CycleID               string        `json:"cycle_id"`
-	CycleLengthWeeks      int64         `json:"cycle_length_weeks"`
-	DaysInCurrentWeek     int64         `json:"days_in_current_week"`
+	ID                    string         `json:"id"`
+	UserID                string         `json:"user_id"`
+	ProgramID             string         `json:"program_id"`
+	CurrentWeek           int64          `json:"current_week"`
+	CurrentCycleIteration int64          `json:"current_cycle_iteration"`
+	CurrentDayIndex       sql.NullInt64  `json:"current_day_index"`
+	MeetDate              sql.NullString `json:"meet_date"`
+	ScheduleType          sql.NullString `json:"schedule_type"`
+	EnrolledAt            string         `json:"enrolled_at"`
+	UpdatedAt             string         `json:"updated_at"`
+	CycleID               string         `json:"cycle_id"`
+	CycleLengthWeeks      int64          `json:"cycle_length_weeks"`
+	DaysInCurrentWeek     int64          `json:"days_in_current_week"`
 }
 
 func (q *Queries) GetStateAdvancementContext(ctx context.Context, userID string) (GetStateAdvancementContextRow, error) {
@@ -152,6 +166,8 @@ func (q *Queries) GetStateAdvancementContext(ctx context.Context, userID string)
 		&i.CurrentWeek,
 		&i.CurrentCycleIteration,
 		&i.CurrentDayIndex,
+		&i.MeetDate,
+		&i.ScheduleType,
 		&i.EnrolledAt,
 		&i.UpdatedAt,
 		&i.CycleID,
@@ -162,20 +178,22 @@ func (q *Queries) GetStateAdvancementContext(ctx context.Context, userID string)
 }
 
 const getUserProgramStateByID = `-- name: GetUserProgramStateByID :one
-SELECT id, user_id, program_id, current_week, current_cycle_iteration, current_day_index, enrolled_at, updated_at
+SELECT id, user_id, program_id, current_week, current_cycle_iteration, current_day_index, meet_date, schedule_type, enrolled_at, updated_at
 FROM user_program_states
 WHERE id = ?
 `
 
 type GetUserProgramStateByIDRow struct {
-	ID                    string        `json:"id"`
-	UserID                string        `json:"user_id"`
-	ProgramID             string        `json:"program_id"`
-	CurrentWeek           int64         `json:"current_week"`
-	CurrentCycleIteration int64         `json:"current_cycle_iteration"`
-	CurrentDayIndex       sql.NullInt64 `json:"current_day_index"`
-	EnrolledAt            string        `json:"enrolled_at"`
-	UpdatedAt             string        `json:"updated_at"`
+	ID                    string         `json:"id"`
+	UserID                string         `json:"user_id"`
+	ProgramID             string         `json:"program_id"`
+	CurrentWeek           int64          `json:"current_week"`
+	CurrentCycleIteration int64          `json:"current_cycle_iteration"`
+	CurrentDayIndex       sql.NullInt64  `json:"current_day_index"`
+	MeetDate              sql.NullString `json:"meet_date"`
+	ScheduleType          sql.NullString `json:"schedule_type"`
+	EnrolledAt            string         `json:"enrolled_at"`
+	UpdatedAt             string         `json:"updated_at"`
 }
 
 func (q *Queries) GetUserProgramStateByID(ctx context.Context, id string) (GetUserProgramStateByIDRow, error) {
@@ -188,6 +206,8 @@ func (q *Queries) GetUserProgramStateByID(ctx context.Context, id string) (GetUs
 		&i.CurrentWeek,
 		&i.CurrentCycleIteration,
 		&i.CurrentDayIndex,
+		&i.MeetDate,
+		&i.ScheduleType,
 		&i.EnrolledAt,
 		&i.UpdatedAt,
 	)
@@ -195,20 +215,22 @@ func (q *Queries) GetUserProgramStateByID(ctx context.Context, id string) (GetUs
 }
 
 const getUserProgramStateByUserID = `-- name: GetUserProgramStateByUserID :one
-SELECT id, user_id, program_id, current_week, current_cycle_iteration, current_day_index, enrolled_at, updated_at
+SELECT id, user_id, program_id, current_week, current_cycle_iteration, current_day_index, meet_date, schedule_type, enrolled_at, updated_at
 FROM user_program_states
 WHERE user_id = ?
 `
 
 type GetUserProgramStateByUserIDRow struct {
-	ID                    string        `json:"id"`
-	UserID                string        `json:"user_id"`
-	ProgramID             string        `json:"program_id"`
-	CurrentWeek           int64         `json:"current_week"`
-	CurrentCycleIteration int64         `json:"current_cycle_iteration"`
-	CurrentDayIndex       sql.NullInt64 `json:"current_day_index"`
-	EnrolledAt            string        `json:"enrolled_at"`
-	UpdatedAt             string        `json:"updated_at"`
+	ID                    string         `json:"id"`
+	UserID                string         `json:"user_id"`
+	ProgramID             string         `json:"program_id"`
+	CurrentWeek           int64          `json:"current_week"`
+	CurrentCycleIteration int64          `json:"current_cycle_iteration"`
+	CurrentDayIndex       sql.NullInt64  `json:"current_day_index"`
+	MeetDate              sql.NullString `json:"meet_date"`
+	ScheduleType          sql.NullString `json:"schedule_type"`
+	EnrolledAt            string         `json:"enrolled_at"`
+	UpdatedAt             string         `json:"updated_at"`
 }
 
 func (q *Queries) GetUserProgramStateByUserID(ctx context.Context, userID string) (GetUserProgramStateByUserIDRow, error) {
@@ -221,6 +243,8 @@ func (q *Queries) GetUserProgramStateByUserID(ctx context.Context, userID string
 		&i.CurrentWeek,
 		&i.CurrentCycleIteration,
 		&i.CurrentDayIndex,
+		&i.MeetDate,
+		&i.ScheduleType,
 		&i.EnrolledAt,
 		&i.UpdatedAt,
 	)
@@ -229,17 +253,19 @@ func (q *Queries) GetUserProgramStateByUserID(ctx context.Context, userID string
 
 const updateUserProgramState = `-- name: UpdateUserProgramState :exec
 UPDATE user_program_states
-SET program_id = ?, current_week = ?, current_cycle_iteration = ?, current_day_index = ?, updated_at = ?
+SET program_id = ?, current_week = ?, current_cycle_iteration = ?, current_day_index = ?, meet_date = ?, schedule_type = ?, updated_at = ?
 WHERE user_id = ?
 `
 
 type UpdateUserProgramStateParams struct {
-	ProgramID             string        `json:"program_id"`
-	CurrentWeek           int64         `json:"current_week"`
-	CurrentCycleIteration int64         `json:"current_cycle_iteration"`
-	CurrentDayIndex       sql.NullInt64 `json:"current_day_index"`
-	UpdatedAt             string        `json:"updated_at"`
-	UserID                string        `json:"user_id"`
+	ProgramID             string         `json:"program_id"`
+	CurrentWeek           int64          `json:"current_week"`
+	CurrentCycleIteration int64          `json:"current_cycle_iteration"`
+	CurrentDayIndex       sql.NullInt64  `json:"current_day_index"`
+	MeetDate              sql.NullString `json:"meet_date"`
+	ScheduleType          sql.NullString `json:"schedule_type"`
+	UpdatedAt             string         `json:"updated_at"`
+	UserID                string         `json:"user_id"`
 }
 
 func (q *Queries) UpdateUserProgramState(ctx context.Context, arg UpdateUserProgramStateParams) error {
@@ -248,6 +274,8 @@ func (q *Queries) UpdateUserProgramState(ctx context.Context, arg UpdateUserProg
 		arg.CurrentWeek,
 		arg.CurrentCycleIteration,
 		arg.CurrentDayIndex,
+		arg.MeetDate,
+		arg.ScheduleType,
 		arg.UpdatedAt,
 		arg.UserID,
 	)

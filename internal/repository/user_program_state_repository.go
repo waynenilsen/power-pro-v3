@@ -70,6 +70,8 @@ func (r *UserProgramStateRepository) GetEnrollmentWithProgram(userID string) (*u
 		CurrentWeek:           int(row.CurrentWeek),
 		CurrentCycleIteration: int(row.CurrentCycleIteration),
 		CurrentDayIndex:       nullInt64ToIntPtr(row.CurrentDayIndex),
+		MeetDate:              nullStringToTimePtr(row.MeetDate),
+		ScheduleType:          nullStringToScheduleType(row.ScheduleType),
 		EnrolledAt:            enrolledAt,
 		UpdatedAt:             updatedAt,
 	}
@@ -94,6 +96,8 @@ func (r *UserProgramStateRepository) Create(state *userprogramstate.UserProgramS
 		CurrentWeek:           int64(state.CurrentWeek),
 		CurrentCycleIteration: int64(state.CurrentCycleIteration),
 		CurrentDayIndex:       intPtrToNullInt64(state.CurrentDayIndex),
+		MeetDate:              timePtrToNullString(state.MeetDate),
+		ScheduleType:          scheduleTypeToNullString(state.ScheduleType),
 		EnrolledAt:            state.EnrolledAt.Format(time.RFC3339),
 		UpdatedAt:             state.UpdatedAt.Format(time.RFC3339),
 	})
@@ -113,6 +117,8 @@ func (r *UserProgramStateRepository) Update(state *userprogramstate.UserProgramS
 		CurrentWeek:           int64(state.CurrentWeek),
 		CurrentCycleIteration: int64(state.CurrentCycleIteration),
 		CurrentDayIndex:       intPtrToNullInt64(state.CurrentDayIndex),
+		MeetDate:              timePtrToNullString(state.MeetDate),
+		ScheduleType:          scheduleTypeToNullString(state.ScheduleType),
 		UpdatedAt:             state.UpdatedAt.Format(time.RFC3339),
 	})
 	if err != nil {
@@ -156,6 +162,8 @@ func dbGetUserProgramStateByUserIDRowToDomain(dbState db.GetUserProgramStateByUs
 		CurrentWeek:           int(dbState.CurrentWeek),
 		CurrentCycleIteration: int(dbState.CurrentCycleIteration),
 		CurrentDayIndex:       nullInt64ToIntPtr(dbState.CurrentDayIndex),
+		MeetDate:              nullStringToTimePtr(dbState.MeetDate),
+		ScheduleType:          nullStringToScheduleType(dbState.ScheduleType),
 		EnrolledAt:            enrolledAt,
 		UpdatedAt:             updatedAt,
 	}
@@ -172,6 +180,8 @@ func dbGetUserProgramStateByIDRowToDomain(dbState db.GetUserProgramStateByIDRow)
 		CurrentWeek:           int(dbState.CurrentWeek),
 		CurrentCycleIteration: int(dbState.CurrentCycleIteration),
 		CurrentDayIndex:       nullInt64ToIntPtr(dbState.CurrentDayIndex),
+		MeetDate:              nullStringToTimePtr(dbState.MeetDate),
+		ScheduleType:          nullStringToScheduleType(dbState.ScheduleType),
 		EnrolledAt:            enrolledAt,
 		UpdatedAt:             updatedAt,
 	}
@@ -206,6 +216,8 @@ func (r *UserProgramStateRepository) GetStateAdvancementContext(userID string) (
 		CurrentWeek:           int(row.CurrentWeek),
 		CurrentCycleIteration: int(row.CurrentCycleIteration),
 		CurrentDayIndex:       nullInt64ToIntPtr(row.CurrentDayIndex),
+		MeetDate:              nullStringToTimePtr(row.MeetDate),
+		ScheduleType:          nullStringToScheduleType(row.ScheduleType),
 		EnrolledAt:            enrolledAt,
 		UpdatedAt:             updatedAt,
 	}
@@ -220,3 +232,39 @@ func (r *UserProgramStateRepository) GetStateAdvancementContext(userID string) (
 
 // Note: intPtrToNullInt64, nullInt64ToIntPtr, stringPtrToNullString, and nullStringToStringPtr
 // are shared across repositories and defined in prescription_repository.go and lift_repository.go.
+
+// nullStringToTimePtr converts a sql.NullString containing an RFC3339 time to a *time.Time.
+func nullStringToTimePtr(ns sql.NullString) *time.Time {
+	if !ns.Valid || ns.String == "" {
+		return nil
+	}
+	t, err := time.Parse(time.RFC3339, ns.String)
+	if err != nil {
+		return nil
+	}
+	return &t
+}
+
+// timePtrToNullString converts a *time.Time to a sql.NullString in RFC3339 format.
+func timePtrToNullString(t *time.Time) sql.NullString {
+	if t == nil {
+		return sql.NullString{Valid: false}
+	}
+	return sql.NullString{String: t.Format(time.RFC3339), Valid: true}
+}
+
+// nullStringToScheduleType converts a sql.NullString to a ScheduleType.
+func nullStringToScheduleType(ns sql.NullString) userprogramstate.ScheduleType {
+	if !ns.Valid || ns.String == "" {
+		return userprogramstate.ScheduleTypeRotation // default
+	}
+	return userprogramstate.ScheduleType(ns.String)
+}
+
+// scheduleTypeToNullString converts a ScheduleType to a sql.NullString.
+func scheduleTypeToNullString(st userprogramstate.ScheduleType) sql.NullString {
+	if st == "" {
+		return sql.NullString{String: string(userprogramstate.ScheduleTypeRotation), Valid: true}
+	}
+	return sql.NullString{String: string(st), Valid: true}
+}

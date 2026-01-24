@@ -3,6 +3,7 @@ package userprogramstate
 import (
 	"errors"
 	"testing"
+	"time"
 )
 
 // ==================== UserID Validation Tests ====================
@@ -997,8 +998,279 @@ func TestAdvanceState_InvalidContext_ZeroWeeks(t *testing.T) {
 	}
 }
 
+// ==================== MeetDate Validation Tests ====================
+
+func TestValidateMeetDate_Valid(t *testing.T) {
+	tests := []struct {
+		name     string
+		meetDate *time.Time
+	}{
+		{"nil", nil},
+		{"future date", ptrTime(time.Now().Add(24 * time.Hour))},
+		{"far future date", ptrTime(time.Now().Add(365 * 24 * time.Hour))},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateMeetDate(tt.meetDate)
+			if err != nil {
+				t.Errorf("ValidateMeetDate(%v) = %v, want nil", tt.meetDate, err)
+			}
+		})
+	}
+}
+
+func TestValidateMeetDate_Invalid(t *testing.T) {
+	tests := []struct {
+		name        string
+		meetDate    *time.Time
+		expectedErr error
+	}{
+		{"past date", ptrTime(time.Now().Add(-24 * time.Hour)), ErrMeetDateInPast},
+		{"now (edge case)", ptrTime(time.Now().Add(-1 * time.Second)), ErrMeetDateInPast},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateMeetDate(tt.meetDate)
+			if !errors.Is(err, tt.expectedErr) {
+				t.Errorf("ValidateMeetDate(%v) = %v, want %v", tt.meetDate, err, tt.expectedErr)
+			}
+		})
+	}
+}
+
+// ==================== ScheduleType Validation Tests ====================
+
+func TestValidateScheduleType_Valid(t *testing.T) {
+	tests := []struct {
+		name         string
+		scheduleType ScheduleType
+	}{
+		{"rotation", ScheduleTypeRotation},
+		{"days_out", ScheduleTypeDaysOut},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateScheduleType(tt.scheduleType)
+			if err != nil {
+				t.Errorf("ValidateScheduleType(%q) = %v, want nil", tt.scheduleType, err)
+			}
+		})
+	}
+}
+
+func TestValidateScheduleType_Invalid(t *testing.T) {
+	tests := []struct {
+		name         string
+		scheduleType ScheduleType
+		expectedErr  error
+	}{
+		{"empty string", ScheduleType(""), ErrInvalidScheduleType},
+		{"invalid value", ScheduleType("invalid"), ErrInvalidScheduleType},
+		{"typo", ScheduleType("rotaiton"), ErrInvalidScheduleType},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateScheduleType(tt.scheduleType)
+			if !errors.Is(err, tt.expectedErr) {
+				t.Errorf("ValidateScheduleType(%q) = %v, want %v", tt.scheduleType, err, tt.expectedErr)
+			}
+		})
+	}
+}
+
+// ==================== EnrollUser with MeetDate Tests ====================
+
+func TestEnrollUser_WithMeetDate(t *testing.T) {
+	futureDate := time.Now().Add(30 * 24 * time.Hour)
+	input := EnrollUserInput{
+		UserID:       "user-1",
+		ProgramID:    "program-1",
+		MeetDate:     &futureDate,
+		ScheduleType: ScheduleTypeDaysOut,
+	}
+
+	state, result := EnrollUser(input, "state-id")
+
+	if !result.Valid {
+		t.Errorf("EnrollUser returned invalid result: %v", result.Errors)
+	}
+	if state == nil {
+		t.Fatal("EnrollUser returned nil state")
+	}
+	if state.MeetDate == nil {
+		t.Fatal("state.MeetDate is nil, want non-nil")
+	}
+	if !state.MeetDate.Equal(futureDate) {
+		t.Errorf("state.MeetDate = %v, want %v", state.MeetDate, futureDate)
+	}
+	if state.ScheduleType != ScheduleTypeDaysOut {
+		t.Errorf("state.ScheduleType = %q, want %q", state.ScheduleType, ScheduleTypeDaysOut)
+	}
+}
+
+func TestEnrollUser_WithPastMeetDate(t *testing.T) {
+	pastDate := time.Now().Add(-24 * time.Hour)
+	input := EnrollUserInput{
+		UserID:    "user-1",
+		ProgramID: "program-1",
+		MeetDate:  &pastDate,
+	}
+
+	state, result := EnrollUser(input, "state-id")
+
+	if result.Valid {
+		t.Error("EnrollUser with past meet date returned valid result")
+	}
+	if state != nil {
+		t.Error("EnrollUser with invalid input returned non-nil state")
+	}
+}
+
+func TestEnrollUser_DefaultsToRotationScheduleType(t *testing.T) {
+	input := EnrollUserInput{
+		UserID:    "user-1",
+		ProgramID: "program-1",
+		// ScheduleType not set
+	}
+
+	state, result := EnrollUser(input, "state-id")
+
+	if !result.Valid {
+		t.Errorf("EnrollUser returned invalid result: %v", result.Errors)
+	}
+	if state == nil {
+		t.Fatal("EnrollUser returned nil state")
+	}
+	if state.ScheduleType != ScheduleTypeRotation {
+		t.Errorf("state.ScheduleType = %q, want %q (default)", state.ScheduleType, ScheduleTypeRotation)
+	}
+}
+
+func TestEnrollUser_InvalidScheduleType(t *testing.T) {
+	input := EnrollUserInput{
+		UserID:       "user-1",
+		ProgramID:    "program-1",
+		ScheduleType: ScheduleType("invalid"),
+	}
+
+	state, result := EnrollUser(input, "state-id")
+
+	if result.Valid {
+		t.Error("EnrollUser with invalid schedule type returned valid result")
+	}
+	if state != nil {
+		t.Error("EnrollUser with invalid input returned non-nil state")
+	}
+}
+
+// ==================== UserProgramState.Validate with MeetDate Tests ====================
+
+func TestUserProgramState_Validate_WithValidMeetDate(t *testing.T) {
+	futureDate := time.Now().Add(30 * 24 * time.Hour)
+	state := &UserProgramState{
+		ID:                    "state-id",
+		UserID:                "user-1",
+		ProgramID:             "program-1",
+		CurrentWeek:           1,
+		CurrentCycleIteration: 1,
+		MeetDate:              &futureDate,
+		ScheduleType:          ScheduleTypeDaysOut,
+	}
+
+	result := state.Validate()
+
+	if !result.Valid {
+		t.Errorf("Validate returned invalid result for valid state: %v", result.Errors)
+	}
+}
+
+func TestUserProgramState_Validate_WithPastMeetDate(t *testing.T) {
+	pastDate := time.Now().Add(-24 * time.Hour)
+	state := &UserProgramState{
+		ID:                    "state-id",
+		UserID:                "user-1",
+		ProgramID:             "program-1",
+		CurrentWeek:           1,
+		CurrentCycleIteration: 1,
+		MeetDate:              &pastDate,
+		ScheduleType:          ScheduleTypeDaysOut,
+	}
+
+	result := state.Validate()
+
+	if result.Valid {
+		t.Error("Validate returned valid result for state with past meet date")
+	}
+}
+
+func TestUserProgramState_Validate_WithInvalidScheduleType(t *testing.T) {
+	state := &UserProgramState{
+		ID:                    "state-id",
+		UserID:                "user-1",
+		ProgramID:             "program-1",
+		CurrentWeek:           1,
+		CurrentCycleIteration: 1,
+		ScheduleType:          ScheduleType("invalid"),
+	}
+
+	result := state.Validate()
+
+	if result.Valid {
+		t.Error("Validate returned valid result for state with invalid schedule type")
+	}
+}
+
+// ==================== AdvanceState preserves MeetDate/ScheduleType Tests ====================
+
+func TestAdvanceState_PreservesMeetDateAndScheduleType(t *testing.T) {
+	futureDate := time.Now().Add(30 * 24 * time.Hour)
+	dayIdx := 0
+	state := &UserProgramState{
+		ID:                    "state-id",
+		UserID:                "user-1",
+		ProgramID:             "program-1",
+		CurrentWeek:           1,
+		CurrentCycleIteration: 1,
+		CurrentDayIndex:       &dayIdx,
+		MeetDate:              &futureDate,
+		ScheduleType:          ScheduleTypeDaysOut,
+	}
+
+	ctx := AdvancementContext{
+		DaysInCurrentWeek: 3,
+		CycleLengthWeeks:  4,
+	}
+
+	result, validation := AdvanceState(state, ctx)
+
+	if !validation.Valid {
+		t.Fatalf("AdvanceState returned invalid result: %v", validation.Errors)
+	}
+	if result.NewState.MeetDate == nil {
+		t.Fatal("MeetDate was not preserved after advancement")
+	}
+	if !result.NewState.MeetDate.Equal(futureDate) {
+		t.Errorf("MeetDate = %v, want %v", result.NewState.MeetDate, futureDate)
+	}
+	if result.NewState.ScheduleType != ScheduleTypeDaysOut {
+		t.Errorf("ScheduleType = %q, want %q", result.NewState.ScheduleType, ScheduleTypeDaysOut)
+	}
+	// Ensure original wasn't mutated
+	if state.MeetDate == nil || !state.MeetDate.Equal(futureDate) {
+		t.Error("Original state.MeetDate was mutated")
+	}
+}
+
 // ==================== Helper Functions for Tests ====================
 
 func ptrInt(i int) *int {
 	return &i
+}
+
+func ptrTime(t time.Time) *time.Time {
+	return &t
 }
