@@ -299,6 +299,13 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /users/{userId}/program", withAuth(enrollmentHandler.Get))
 	mux.Handle("DELETE /users/{userId}/program", withAuth(enrollmentHandler.Unenroll))
 
+	// Meet Date routes:
+	// - Users can manage their own meet date
+	// - Admins can manage any user's meet date
+	meetDateHandler := api.NewMeetDateHandler(s.userProgramStateRepo)
+	mux.Handle("PUT /users/{userId}/programs/{programId}/state/meet-date", withAuth(meetDateHandler.SetMeetDate))
+	mux.Handle("GET /users/{userId}/programs/{programId}/state/countdown", withAuth(meetDateHandler.GetCountdown))
+
 	// State Advancement routes:
 	// - Users can advance their own program state
 	// - Admins can advance any user's program state

@@ -63,7 +63,13 @@ INSERT INTO users (id, created_at, updated_at) VALUES
     ('bill-starr-test-user', datetime('now'), datetime('now')),
     ('wendler-531-test-user', datetime('now'), datetime('now')),
     ('nuckols-hf-test-user', datetime('now'), datetime('now')),
-    ('nsuns-lp-test-user', datetime('now'), datetime('now'));
+    ('nsuns-lp-test-user', datetime('now'), datetime('now')),
+    -- Meet date test users
+    ('meet-date-test-user', datetime('now'), datetime('now')),
+    ('meet-date-validation-user', datetime('now'), datetime('now')),
+    ('meet-date-auth-user', datetime('now'), datetime('now')),
+    ('phase-calc-user', datetime('now'), datetime('now')),
+    ('response-format-user', datetime('now'), datetime('now'));
 -- +goose StatementEnd
 
 -- +goose Down

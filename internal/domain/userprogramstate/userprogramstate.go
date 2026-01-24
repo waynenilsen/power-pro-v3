@@ -395,3 +395,57 @@ func (s *UserProgramState) IncrementCyclesSinceStart() {
 	s.CyclesSinceStart++
 	s.UpdatedAt = time.Now()
 }
+
+// UpdateMeetDateInput contains the input data for updating a user's meet date.
+type UpdateMeetDateInput struct {
+	MeetDate *time.Time // nil means clear the meet date
+}
+
+// UpdateMeetDate updates the user's meet date.
+// If the meet date is nil, it clears the meet date and sets schedule type to rotation.
+// If the meet date is provided, it validates the date is in the future.
+func (s *UserProgramState) UpdateMeetDate(input UpdateMeetDateInput) *ValidationResult {
+	result := NewValidationResult()
+
+	// Validate meet date if provided
+	if err := ValidateMeetDate(input.MeetDate); err != nil {
+		result.AddError(err)
+		return result
+	}
+
+	// Update meet date
+	s.MeetDate = input.MeetDate
+
+	// If clearing meet date, also reset schedule type to rotation
+	if input.MeetDate == nil {
+		s.ScheduleType = ScheduleTypeRotation
+	} else {
+		// When setting a meet date, default to days_out schedule
+		s.ScheduleType = ScheduleTypeDaysOut
+	}
+
+	s.UpdatedAt = time.Now()
+	return result
+}
+
+// DaysOut calculates the number of days until the meet date.
+// Returns 0 if meet date is not set.
+func (s *UserProgramState) DaysOut() int {
+	if s.MeetDate == nil {
+		return 0
+	}
+	now := time.Now()
+	duration := s.MeetDate.Sub(now)
+	days := int(duration.Hours() / 24)
+	if days < 0 {
+		return 0
+	}
+	return days
+}
+
+// WeeksToMeet calculates the number of weeks until the meet date.
+// Returns 0 if meet date is not set.
+func (s *UserProgramState) WeeksToMeet() int {
+	days := s.DaysOut()
+	return days / 7
+}
