@@ -22,6 +22,8 @@ const (
 	TypeAMRAP SetSchemeType = "AMRAP"
 	// TypeTopBackoff generates a top set followed by backoff sets (future implementation).
 	TypeTopBackoff SetSchemeType = "TOP_BACKOFF"
+	// TypeRepRange generates sets with a target rep range (e.g., 3x8-12).
+	TypeRepRange SetSchemeType = "REP_RANGE"
 )
 
 // ValidSchemeTypes contains all valid scheme types for validation.
@@ -30,6 +32,7 @@ var ValidSchemeTypes = map[SetSchemeType]bool{
 	TypeRamp:       true,
 	TypeAMRAP:      true,
 	TypeTopBackoff: true,
+	TypeRepRange:   true,
 }
 
 // Errors for set scheme operations.

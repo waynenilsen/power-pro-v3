@@ -83,6 +83,7 @@ func TestValidSchemeTypes(t *testing.T) {
 		TypeRamp,
 		TypeAMRAP,
 		TypeTopBackoff,
+		TypeRepRange,
 	}
 
 	for _, schemeType := range expectedTypes {
@@ -107,6 +108,7 @@ func TestValidateSchemeType(t *testing.T) {
 		{"valid RAMP", TypeRamp, false},
 		{"valid AMRAP", TypeAMRAP, false},
 		{"valid TOP_BACKOFF", TypeTopBackoff, false},
+		{"valid REP_RANGE", TypeRepRange, false},
 		{"empty type", "", true},
 		{"unknown type", "UNKNOWN_TYPE", true},
 		{"lowercase type", "fixed", true},
