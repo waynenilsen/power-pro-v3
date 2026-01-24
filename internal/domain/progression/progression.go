@@ -22,17 +22,19 @@ const (
 	TypeCycle ProgressionType = "CYCLE_PROGRESSION"
 	// TypeAMRAP adjusts weight based on AMRAP set performance (e.g., nSuns).
 	TypeAMRAP ProgressionType = "AMRAP_PROGRESSION"
+	// TypeDeloadOnFailure reduces weight after repeated failures (e.g., GZCLP, Texas Method).
+	TypeDeloadOnFailure ProgressionType = "DELOAD_ON_FAILURE"
 	// Future types documented for extensibility:
-	// TypeDeloadOnFailure ProgressionType = "DELOAD_ON_FAILURE" - reduces weight after repeated failures
 	// TypeRPEBased ProgressionType = "RPE_BASED_PROGRESSION" - adjusts based on RPE targets
 	// TypeDouble ProgressionType = "DOUBLE_PROGRESSION" - increases reps first, then weight
 )
 
 // ValidProgressionTypes contains all currently implemented progression types.
 var ValidProgressionTypes = map[ProgressionType]bool{
-	TypeLinear: true,
-	TypeCycle:  true,
-	TypeAMRAP:  true,
+	TypeLinear:          true,
+	TypeCycle:           true,
+	TypeAMRAP:           true,
+	TypeDeloadOnFailure: true,
 }
 
 // TriggerType identifies what event causes a progression to evaluate/apply.
@@ -113,6 +115,16 @@ type TriggerEvent struct {
 	IsAMRAP bool `json:"isAMRAP,omitempty"`
 	// SetWeight is the weight used for the set (optional, for logging context).
 	SetWeight *float64 `json:"setWeight,omitempty"`
+
+	// Failure-specific fields (for ON_FAILURE trigger)
+	// ConsecutiveFailures is the current count of consecutive failures for this lift/progression.
+	ConsecutiveFailures *int `json:"consecutiveFailures,omitempty"`
+	// TargetReps is the number of reps that were prescribed.
+	TargetReps *int `json:"targetReps,omitempty"`
+	// FailedSetID is the UUID of the logged set that triggered the failure.
+	FailedSetID *string `json:"failedSetId,omitempty"`
+	// ProgressionID is the UUID of the progression this failure counter is tracking.
+	ProgressionID *string `json:"progressionId,omitempty"`
 }
 
 // Validate validates the TriggerEvent.

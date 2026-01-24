@@ -289,6 +289,7 @@ func GetDefaultFactory() *progression.ProgressionFactory {
 	progression.RegisterLinearProgression(factory)
 	progression.RegisterCycleProgression(factory)
 	progression.RegisterAMRAPProgression(factory)
+	progression.RegisterDeloadOnFailure(factory)
 	return factory
 }
 
