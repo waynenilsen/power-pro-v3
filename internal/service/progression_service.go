@@ -11,6 +11,7 @@ import (
 	"fmt"
 
 	"github.com/waynenilsen/power-pro-v3/internal/db"
+	"github.com/waynenilsen/power-pro-v3/internal/domain/greyskull"
 	"github.com/waynenilsen/power-pro-v3/internal/domain/progression"
 )
 
@@ -291,6 +292,7 @@ func GetDefaultFactory() *progression.ProgressionFactory {
 	progression.RegisterAMRAPProgression(factory)
 	progression.RegisterDeloadOnFailure(factory)
 	progression.RegisterStageProgression(factory)
+	greyskull.RegisterGreySkullProgression(factory)
 	return factory
 }
 

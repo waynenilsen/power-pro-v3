@@ -27,6 +27,8 @@ const (
 	// TypeStage is defined in stage.go - changes set/rep schemes on failure (e.g., GZCLP T1/T2).
 	// TypeDouble increases reps until hitting ceiling, then adds weight (e.g., 3x8-12 style).
 	TypeDouble ProgressionType = "DOUBLE_PROGRESSION"
+	// TypeGreySkull implements the GreySkull LP AMRAP-based progression with deload on failure.
+	TypeGreySkull ProgressionType = "GREYSKULL_PROGRESSION"
 	// Future types documented for extensibility:
 	// TypeRPEBased ProgressionType = "RPE_BASED_PROGRESSION" - adjusts based on RPE targets
 )
@@ -39,6 +41,7 @@ var ValidProgressionTypes = map[ProgressionType]bool{
 	TypeDeloadOnFailure: true,
 	TypeStage:           true,
 	TypeDouble:          true,
+	TypeGreySkull:       true,
 }
 
 // TriggerType identifies what event causes a progression to evaluate/apply.
