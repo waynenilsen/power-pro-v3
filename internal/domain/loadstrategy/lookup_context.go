@@ -4,6 +4,7 @@ package loadstrategy
 import (
 	"github.com/waynenilsen/power-pro-v3/internal/domain/dailylookup"
 	"github.com/waynenilsen/power-pro-v3/internal/domain/rotationlookup"
+	"github.com/waynenilsen/power-pro-v3/internal/domain/rpechart"
 	"github.com/waynenilsen/power-pro-v3/internal/domain/weeklylookup"
 )
 
@@ -39,6 +40,11 @@ type LookupContext struct {
 	// Optional: if nil, no rotation-based modifications are applied.
 	// Programs like Conjugate/Westside use this to cycle through different lifts.
 	RotationLookup *rotationlookup.RotationLookup
+
+	// RPEChart is the RPE chart for converting (reps, RPE) to percentage of 1RM.
+	// Optional: if nil, RPE-based lookups are not available.
+	// Programs like RTS (Reactive Training Systems) use this for autoregulated training.
+	RPEChart *rpechart.RPEChart
 }
 
 // HasWeeklyLookup returns true if a weekly lookup is configured and the week number is valid.
@@ -188,4 +194,18 @@ func (c *LookupContext) IsLiftInRotationFocus(liftIdentifier string) bool {
 		return false
 	}
 	return entry.LiftIdentifier == liftIdentifier
+}
+
+// HasRPEChart returns true if an RPE chart is configured.
+func (c *LookupContext) HasRPEChart() bool {
+	return c != nil && c.RPEChart != nil
+}
+
+// GetRPEPercentage returns the percentage of 1RM for the given reps and RPE.
+// Returns an error if no RPE chart is configured or no matching entry is found.
+func (c *LookupContext) GetRPEPercentage(reps int, rpe float64) (float64, error) {
+	if !c.HasRPEChart() {
+		return 0, rpechart.ErrEntryNotFound
+	}
+	return c.RPEChart.GetPercentage(reps, rpe)
 }
