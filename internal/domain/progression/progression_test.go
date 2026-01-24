@@ -146,6 +146,7 @@ func TestValidProgressionTypes(t *testing.T) {
 		TypeAMRAP,
 		TypeDeloadOnFailure,
 		TypeStage,
+		TypeDouble,
 	}
 
 	for _, progressionType := range expectedTypes {

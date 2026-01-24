@@ -25,9 +25,10 @@ const (
 	// TypeDeloadOnFailure reduces weight after repeated failures (e.g., GZCLP, Texas Method).
 	TypeDeloadOnFailure ProgressionType = "DELOAD_ON_FAILURE"
 	// TypeStage is defined in stage.go - changes set/rep schemes on failure (e.g., GZCLP T1/T2).
+	// TypeDouble increases reps until hitting ceiling, then adds weight (e.g., 3x8-12 style).
+	TypeDouble ProgressionType = "DOUBLE_PROGRESSION"
 	// Future types documented for extensibility:
 	// TypeRPEBased ProgressionType = "RPE_BASED_PROGRESSION" - adjusts based on RPE targets
-	// TypeDouble ProgressionType = "DOUBLE_PROGRESSION" - increases reps first, then weight
 )
 
 // ValidProgressionTypes contains all currently implemented progression types.
@@ -37,6 +38,7 @@ var ValidProgressionTypes = map[ProgressionType]bool{
 	TypeAMRAP:           true,
 	TypeDeloadOnFailure: true,
 	TypeStage:           true,
+	TypeDouble:          true,
 }
 
 // TriggerType identifies what event causes a progression to evaluate/apply.
@@ -117,6 +119,10 @@ type TriggerEvent struct {
 	IsAMRAP bool `json:"isAMRAP,omitempty"`
 	// SetWeight is the weight used for the set (optional, for logging context).
 	SetWeight *float64 `json:"setWeight,omitempty"`
+
+	// Double progression-specific fields (for AFTER_SET trigger)
+	// MaxReps is the rep ceiling for double progression (e.g., 12 in a 3x8-12 scheme).
+	MaxReps *int `json:"maxReps,omitempty"`
 
 	// Failure-specific fields (for ON_FAILURE trigger)
 	// ConsecutiveFailures is the current count of consecutive failures for this lift/progression.
