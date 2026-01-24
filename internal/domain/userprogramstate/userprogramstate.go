@@ -28,6 +28,8 @@ type UserProgramState struct {
 	CurrentWeek           int
 	CurrentCycleIteration int
 	CurrentDayIndex       *int
+	RotationPosition      int // 0-based position in rotation for programs like Conjugate/Westside
+	CyclesSinceStart      int // Number of complete cycles since enrollment
 	EnrolledAt            time.Time
 	UpdatedAt             time.Time
 }
@@ -122,6 +124,8 @@ func EnrollUser(input EnrollUserInput, id string) (*UserProgramState, *Validatio
 		CurrentWeek:           1, // Initial state
 		CurrentCycleIteration: 1, // Initial state
 		CurrentDayIndex:       nil,
+		RotationPosition:      0, // Start at first position in rotation
+		CyclesSinceStart:      0, // No cycles completed yet
 		EnrolledAt:            now,
 		UpdatedAt:             now,
 	}, result
@@ -235,6 +239,8 @@ func AdvanceState(state *UserProgramState, ctx AdvancementContext) (*Advancement
 		CurrentWeek:           state.CurrentWeek,
 		CurrentCycleIteration: state.CurrentCycleIteration,
 		CurrentDayIndex:       copyIntPtr(state.CurrentDayIndex),
+		RotationPosition:      state.RotationPosition,
+		CyclesSinceStart:      state.CyclesSinceStart,
 		EnrolledAt:            state.EnrolledAt,
 		UpdatedAt:             time.Now(),
 	}
@@ -266,6 +272,9 @@ func AdvanceState(state *UserProgramState, ctx AdvancementContext) (*Advancement
 			// Increment cycle iteration
 			newState.CurrentCycleIteration++
 
+			// Track total cycles completed since enrollment
+			newState.CyclesSinceStart++
+
 			// Mark cycle as completed
 			cycleCompleted = true
 		}
@@ -287,4 +296,29 @@ func copyIntPtr(p *int) *int {
 	}
 	v := *p
 	return &v
+}
+
+// AdvanceRotation advances the rotation position by 1 and wraps around when it
+// reaches rotationLength. This is used by programs like Conjugate/Westside that
+// cycle through different lift focuses.
+//
+// Example: With rotationLength=3 (deadlift, squat, bench):
+//   - Position 0 → 1
+//   - Position 1 → 2
+//   - Position 2 → 0 (wraps around)
+//
+// If rotationLength is <= 0, this function does nothing.
+func (s *UserProgramState) AdvanceRotation(rotationLength int) {
+	if rotationLength <= 0 {
+		return
+	}
+	s.RotationPosition = (s.RotationPosition + 1) % rotationLength
+	s.UpdatedAt = time.Now()
+}
+
+// IncrementCyclesSinceStart increments the count of completed cycles.
+// This is called when a full program cycle completes.
+func (s *UserProgramState) IncrementCyclesSinceStart() {
+	s.CyclesSinceStart++
+	s.UpdatedAt = time.Now()
 }

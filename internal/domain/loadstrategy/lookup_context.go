@@ -3,6 +3,7 @@ package loadstrategy
 
 import (
 	"github.com/waynenilsen/power-pro-v3/internal/domain/dailylookup"
+	"github.com/waynenilsen/power-pro-v3/internal/domain/rotationlookup"
 	"github.com/waynenilsen/power-pro-v3/internal/domain/weeklylookup"
 )
 
@@ -29,6 +30,15 @@ type LookupContext struct {
 	// DailyLookup is the daily lookup table to use for day-based modifications.
 	// Optional: if nil, no daily lookup modifications are applied.
 	DailyLookup *dailylookup.DailyLookup
+
+	// RotationPosition is the current position in the rotation (0-indexed).
+	// Used for RotationLookup resolution to determine which lift is in focus.
+	RotationPosition int
+
+	// RotationLookup is the rotation lookup table to use for lift rotation patterns.
+	// Optional: if nil, no rotation-based modifications are applied.
+	// Programs like Conjugate/Westside use this to cycle through different lifts.
+	RotationLookup *rotationlookup.RotationLookup
 }
 
 // HasWeeklyLookup returns true if a weekly lookup is configured and the week number is valid.
@@ -143,4 +153,39 @@ func (c *LookupContext) GetRepsForSet() int {
 	}
 
 	return weeklyEntry.Reps[setIndex]
+}
+
+// HasRotationLookup returns true if a rotation lookup is configured.
+// Note: RotationPosition of 0 is valid (it's the first position in the rotation).
+func (c *LookupContext) HasRotationLookup() bool {
+	return c != nil && c.RotationLookup != nil
+}
+
+// GetRotationEntry returns the rotation lookup entry for the current rotation position.
+// Returns nil if no rotation lookup is configured or the position is not found.
+func (c *LookupContext) GetRotationEntry() *rotationlookup.RotationLookupEntry {
+	if !c.HasRotationLookup() {
+		return nil
+	}
+	return c.RotationLookup.GetByPosition(c.RotationPosition)
+}
+
+// IsLiftInRotationFocus checks if the given lift identifier is the current focus
+// based on the rotation position. This is used by programs like Conjugate/Westside
+// where different lifts are emphasized on different training days/weeks.
+//
+// Returns true if:
+//   - A rotation lookup is configured AND
+//   - The current rotation position's entry has a matching lift identifier
+//
+// Returns false if:
+//   - No rotation lookup is configured
+//   - The rotation position doesn't exist in the lookup
+//   - The lift identifier doesn't match the current rotation entry
+func (c *LookupContext) IsLiftInRotationFocus(liftIdentifier string) bool {
+	entry := c.GetRotationEntry()
+	if entry == nil {
+		return false
+	}
+	return entry.LiftIdentifier == liftIdentifier
 }
