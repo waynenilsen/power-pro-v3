@@ -84,6 +84,7 @@ func TestValidSchemeTypes(t *testing.T) {
 		TypeAMRAP,
 		TypeTopBackoff,
 		TypeRepRange,
+		TypeGreySkull,
 	}
 
 	for _, schemeType := range expectedTypes {
