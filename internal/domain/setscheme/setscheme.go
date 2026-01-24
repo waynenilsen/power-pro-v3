@@ -26,16 +26,19 @@ const (
 	TypeRepRange SetSchemeType = "REP_RANGE"
 	// TypeGreySkull generates fixed sets followed by an AMRAP set (e.g., 2x5 + 1x5+).
 	TypeGreySkull SetSchemeType = "GREYSKULL"
+	// TypeFatigueDrop generates sets with progressive weight drops until target RPE is reached.
+	TypeFatigueDrop SetSchemeType = "FATIGUE_DROP"
 )
 
 // ValidSchemeTypes contains all valid scheme types for validation.
 var ValidSchemeTypes = map[SetSchemeType]bool{
-	TypeFixed:      true,
-	TypeRamp:       true,
-	TypeAMRAP:      true,
-	TypeTopBackoff: true,
-	TypeRepRange:   true,
-	TypeGreySkull:  true,
+	TypeFixed:       true,
+	TypeRamp:        true,
+	TypeAMRAP:       true,
+	TypeTopBackoff:  true,
+	TypeRepRange:    true,
+	TypeGreySkull:   true,
+	TypeFatigueDrop: true,
 }
 
 // Errors for set scheme operations.
