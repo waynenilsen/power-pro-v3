@@ -25,15 +25,19 @@ const (
 	TypeRelativeTo LoadStrategyType = "RELATIVE_TO"
 	// TypeFindRM indicates the user works up to find their rep max (no prescribed weight).
 	TypeFindRM LoadStrategyType = "FIND_RM"
+	// TypeTaper applies a taper multiplier to reduce volume as meet approaches.
+	// Note: TypeTaper constant is defined in taper.go to avoid circular reference.
 )
 
 // ValidStrategyTypes contains all valid strategy types for validation.
+// Note: TypeTaper ("TAPER") is also valid but defined in taper.go to avoid import cycles.
 var ValidStrategyTypes = map[LoadStrategyType]bool{
 	TypePercentOf:   true,
 	TypeRPETarget:   true,
 	TypeFixedWeight: true,
 	TypeRelativeTo:  true,
 	TypeFindRM:      true,
+	"TAPER":         true,
 }
 
 // Errors for load strategy operations.

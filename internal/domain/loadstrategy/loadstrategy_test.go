@@ -74,6 +74,7 @@ func TestValidStrategyTypes(t *testing.T) {
 		TypeFixedWeight,
 		TypeRelativeTo,
 		TypeFindRM,
+		TypeTaper,
 	}
 
 	for _, strategyType := range expectedTypes {
