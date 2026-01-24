@@ -257,3 +257,146 @@ func GetPhaseInfo(durations PhaseDurations) []PhaseInfo {
 		},
 	}
 }
+
+// ScheduleType represents how a program's schedule is determined.
+type ScheduleType string
+
+const (
+	// ScheduleTypeRotation means the program follows a rotating schedule (default).
+	ScheduleTypeRotation ScheduleType = "rotation"
+	// ScheduleTypeDaysOut means the program schedule is determined by days until meet date.
+	ScheduleTypeDaysOut ScheduleType = "days_out"
+)
+
+// EffectiveScheduleInput contains all inputs needed to determine the effective week.
+type EffectiveScheduleInput struct {
+	ScheduleType     ScheduleType   // How schedule is determined
+	CurrentWeek      int            // Current week for rotation-based programs
+	MeetDate         *time.Time     // Meet date for days_out programs
+	Now              time.Time      // Current time (for testability)
+	PhaseDurations   PhaseDurations // Phase durations for days_out calculation
+	CycleLengthWeeks int            // Total weeks in the program cycle
+}
+
+// EffectiveScheduleResult contains the result of effective schedule calculation.
+type EffectiveScheduleResult struct {
+	WeekNumber      int   // The week number to use for workout generation
+	Phase           Phase // Current phase (meaningful for days_out, PhasePrep1 for rotation)
+	WeekWithinPhase int   // Week within the current phase
+	DaysOut         int   // Days until meet (-1 for rotation schedule)
+	IsPeaking       bool  // True if in competition phase (for taper application)
+}
+
+// GetEffectiveSchedule determines the effective week and phase based on schedule type.
+// For rotation schedules: uses CurrentWeek directly.
+// For days_out schedules: derives week from meet date.
+func GetEffectiveSchedule(input EffectiveScheduleInput) (*EffectiveScheduleResult, error) {
+	switch input.ScheduleType {
+	case ScheduleTypeRotation, "":
+		// Rotation mode: use CurrentWeek directly, no phase-based logic
+		return &EffectiveScheduleResult{
+			WeekNumber:      input.CurrentWeek,
+			Phase:           PhasePrep1, // Default phase for rotation (not meaningful)
+			WeekWithinPhase: input.CurrentWeek,
+			DaysOut:         -1, // No meet date
+			IsPeaking:       false,
+		}, nil
+
+	case ScheduleTypeDaysOut:
+		// Days out mode: derive week from meet date
+		if input.MeetDate == nil {
+			return nil, ErrMeetDateRequired
+		}
+
+		// Use provided durations or default
+		durations := input.PhaseDurations
+		if durations.TotalWeeks() == 0 {
+			durations = DefaultPhaseDurations()
+		}
+
+		result, err := CalculateWithDurations(*input.MeetDate, input.Now, durations)
+		if err != nil {
+			return nil, err
+		}
+
+		// Clamp week to cycle length if specified
+		weekNumber := result.WeekOverall
+		if input.CycleLengthWeeks > 0 && weekNumber > input.CycleLengthWeeks {
+			weekNumber = input.CycleLengthWeeks
+		}
+
+		return &EffectiveScheduleResult{
+			WeekNumber:      weekNumber,
+			Phase:           result.Phase,
+			WeekWithinPhase: result.WeekWithinPhase,
+			DaysOut:         result.DaysOut,
+			IsPeaking:       result.Phase == PhaseCompetition,
+		}, nil
+
+	default:
+		return nil, errors.New("invalid schedule type")
+	}
+}
+
+// ShouldTransitionPhase checks if a phase transition would occur between two points in time.
+// This is useful for detecting when the user moves between Prep1 -> Prep2 -> Competition.
+// Returns the new phase and whether a transition occurred.
+func ShouldTransitionPhase(meetDate time.Time, previousTime, currentTime time.Time) (newPhase Phase, transitioned bool) {
+	prevPhase := GetCurrentPhase(meetDate, previousTime)
+	currPhase := GetCurrentPhase(meetDate, currentTime)
+
+	return currPhase, prevPhase != currPhase
+}
+
+// ShouldTransitionPhaseWithDurations checks for phase transition with custom durations.
+func ShouldTransitionPhaseWithDurations(meetDate time.Time, previousTime, currentTime time.Time, durations PhaseDurations) (newPhase Phase, transitioned bool) {
+	prevPhase := GetCurrentPhaseWithDurations(meetDate, previousTime, durations)
+	currPhase := GetCurrentPhaseWithDurations(meetDate, currentTime, durations)
+
+	return currPhase, prevPhase != currPhase
+}
+
+// ValidateMeetDateForSchedule validates the meet date based on schedule requirements.
+// For days_out schedule, meet date must be set and in the future (or today).
+// For rotation schedule, meet date is optional.
+func ValidateMeetDateForSchedule(scheduleType ScheduleType, meetDate *time.Time, now time.Time) error {
+	if scheduleType == ScheduleTypeDaysOut {
+		if meetDate == nil {
+			return ErrMeetDateRequired
+		}
+		daysOut := GetDaysOut(*meetDate, now)
+		if daysOut < 0 {
+			return ErrMeetDateInPast
+		}
+	}
+	return nil
+}
+
+// HandleMeetDateChange handles the scenario where a meet date is changed mid-program.
+// Returns the new effective schedule information based on the new meet date.
+func HandleMeetDateChange(oldMeetDate, newMeetDate *time.Time, now time.Time, durations PhaseDurations) (*EffectiveScheduleResult, error) {
+	if newMeetDate == nil {
+		// Meet date cleared - switch to rotation mode behavior
+		return &EffectiveScheduleResult{
+			WeekNumber:      1, // Start from week 1
+			Phase:           PhasePrep1,
+			WeekWithinPhase: 1,
+			DaysOut:         -1,
+			IsPeaking:       false,
+		}, nil
+	}
+
+	// Calculate new position based on new meet date
+	result, err := CalculateWithDurations(*newMeetDate, now, durations)
+	if err != nil {
+		return nil, err
+	}
+
+	return &EffectiveScheduleResult{
+		WeekNumber:      result.WeekOverall,
+		Phase:           result.Phase,
+		WeekWithinPhase: result.WeekWithinPhase,
+		DaysOut:         result.DaysOut,
+		IsPeaking:       result.Phase == PhaseCompetition,
+	}, nil
+}

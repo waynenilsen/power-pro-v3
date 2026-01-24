@@ -601,3 +601,439 @@ func TestEdgeCases_ExactPhaseBoundaries(t *testing.T) {
 		})
 	}
 }
+
+// ==================== GetEffectiveSchedule Tests ====================
+
+func TestGetEffectiveSchedule_RotationMode(t *testing.T) {
+	input := EffectiveScheduleInput{
+		ScheduleType: ScheduleTypeRotation,
+		CurrentWeek:  3,
+	}
+
+	result, err := GetEffectiveSchedule(input)
+
+	if err != nil {
+		t.Fatalf("GetEffectiveSchedule() error = %v", err)
+	}
+	if result.WeekNumber != 3 {
+		t.Errorf("WeekNumber = %d, want 3", result.WeekNumber)
+	}
+	if result.DaysOut != -1 {
+		t.Errorf("DaysOut = %d, want -1 (no meet date)", result.DaysOut)
+	}
+	if result.IsPeaking {
+		t.Error("IsPeaking should be false for rotation mode")
+	}
+}
+
+func TestGetEffectiveSchedule_RotationModeEmptyString(t *testing.T) {
+	// Empty string should be treated as rotation
+	input := EffectiveScheduleInput{
+		ScheduleType: "",
+		CurrentWeek:  5,
+	}
+
+	result, err := GetEffectiveSchedule(input)
+
+	if err != nil {
+		t.Fatalf("GetEffectiveSchedule() error = %v", err)
+	}
+	if result.WeekNumber != 5 {
+		t.Errorf("WeekNumber = %d, want 5", result.WeekNumber)
+	}
+}
+
+func TestGetEffectiveSchedule_DaysOutMode(t *testing.T) {
+	meetDate := date(2024, time.June, 15)
+	now := meetDate.AddDate(0, 0, -49) // 49 days out = prep2
+
+	input := EffectiveScheduleInput{
+		ScheduleType:   ScheduleTypeDaysOut,
+		MeetDate:       &meetDate,
+		Now:            now,
+		PhaseDurations: DefaultPhaseDurations(),
+	}
+
+	result, err := GetEffectiveSchedule(input)
+
+	if err != nil {
+		t.Fatalf("GetEffectiveSchedule() error = %v", err)
+	}
+	if result.WeekNumber != 6 {
+		t.Errorf("WeekNumber = %d, want 6", result.WeekNumber)
+	}
+	if result.Phase != PhasePrep2 {
+		t.Errorf("Phase = %q, want %q", result.Phase, PhasePrep2)
+	}
+	if result.DaysOut != 49 {
+		t.Errorf("DaysOut = %d, want 49", result.DaysOut)
+	}
+	if result.IsPeaking {
+		t.Error("IsPeaking should be false for prep2 phase")
+	}
+}
+
+func TestGetEffectiveSchedule_DaysOutModeCompetitionPhase(t *testing.T) {
+	meetDate := date(2024, time.June, 15)
+	now := meetDate.AddDate(0, 0, -14) // 14 days out = competition phase
+
+	input := EffectiveScheduleInput{
+		ScheduleType:   ScheduleTypeDaysOut,
+		MeetDate:       &meetDate,
+		Now:            now,
+		PhaseDurations: DefaultPhaseDurations(),
+	}
+
+	result, err := GetEffectiveSchedule(input)
+
+	if err != nil {
+		t.Fatalf("GetEffectiveSchedule() error = %v", err)
+	}
+	if result.Phase != PhaseCompetition {
+		t.Errorf("Phase = %q, want %q", result.Phase, PhaseCompetition)
+	}
+	if !result.IsPeaking {
+		t.Error("IsPeaking should be true for competition phase")
+	}
+}
+
+func TestGetEffectiveSchedule_DaysOutModeNoMeetDate(t *testing.T) {
+	input := EffectiveScheduleInput{
+		ScheduleType: ScheduleTypeDaysOut,
+		MeetDate:     nil, // Missing meet date
+		Now:          time.Now(),
+	}
+
+	_, err := GetEffectiveSchedule(input)
+
+	if err == nil {
+		t.Error("GetEffectiveSchedule() should error when days_out has no meet date")
+	}
+	if err != ErrMeetDateRequired {
+		t.Errorf("error = %v, want %v", err, ErrMeetDateRequired)
+	}
+}
+
+func TestGetEffectiveSchedule_DaysOutModeDefaultDurations(t *testing.T) {
+	meetDate := date(2024, time.June, 15)
+	now := meetDate.AddDate(0, 0, -90) // First day of program
+
+	input := EffectiveScheduleInput{
+		ScheduleType: ScheduleTypeDaysOut,
+		MeetDate:     &meetDate,
+		Now:          now,
+		// PhaseDurations not set - should use defaults
+	}
+
+	result, err := GetEffectiveSchedule(input)
+
+	if err != nil {
+		t.Fatalf("GetEffectiveSchedule() error = %v", err)
+	}
+	if result.WeekNumber != 1 {
+		t.Errorf("WeekNumber = %d, want 1", result.WeekNumber)
+	}
+	if result.Phase != PhasePrep1 {
+		t.Errorf("Phase = %q, want %q", result.Phase, PhasePrep1)
+	}
+}
+
+func TestGetEffectiveSchedule_DaysOutModeClampToCycleLength(t *testing.T) {
+	meetDate := date(2024, time.June, 15)
+	now := meetDate.AddDate(0, 0, 0) // Meet day = week 13
+
+	input := EffectiveScheduleInput{
+		ScheduleType:     ScheduleTypeDaysOut,
+		MeetDate:         &meetDate,
+		Now:              now,
+		PhaseDurations:   DefaultPhaseDurations(),
+		CycleLengthWeeks: 10, // Shorter cycle
+	}
+
+	result, err := GetEffectiveSchedule(input)
+
+	if err != nil {
+		t.Fatalf("GetEffectiveSchedule() error = %v", err)
+	}
+	// Week 13 should be clamped to cycle length of 10
+	if result.WeekNumber != 10 {
+		t.Errorf("WeekNumber = %d, want 10 (clamped)", result.WeekNumber)
+	}
+}
+
+func TestGetEffectiveSchedule_InvalidScheduleType(t *testing.T) {
+	input := EffectiveScheduleInput{
+		ScheduleType: ScheduleType("invalid"),
+	}
+
+	_, err := GetEffectiveSchedule(input)
+
+	if err == nil {
+		t.Error("GetEffectiveSchedule() should error for invalid schedule type")
+	}
+}
+
+// ==================== ShouldTransitionPhase Tests ====================
+
+func TestShouldTransitionPhase_NoTransition(t *testing.T) {
+	meetDate := date(2024, time.June, 15)
+	prev := meetDate.AddDate(0, 0, -50) // Prep2
+	curr := meetDate.AddDate(0, 0, -49) // Still Prep2
+
+	newPhase, transitioned := ShouldTransitionPhase(meetDate, prev, curr)
+
+	if transitioned {
+		t.Error("Should not have transitioned within same phase")
+	}
+	if newPhase != PhasePrep2 {
+		t.Errorf("newPhase = %q, want %q", newPhase, PhasePrep2)
+	}
+}
+
+func TestShouldTransitionPhase_Prep1ToPrep2(t *testing.T) {
+	meetDate := date(2024, time.June, 15)
+	prev := meetDate.AddDate(0, 0, -63) // Last day of Prep1
+	curr := meetDate.AddDate(0, 0, -62) // First day of Prep2
+
+	newPhase, transitioned := ShouldTransitionPhase(meetDate, prev, curr)
+
+	if !transitioned {
+		t.Error("Should have transitioned from Prep1 to Prep2")
+	}
+	if newPhase != PhasePrep2 {
+		t.Errorf("newPhase = %q, want %q", newPhase, PhasePrep2)
+	}
+}
+
+func TestShouldTransitionPhase_Prep2ToCompetition(t *testing.T) {
+	meetDate := date(2024, time.June, 15)
+	prev := meetDate.AddDate(0, 0, -35) // Last day of Prep2
+	curr := meetDate.AddDate(0, 0, -34) // First day of Competition
+
+	newPhase, transitioned := ShouldTransitionPhase(meetDate, prev, curr)
+
+	if !transitioned {
+		t.Error("Should have transitioned from Prep2 to Competition")
+	}
+	if newPhase != PhaseCompetition {
+		t.Errorf("newPhase = %q, want %q", newPhase, PhaseCompetition)
+	}
+}
+
+func TestShouldTransitionPhase_MultiDayJump(t *testing.T) {
+	// Test when user misses several days and jumps phases
+	meetDate := date(2024, time.June, 15)
+	prev := meetDate.AddDate(0, 0, -70) // Prep1
+	curr := meetDate.AddDate(0, 0, -20) // Competition (skipped Prep2)
+
+	newPhase, transitioned := ShouldTransitionPhase(meetDate, prev, curr)
+
+	if !transitioned {
+		t.Error("Should have transitioned when jumping phases")
+	}
+	if newPhase != PhaseCompetition {
+		t.Errorf("newPhase = %q, want %q", newPhase, PhaseCompetition)
+	}
+}
+
+// ==================== ValidateMeetDateForSchedule Tests ====================
+
+func TestValidateMeetDateForSchedule_RotationNoMeetDate(t *testing.T) {
+	err := ValidateMeetDateForSchedule(ScheduleTypeRotation, nil, time.Now())
+
+	if err != nil {
+		t.Errorf("ValidateMeetDateForSchedule() error = %v, want nil", err)
+	}
+}
+
+func TestValidateMeetDateForSchedule_RotationWithMeetDate(t *testing.T) {
+	futureDate := time.Now().AddDate(0, 0, 30)
+	err := ValidateMeetDateForSchedule(ScheduleTypeRotation, &futureDate, time.Now())
+
+	if err != nil {
+		t.Errorf("ValidateMeetDateForSchedule() error = %v, want nil", err)
+	}
+}
+
+func TestValidateMeetDateForSchedule_DaysOutNoMeetDate(t *testing.T) {
+	err := ValidateMeetDateForSchedule(ScheduleTypeDaysOut, nil, time.Now())
+
+	if err != ErrMeetDateRequired {
+		t.Errorf("ValidateMeetDateForSchedule() error = %v, want %v", err, ErrMeetDateRequired)
+	}
+}
+
+func TestValidateMeetDateForSchedule_DaysOutPastMeetDate(t *testing.T) {
+	pastDate := time.Now().AddDate(0, 0, -5)
+	err := ValidateMeetDateForSchedule(ScheduleTypeDaysOut, &pastDate, time.Now())
+
+	if err != ErrMeetDateInPast {
+		t.Errorf("ValidateMeetDateForSchedule() error = %v, want %v", err, ErrMeetDateInPast)
+	}
+}
+
+func TestValidateMeetDateForSchedule_DaysOutValidMeetDate(t *testing.T) {
+	futureDate := time.Now().AddDate(0, 0, 30)
+	err := ValidateMeetDateForSchedule(ScheduleTypeDaysOut, &futureDate, time.Now())
+
+	if err != nil {
+		t.Errorf("ValidateMeetDateForSchedule() error = %v, want nil", err)
+	}
+}
+
+func TestValidateMeetDateForSchedule_DaysOutMeetDateToday(t *testing.T) {
+	// Meet date today should be valid (0 days out)
+	today := time.Now()
+	todayStart := date(today.Year(), today.Month(), today.Day())
+
+	err := ValidateMeetDateForSchedule(ScheduleTypeDaysOut, &todayStart, today)
+
+	if err != nil {
+		t.Errorf("ValidateMeetDateForSchedule() for today's date error = %v, want nil", err)
+	}
+}
+
+// ==================== HandleMeetDateChange Tests ====================
+
+func TestHandleMeetDateChange_MeetDateCleared(t *testing.T) {
+	oldDate := date(2024, time.June, 15)
+	now := date(2024, time.April, 1)
+
+	result, err := HandleMeetDateChange(&oldDate, nil, now, DefaultPhaseDurations())
+
+	if err != nil {
+		t.Fatalf("HandleMeetDateChange() error = %v", err)
+	}
+	if result.WeekNumber != 1 {
+		t.Errorf("WeekNumber = %d, want 1 (reset)", result.WeekNumber)
+	}
+	if result.DaysOut != -1 {
+		t.Errorf("DaysOut = %d, want -1 (no meet date)", result.DaysOut)
+	}
+	if result.IsPeaking {
+		t.Error("IsPeaking should be false when meet date cleared")
+	}
+}
+
+func TestHandleMeetDateChange_MeetDateMoved(t *testing.T) {
+	oldDate := date(2024, time.June, 15)
+	newDate := date(2024, time.July, 15) // Moved out by 30 days
+	now := date(2024, time.April, 1)
+
+	result, err := HandleMeetDateChange(&oldDate, &newDate, now, DefaultPhaseDurations())
+
+	if err != nil {
+		t.Fatalf("HandleMeetDateChange() error = %v", err)
+	}
+
+	// Should calculate based on new meet date
+	expectedDaysOut := GetDaysOut(newDate, now)
+	if result.DaysOut != expectedDaysOut {
+		t.Errorf("DaysOut = %d, want %d", result.DaysOut, expectedDaysOut)
+	}
+}
+
+func TestHandleMeetDateChange_NoOldMeetDate(t *testing.T) {
+	newDate := date(2024, time.June, 15)
+	now := date(2024, time.April, 1) // ~75 days out
+
+	result, err := HandleMeetDateChange(nil, &newDate, now, DefaultPhaseDurations())
+
+	if err != nil {
+		t.Fatalf("HandleMeetDateChange() error = %v", err)
+	}
+
+	if result.Phase != PhasePrep1 {
+		t.Errorf("Phase = %q, want %q", result.Phase, PhasePrep1)
+	}
+}
+
+// ==================== Integration Scenarios ====================
+
+func TestIntegration_FullProgramProgression(t *testing.T) {
+	// Test progressing through an entire 13-week program
+	meetDate := date(2024, time.June, 15)
+
+	// Start 90 days out (first day of program)
+	for daysOut := 90; daysOut >= 0; daysOut -= 7 {
+		now := meetDate.AddDate(0, 0, -daysOut)
+
+		input := EffectiveScheduleInput{
+			ScheduleType:   ScheduleTypeDaysOut,
+			MeetDate:       &meetDate,
+			Now:            now,
+			PhaseDurations: DefaultPhaseDurations(),
+		}
+
+		result, err := GetEffectiveSchedule(input)
+		if err != nil {
+			t.Fatalf("GetEffectiveSchedule() at %d days out error = %v", daysOut, err)
+		}
+
+		// Verify week progression
+		expectedWeek := (90-daysOut)/7 + 1
+		if expectedWeek > 13 {
+			expectedWeek = 13
+		}
+		if result.WeekNumber != expectedWeek {
+			t.Errorf("At %d days out: WeekNumber = %d, want %d", daysOut, result.WeekNumber, expectedWeek)
+		}
+
+		// Verify phase transitions happen at correct weeks
+		switch {
+		case result.WeekNumber <= 4:
+			if result.Phase != PhasePrep1 {
+				t.Errorf("Week %d should be Prep1, got %s", result.WeekNumber, result.Phase)
+			}
+		case result.WeekNumber <= 8:
+			if result.Phase != PhasePrep2 {
+				t.Errorf("Week %d should be Prep2, got %s", result.WeekNumber, result.Phase)
+			}
+		default:
+			if result.Phase != PhaseCompetition {
+				t.Errorf("Week %d should be Competition, got %s", result.WeekNumber, result.Phase)
+			}
+			if !result.IsPeaking {
+				t.Errorf("Week %d should have IsPeaking=true", result.WeekNumber)
+			}
+		}
+	}
+}
+
+func TestIntegration_MeetDateMidProgramChange(t *testing.T) {
+	// Scenario: User is in Prep2 (week 6), then meet date gets pushed back 2 weeks
+	originalMeetDate := date(2024, time.June, 15)
+	now := originalMeetDate.AddDate(0, 0, -49) // Week 6, Prep2
+
+	// Get current position
+	input := EffectiveScheduleInput{
+		ScheduleType:   ScheduleTypeDaysOut,
+		MeetDate:       &originalMeetDate,
+		Now:            now,
+		PhaseDurations: DefaultPhaseDurations(),
+	}
+
+	beforeChange, err := GetEffectiveSchedule(input)
+	if err != nil {
+		t.Fatalf("Before change: %v", err)
+	}
+	if beforeChange.WeekNumber != 6 {
+		t.Fatalf("Before change: WeekNumber = %d, want 6", beforeChange.WeekNumber)
+	}
+
+	// Meet date pushed back 2 weeks
+	newMeetDate := originalMeetDate.AddDate(0, 0, 14)
+
+	afterChange, err := HandleMeetDateChange(&originalMeetDate, &newMeetDate, now, DefaultPhaseDurations())
+	if err != nil {
+		t.Fatalf("After change: %v", err)
+	}
+
+	// Should now be 2 weeks earlier in the program
+	if afterChange.WeekNumber != 4 {
+		t.Errorf("After change: WeekNumber = %d, want 4 (pushed back)", afterChange.WeekNumber)
+	}
+	if afterChange.Phase != PhasePrep1 {
+		t.Errorf("After change: Phase = %s, want Prep1 (back to earlier phase)", afterChange.Phase)
+	}
+}
