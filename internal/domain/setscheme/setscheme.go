@@ -28,6 +28,8 @@ const (
 	TypeGreySkull SetSchemeType = "GREYSKULL"
 	// TypeFatigueDrop generates sets with progressive weight drops until target RPE is reached.
 	TypeFatigueDrop SetSchemeType = "FATIGUE_DROP"
+	// TypeMRS generates max rep sets until total rep target is reached (GZCL-style).
+	TypeMRS SetSchemeType = "MRS"
 )
 
 // ValidSchemeTypes contains all valid scheme types for validation.
@@ -39,6 +41,7 @@ var ValidSchemeTypes = map[SetSchemeType]bool{
 	TypeRepRange:    true,
 	TypeGreySkull:   true,
 	TypeFatigueDrop: true,
+	TypeMRS:         true,
 }
 
 // Errors for set scheme operations.

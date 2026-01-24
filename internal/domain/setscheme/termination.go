@@ -17,6 +17,8 @@ const (
 	TerminationTypeRepFailure TerminationConditionType = "REP_FAILURE"
 	// TerminationTypeMaxSets stops after a maximum number of sets (safety limit).
 	TerminationTypeMaxSets TerminationConditionType = "MAX_SETS"
+	// TerminationTypeTotalReps stops when cumulative reps reach target.
+	TerminationTypeTotalReps TerminationConditionType = "TOTAL_REPS"
 )
 
 // ErrInvalidTermination indicates invalid termination condition configuration.
@@ -177,6 +179,52 @@ func (m *MaxSets) MarshalJSON() ([]byte, error) {
 	})
 }
 
+// TotalReps stops when cumulative reps reach or exceed a target.
+// Common use case: "Do sets until you accumulate 25 total reps".
+type TotalReps struct {
+	// Target is the total reps at or above which we terminate (required, >= 1).
+	Target int `json:"target"`
+}
+
+// NewTotalReps creates a new TotalReps condition.
+func NewTotalReps(target int) (*TotalReps, error) {
+	c := &TotalReps{Target: target}
+	if err := c.Validate(); err != nil {
+		return nil, err
+	}
+	return c, nil
+}
+
+// Type returns the discriminator string for TotalReps.
+func (t *TotalReps) Type() TerminationConditionType {
+	return TerminationTypeTotalReps
+}
+
+// ShouldTerminate returns true if TotalReps >= Target.
+func (t *TotalReps) ShouldTerminate(ctx TerminationContext) bool {
+	return ctx.TotalReps >= t.Target
+}
+
+// Validate validates the TotalReps configuration.
+func (t *TotalReps) Validate() error {
+	if t.Target < 1 {
+		return fmt.Errorf("%w: target must be >= 1, got %d", ErrInvalidTermination, t.Target)
+	}
+	return nil
+}
+
+// MarshalJSON implements json.Marshaler for TotalReps.
+func (t *TotalReps) MarshalJSON() ([]byte, error) {
+	type Alias TotalReps
+	return json.Marshal(&struct {
+		Type TerminationConditionType `json:"type"`
+		*Alias
+	}{
+		Type:  TerminationTypeTotalReps,
+		Alias: (*Alias)(t),
+	})
+}
+
 // TerminationConditionEnvelope is the JSON wrapper for polymorphic TerminationCondition serialization.
 type TerminationConditionEnvelope struct {
 	Type TerminationConditionType `json:"type"`
@@ -219,6 +267,15 @@ func UnmarshalTerminationCondition(data json.RawMessage) (TerminationCondition, 
 		var cond MaxSets
 		if err := json.Unmarshal(data, &cond); err != nil {
 			return nil, fmt.Errorf("failed to unmarshal MaxSets: %w", err)
+		}
+		if err := cond.Validate(); err != nil {
+			return nil, err
+		}
+		return &cond, nil
+	case TerminationTypeTotalReps:
+		var cond TotalReps
+		if err := json.Unmarshal(data, &cond); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal TotalReps: %w", err)
 		}
 		if err := cond.Validate(); err != nil {
 			return nil, err
