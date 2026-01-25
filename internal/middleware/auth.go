@@ -5,6 +5,7 @@ import (
 	"context"
 	"log"
 	"net/http"
+	"os"
 	"strings"
 )
 
@@ -16,11 +17,35 @@ const (
 	UserIDKey contextKey = "user_id"
 	// IsAdminKey is the context key for the admin flag.
 	IsAdminKey contextKey = "is_admin"
+	// UserKey is the context key for the full user object.
+	UserKey contextKey = "user"
 )
+
+// AuthUser represents a user in the context for middleware purposes.
+// This is separate from the auth.User to avoid circular dependencies.
+type AuthUser struct {
+	ID      string
+	Email   string
+	Name    string
+	IsAdmin bool
+}
+
+// SessionValidator validates session tokens and returns user information.
+type SessionValidator interface {
+	ValidateSession(ctx context.Context, token string) (*AuthUser, error)
+}
 
 // GetUserID retrieves the authenticated user ID from the request context.
 func GetUserID(r *http.Request) string {
 	if id, ok := r.Context().Value(UserIDKey).(string); ok {
+		return id
+	}
+	return ""
+}
+
+// UserIDFromContext retrieves the authenticated user ID from a context.
+func UserIDFromContext(ctx context.Context) string {
+	if id, ok := ctx.Value(UserIDKey).(string); ok {
 		return id
 	}
 	return ""
@@ -34,33 +59,93 @@ func IsAdmin(r *http.Request) bool {
 	return false
 }
 
+// IsAdminFromContext checks if the authenticated user is an admin from context.
+func IsAdminFromContext(ctx context.Context) bool {
+	if isAdmin, ok := ctx.Value(IsAdminKey).(bool); ok {
+		return isAdmin
+	}
+	return false
+}
+
+// UserFromContext retrieves the full user from a context.
+func UserFromContext(ctx context.Context) *AuthUser {
+	if user, ok := ctx.Value(UserKey).(*AuthUser); ok {
+		return user
+	}
+	return nil
+}
+
 // AuthConfig holds configuration for the authentication middleware.
 type AuthConfig struct {
 	// WriteJSON is a function to write JSON error responses.
 	WriteError func(w http.ResponseWriter, status int, message string)
+	// SessionValidator validates session tokens.
+	SessionValidator SessionValidator
+}
+
+// isTestMode checks if the application is running in test mode.
+func isTestMode() bool {
+	return os.Getenv("POWERPRO_TEST_MODE") == "true"
 }
 
 // RequireAuth creates middleware that requires authentication.
-// It extracts user ID from the Authorization header (Bearer token) or X-User-ID header.
-// The X-Admin header is used to indicate admin status.
-// This is temporary until a proper session-based auth system is implemented.
+// It extracts user ID from the Authorization header (Bearer token) and validates via the auth service.
+// In test mode (POWERPRO_TEST_MODE=true), falls back to X-User-ID and X-Admin headers.
 func RequireAuth(cfg AuthConfig) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			userID := extractUserID(r)
-			if userID == "" {
-				log.Printf("AUTH: Unauthorized request to %s - no user context", r.URL.Path)
-				cfg.WriteError(w, http.StatusUnauthorized, "Authentication required")
-				return
+			ctx := r.Context()
+
+			// Try Bearer token authentication first
+			authHeader := r.Header.Get("Authorization")
+			if strings.HasPrefix(authHeader, "Bearer ") {
+				token := strings.TrimPrefix(authHeader, "Bearer ")
+				if token != "" && cfg.SessionValidator != nil {
+					user, err := cfg.SessionValidator.ValidateSession(ctx, token)
+					if err != nil {
+						log.Printf("AUTH: Invalid session token for %s: %v", r.URL.Path, err)
+						cfg.WriteError(w, http.StatusUnauthorized, "Invalid or expired session")
+						return
+					}
+
+					// Set user info in context
+					ctx = context.WithValue(ctx, UserIDKey, user.ID)
+					ctx = context.WithValue(ctx, IsAdminKey, user.IsAdmin)
+					ctx = context.WithValue(ctx, UserKey, user)
+
+					next.ServeHTTP(w, r.WithContext(ctx))
+					return
+				}
 			}
 
-			isAdmin := r.Header.Get("X-Admin") == "true"
+			// Fall back to test mode headers if no valid Bearer token
+			if isTestMode() || cfg.SessionValidator == nil {
+				userID := r.Header.Get("X-User-ID")
+				if userID == "" {
+					// Also check Bearer token as user ID for backward compatibility in tests
+					if strings.HasPrefix(authHeader, "Bearer ") {
+						userID = strings.TrimPrefix(authHeader, "Bearer ")
+					}
+				}
 
-			// Add user info to context
-			ctx := context.WithValue(r.Context(), UserIDKey, userID)
-			ctx = context.WithValue(ctx, IsAdminKey, isAdmin)
+				if userID != "" {
+					isAdmin := r.Header.Get("X-Admin") == "true"
 
-			next.ServeHTTP(w, r.WithContext(ctx))
+					ctx = context.WithValue(ctx, UserIDKey, userID)
+					ctx = context.WithValue(ctx, IsAdminKey, isAdmin)
+					// Create a minimal user for test mode
+					ctx = context.WithValue(ctx, UserKey, &AuthUser{
+						ID:      userID,
+						IsAdmin: isAdmin,
+					})
+
+					next.ServeHTTP(w, r.WithContext(ctx))
+					return
+				}
+			}
+
+			log.Printf("AUTH: Unauthorized request to %s - no user context", r.URL.Path)
+			cfg.WriteError(w, http.StatusUnauthorized, "Authentication required")
 		})
 	}
 }
@@ -133,25 +218,6 @@ func RequireOwnerOrAdmin(cfg AuthConfig, ownerFunc ResourceOwnerFunc) func(http.
 			next.ServeHTTP(w, r)
 		})
 	}
-}
-
-// extractUserID extracts the user ID from the request.
-// It checks the Authorization header first (Bearer token), then X-User-ID header.
-// This is temporary until proper session-based auth is implemented.
-func extractUserID(r *http.Request) string {
-	// Check Authorization header (Bearer token)
-	authHeader := r.Header.Get("Authorization")
-	if strings.HasPrefix(authHeader, "Bearer ") {
-		// For now, treat the bearer token as the user ID
-		// This will be replaced with session lookup later
-		token := strings.TrimPrefix(authHeader, "Bearer ")
-		if token != "" {
-			return token
-		}
-	}
-
-	// Fall back to X-User-ID header (for testing/development)
-	return r.Header.Get("X-User-ID")
 }
 
 // ChainMiddleware chains multiple middleware functions together.
