@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/waynenilsen/power-pro-v3/internal/api"
+	"github.com/waynenilsen/power-pro-v3/internal/auth"
 	"github.com/waynenilsen/power-pro-v3/internal/domain/event"
 	"github.com/waynenilsen/power-pro-v3/internal/domain/loadstrategy"
 	"github.com/waynenilsen/power-pro-v3/internal/domain/setscheme"
@@ -50,6 +51,8 @@ type Server struct {
 	strategyFactory            *loadstrategy.StrategyFactory
 	schemeFactory              *setscheme.SchemeFactory
 	eventBus                   *event.Bus
+	authService                *auth.Service
+	authValidator              *auth.SessionValidatorAdapter
 }
 
 // New creates a new Server instance.
@@ -91,6 +94,12 @@ func New(cfg Config) *Server {
 	sessionService := service.NewSessionService(prescriptionRepo, loggedSetRepo)
 	eventBus := event.NewBus()
 
+	// Auth service and validator
+	userRepo := auth.NewSQLiteUserRepository(cfg.DB)
+	authSessionRepo := auth.NewSQLiteSessionRepository(cfg.DB)
+	authService := auth.NewService(userRepo, authSessionRepo)
+	authValidator := auth.NewSessionValidatorAdapter(authService)
+
 	s := &Server{
 		config:               cfg,
 		liftRepo:             liftRepo,
@@ -115,6 +124,8 @@ func New(cfg Config) *Server {
 		strategyFactory:            strategyFactory,
 		schemeFactory:              schemeFactory,
 		eventBus:                   eventBus,
+		authService:                authService,
+		authValidator:              authValidator,
 	}
 
 	mux := http.NewServeMux()
@@ -144,9 +155,13 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	dailyLookupHandler := api.NewDailyLookupHandler(s.dailyLookupRepo)
 	programHandler := api.NewProgramHandler(s.programRepo, s.cycleRepo)
 
+	// Auth handler (routes don't require auth middleware)
+	authHandler := api.NewAuthHandler(s.authService)
+
 	// Auth middleware configuration
 	authCfg := middleware.AuthConfig{
-		WriteError: api.WriteError,
+		WriteError:       api.WriteError,
+		SessionValidator: s.authValidator,
 	}
 
 	// Create middleware
@@ -184,6 +199,12 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(`{"status":"ok"}`))
 	})
+
+	// Auth routes (no auth required for register/login)
+	mux.HandleFunc("POST /auth/register", authHandler.Register)
+	mux.HandleFunc("POST /auth/login", authHandler.Login)
+	mux.Handle("POST /auth/logout", withAuth(authHandler.Logout))
+	mux.Handle("GET /auth/me", withAuth(authHandler.Me))
 
 	// Lift routes (NFR-007):
 	// - All authenticated users can read lift data

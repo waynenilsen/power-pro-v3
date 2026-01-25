@@ -776,9 +776,30 @@ func TestBearerTokenAuthentication(t *testing.T) {
 	}
 	defer ts.Close()
 
+	// Register and login to get a real token for Bearer auth tests
+	registerBody := `{"email": "bearer@example.com", "password": "password123"}`
+	regReq, _ := http.NewRequest(http.MethodPost, ts.URL("/auth/register"), bytes.NewBufferString(registerBody))
+	regReq.Header.Set("Content-Type", "application/json")
+	regResp, _ := http.DefaultClient.Do(regReq)
+	regResp.Body.Close()
+
+	loginBody := `{"email": "bearer@example.com", "password": "password123"}`
+	loginReq, _ := http.NewRequest(http.MethodPost, ts.URL("/auth/login"), bytes.NewBufferString(loginBody))
+	loginReq.Header.Set("Content-Type", "application/json")
+	loginResp, _ := http.DefaultClient.Do(loginReq)
+
+	var loginResult struct {
+		Data struct {
+			Token string `json:"token"`
+		} `json:"data"`
+	}
+	json.NewDecoder(loginResp.Body).Decode(&loginResult)
+	loginResp.Body.Close()
+	realToken := loginResult.Data.Token
+
 	t.Run("can authenticate with Bearer token", func(t *testing.T) {
 		req, _ := http.NewRequest(http.MethodGet, ts.URL("/lifts"), nil)
-		req.Header.Set("Authorization", "Bearer "+testutil.TestUserID)
+		req.Header.Set("Authorization", "Bearer "+realToken)
 
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {

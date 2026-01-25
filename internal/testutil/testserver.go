@@ -26,7 +26,12 @@ type TestServer struct {
 }
 
 // NewTestServer creates and starts a new test server with an isolated database.
+// It automatically enables test mode (POWERPRO_TEST_MODE=true) to allow X-User-ID
+// and X-Admin headers to work for authentication in tests.
 func NewTestServer() (*TestServer, error) {
+	// Enable test mode for X-User-ID header authentication
+	os.Setenv("POWERPRO_TEST_MODE", "true")
+
 	// Find migrations path relative to project root
 	migrationsPath, err := findMigrationsPath()
 	if err != nil {
