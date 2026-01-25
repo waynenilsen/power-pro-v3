@@ -304,7 +304,9 @@ func TestNSunsCAP3Program(t *testing.T) {
 		t.Logf("Week 1 Day 1: Bench Volume at %.1f lbs (%d sets)", bench.Sets[0].Weight, len(bench.Sets))
 	})
 
-	// Advance to Week 1 Day 3 (Squat Medium Volume)
+	// Advance to Week 1 Day 3 (Squat Medium Volume) using explicit state machine flow
+	w1d1Session := startWorkoutSession(t, ts, userID)
+	finishWorkoutSession(t, ts, w1d1Session, userID)
 	advanceUserState(t, ts, userID)
 
 	t.Run("Week 1 Day 3 generates Squat Medium Volume workout", func(t *testing.T) {
@@ -335,7 +337,9 @@ func TestNSunsCAP3Program(t *testing.T) {
 		t.Logf("Week 1 Day 3: Squat Medium Volume at %.1f lbs", squat.Sets[0].Weight)
 	})
 
-	// Advance to Week 1 Day 5 (Deadlift High Intensity AMRAP)
+	// Advance to Week 1 Day 5 (Deadlift High Intensity AMRAP) using explicit state machine flow
+	w1d3Session := startWorkoutSession(t, ts, userID)
+	finishWorkoutSession(t, ts, w1d3Session, userID)
 	advanceUserState(t, ts, userID)
 
 	t.Run("Week 1 Day 5 generates Deadlift High Intensity AMRAP", func(t *testing.T) {
@@ -415,7 +419,7 @@ func TestNSunsCAP3Program(t *testing.T) {
 		logResp.Body.Close()
 	})
 
-	// Finish session and advance to Week 2
+	// Finish session and advance to Week 2 using explicit state machine flow
 	finishWorkoutSession(t, ts, sessionW1D5, userID)
 	advanceUserState(t, ts, userID)
 
@@ -450,7 +454,9 @@ func TestNSunsCAP3Program(t *testing.T) {
 		t.Logf("Week 2 Day 1: Bench Medium Volume at %.1f lbs", bench.Sets[0].Weight)
 	})
 
-	// Advance to Week 2 Day 3 (Squat High Intensity)
+	// Advance to Week 2 Day 3 (Squat High Intensity) using explicit state machine flow
+	w2d1Session := startWorkoutSession(t, ts, userID)
+	finishWorkoutSession(t, ts, w2d1Session, userID)
 	advanceUserState(t, ts, userID)
 
 	t.Run("Week 2 Day 3 generates Squat High Intensity AMRAP", func(t *testing.T) {
@@ -525,9 +531,13 @@ func TestNSunsCAP3Program(t *testing.T) {
 		logResp.Body.Close()
 	})
 
-	// Finish session and advance through Week 2 Day 5 to Week 3
+	// Finish session and advance through Week 2 Day 5 to Week 3 using explicit state machine flow
 	finishWorkoutSession(t, ts, sessionW2D3, userID)
 	advanceUserState(t, ts, userID) // W2 D5
+
+	// Complete W2 D5 workout
+	w2d5Session := startWorkoutSession(t, ts, userID)
+	finishWorkoutSession(t, ts, w2d5Session, userID)
 	advanceUserState(t, ts, userID) // W3 D1
 
 	// =============================================================================
@@ -609,10 +619,17 @@ func TestNSunsCAP3Program(t *testing.T) {
 		logResp.Body.Close()
 	})
 
-	// Finish session and advance through Week 3 to end of cycle
+	// Finish session and advance through Week 3 to end of cycle using explicit state machine flow
 	finishWorkoutSession(t, ts, sessionW3D1, userID)
 	advanceUserState(t, ts, userID) // W3 D3
+
+	// Complete remaining Week 3 workouts
+	w3d3Session := startWorkoutSession(t, ts, userID)
+	finishWorkoutSession(t, ts, w3d3Session, userID)
 	advanceUserState(t, ts, userID) // W3 D5
+
+	w3d5Session := startWorkoutSession(t, ts, userID)
+	finishWorkoutSession(t, ts, w3d5Session, userID)
 	advanceUserState(t, ts, userID) // New cycle W1 D1
 
 	// =============================================================================
@@ -624,7 +641,6 @@ func TestNSunsCAP3Program(t *testing.T) {
 		triggerBody := ManualTriggerRequest{
 			ProgressionID: cycleProgID,
 			LiftID:        deadliftID,
-			Force:         true,
 		}
 		triggerResp, err := authPostTrigger(ts.URL("/users/"+userID+"/progressions/trigger"), triggerBody, userID)
 		if err != nil {

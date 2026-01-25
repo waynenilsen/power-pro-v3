@@ -508,8 +508,10 @@ func TestRTSIntermediatePhaseTransitions(t *testing.T) {
 		t.Logf("Week 1 (Baseline): %s", workout.Data.DaySlug)
 	})
 
-	// Advance through Week 1 (4 days)
+	// Advance through Week 1 (4 days) using explicit state machine flow
 	for i := 0; i < 4; i++ {
+		sid := startWorkoutSession(t, ts, userID)
+		finishWorkoutSession(t, ts, sid, userID)
 		advanceUserState(t, ts, userID)
 	}
 
@@ -525,8 +527,10 @@ func TestRTSIntermediatePhaseTransitions(t *testing.T) {
 		t.Logf("Week 2 (Development): %s", workout.Data.DaySlug)
 	})
 
-	// Advance through Weeks 2-4 (3 weeks x 4 days = 12 days)
+	// Advance through Weeks 2-4 (3 weeks x 4 days = 12 days) using explicit state machine flow
 	for i := 0; i < 12; i++ {
+		sid := startWorkoutSession(t, ts, userID)
+		finishWorkoutSession(t, ts, sid, userID)
 		advanceUserState(t, ts, userID)
 	}
 
@@ -542,8 +546,10 @@ func TestRTSIntermediatePhaseTransitions(t *testing.T) {
 		t.Logf("Week 5 (Intensification): %s", workout.Data.DaySlug)
 	})
 
-	// Advance through Weeks 5-8 (4 weeks x 4 days = 16 days)
+	// Advance through Weeks 5-8 (4 weeks x 4 days = 16 days) using explicit state machine flow
 	for i := 0; i < 16; i++ {
+		sid := startWorkoutSession(t, ts, userID)
+		finishWorkoutSession(t, ts, sid, userID)
 		advanceUserState(t, ts, userID)
 	}
 
@@ -611,8 +617,10 @@ func TestRTSIntermediateFourDayStructure(t *testing.T) {
 			daysSeen[workout.Data.DaySlug] = true
 			t.Logf("Day %d: %s with %d exercises", day+1, workout.Data.DaySlug, len(workout.Data.Exercises))
 
-			// Advance to next day
+			// Advance to next day using explicit state machine flow
 			if day < 3 {
+				sid := startWorkoutSession(t, ts, userID)
+				finishWorkoutSession(t, ts, sid, userID)
 				advanceUserState(t, ts, userID)
 			}
 		}
@@ -663,8 +671,10 @@ func TestRTSIntermediateWeekProgression(t *testing.T) {
 			t.Errorf("Expected week 1, got %d", workout.Data.WeekNumber)
 		}
 
-		// Advance through all 4 days of week 1
+		// Advance through all 4 days of week 1 using explicit state machine flow
 		for i := 0; i < 4; i++ {
+			sid := startWorkoutSession(t, ts, userID)
+			finishWorkoutSession(t, ts, sid, userID)
 			advanceUserState(t, ts, userID)
 		}
 
@@ -707,8 +717,10 @@ func TestRTSIntermediateFatigueDropScheme(t *testing.T) {
 	enrollResp, _ := userPost(ts.URL("/users/"+userID+"/program"), enrollBody, userID)
 	enrollResp.Body.Close()
 
-	// Advance to Week 2 (Development phase with fatigue drops)
+	// Advance to Week 2 (Development phase with fatigue drops) using explicit state machine flow
 	for i := 0; i < 4; i++ {
+		sid := startWorkoutSession(t, ts, userID)
+		finishWorkoutSession(t, ts, sid, userID)
 		advanceUserState(t, ts, userID)
 	}
 
@@ -774,8 +786,10 @@ func TestRTSIntermediatePeakingPhase(t *testing.T) {
 	enrollResp, _ := userPost(ts.URL("/users/"+userID+"/program"), enrollBody, userID)
 	enrollResp.Body.Close()
 
-	// Advance to Week 9 (8 weeks x 4 days = 32 days)
+	// Advance to Week 9 (8 weeks x 4 days = 32 days) using explicit state machine flow
 	for i := 0; i < 32; i++ {
+		sid := startWorkoutSession(t, ts, userID)
+		finishWorkoutSession(t, ts, sid, userID)
 		advanceUserState(t, ts, userID)
 	}
 

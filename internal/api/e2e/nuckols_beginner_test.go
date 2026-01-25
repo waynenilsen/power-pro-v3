@@ -482,7 +482,8 @@ func TestNuckolsBeginnerProgram(t *testing.T) {
 		}
 	})
 
-	// Advance to Day 2
+	// Advance to Day 2 using explicit state machine flow
+	finishWorkoutSession(t, ts, sessionID, userID)
 	advanceUserState(t, ts, userID)
 
 	// =============================================================================
@@ -536,7 +537,9 @@ func TestNuckolsBeginnerProgram(t *testing.T) {
 		}
 	})
 
-	// Advance to Day 3
+	// Advance to Day 3 using explicit state machine flow
+	day2Session := startWorkoutSession(t, ts, userID)
+	finishWorkoutSession(t, ts, day2Session, userID)
 	advanceUserState(t, ts, userID)
 
 	// =============================================================================
@@ -598,16 +601,14 @@ func TestNuckolsBeginnerProgram(t *testing.T) {
 		}
 	})
 
-	// Advance through remaining weeks to Week 4
+	// Advance through remaining weeks to Week 4 using explicit state machine flow
 	// Currently at W1D3, need to advance to W4D1
 	// W1D3 -> W2D1 -> W2D2 -> W2D3 -> W3D1 -> W3D2 -> W3D3 -> W4D1
-	advanceUserState(t, ts, userID) // W2 D1
-	advanceUserState(t, ts, userID) // W2 D2
-	advanceUserState(t, ts, userID) // W2 D3
-	advanceUserState(t, ts, userID) // W3 D1
-	advanceUserState(t, ts, userID) // W3 D2
-	advanceUserState(t, ts, userID) // W3 D3
-	advanceUserState(t, ts, userID) // W4 D1
+	for i := 0; i < 7; i++ {
+		sid := startWorkoutSession(t, ts, userID)
+		finishWorkoutSession(t, ts, sid, userID)
+		advanceUserState(t, ts, userID)
+	}
 
 	// =============================================================================
 	// Week 4, Day 1: Verify deload week (70% for squat)
@@ -634,10 +635,12 @@ func TestNuckolsBeginnerProgram(t *testing.T) {
 		t.Logf("Week 4 (deload) workout generated successfully")
 	})
 
-	// Complete week 4
-	advanceUserState(t, ts, userID) // W4 D2
-	advanceUserState(t, ts, userID) // W4 D3
-	advanceUserState(t, ts, userID) // Back to W1 D1
+	// Complete week 4 using explicit state machine flow
+	for i := 0; i < 3; i++ {
+		sid := startWorkoutSession(t, ts, userID)
+		finishWorkoutSession(t, ts, sid, userID)
+		advanceUserState(t, ts, userID)
+	} // Back to W1 D1
 
 	// =============================================================================
 	// Verify 4-week cycle repeats

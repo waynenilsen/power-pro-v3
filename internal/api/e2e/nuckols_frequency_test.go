@@ -286,13 +286,17 @@ func TestNuckolsHighFrequencyProgram(t *testing.T) {
 		}
 	})
 
-	// Advance through Weeks 1-2
+	// Advance through Weeks 1-2 using explicit state machine flow
 	// Week 1: Mon -> Tue -> Wed -> Thu -> Fri
 	for i := 0; i < 5; i++ {
+		sessionID := startWorkoutSession(t, ts, userID)
+		finishWorkoutSession(t, ts, sessionID, userID)
 		advanceUserState(t, ts, userID)
 	}
 	// Week 2: Mon -> Tue -> Wed -> Thu -> Fri
 	for i := 0; i < 5; i++ {
+		sessionID := startWorkoutSession(t, ts, userID)
+		finishWorkoutSession(t, ts, sessionID, userID)
 		advanceUserState(t, ts, userID)
 	}
 
@@ -300,10 +304,12 @@ func TestNuckolsHighFrequencyProgram(t *testing.T) {
 	// WEEK 3: AMRAP session on Thursday
 	// =============================================================================
 	t.Run("Week 3 Thursday has AMRAP set at 85%", func(t *testing.T) {
-		// Advance to Thursday (Mon -> Tue -> Wed -> Thu)
-		advanceUserState(t, ts, userID) // Mon
-		advanceUserState(t, ts, userID) // Tue
-		advanceUserState(t, ts, userID) // Wed
+		// Advance to Thursday (Mon -> Tue -> Wed -> Thu) using explicit state machine flow
+		for i := 0; i < 3; i++ {
+			sid := startWorkoutSession(t, ts, userID)
+			finishWorkoutSession(t, ts, sid, userID)
+			advanceUserState(t, ts, userID)
+		}
 
 		workoutResp, err := userGet(ts.URL("/users/"+userID+"/workout"), userID)
 		if err != nil {
@@ -382,9 +388,13 @@ func TestNuckolsHighFrequencyProgram(t *testing.T) {
 		logResp.Body.Close()
 	})
 
-	// Finish session and advance to end of cycle
+	// Finish session and advance to end of cycle using explicit state machine flow
 	finishWorkoutSession(t, ts, sessionID, userID)
 	advanceUserState(t, ts, userID) // Thu -> Fri
+
+	// Finish Friday workout
+	friSession := startWorkoutSession(t, ts, userID)
+	finishWorkoutSession(t, ts, friSession, userID)
 	advanceUserState(t, ts, userID) // Fri -> Week 1 Mon (new cycle)
 
 	// =============================================================================
@@ -394,7 +404,6 @@ func TestNuckolsHighFrequencyProgram(t *testing.T) {
 		triggerBody := ManualTriggerRequest{
 			ProgressionID: cycleProgID,
 			LiftID:        squatID,
-			Force:         true,
 		}
 		triggerResp, err := authPostTrigger(ts.URL("/users/"+userID+"/progressions/trigger"), triggerBody, userID)
 		if err != nil {
