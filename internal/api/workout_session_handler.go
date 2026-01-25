@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/waynenilsen/power-pro-v3/internal/domain/event"
+	"github.com/waynenilsen/power-pro-v3/internal/domain/userprogramstate"
 	"github.com/waynenilsen/power-pro-v3/internal/domain/workoutsession"
 	apperrors "github.com/waynenilsen/power-pro-v3/internal/errors"
 	"github.com/waynenilsen/power-pro-v3/internal/middleware"
@@ -82,6 +83,12 @@ func (h *WorkoutSessionHandler) Start(w http.ResponseWriter, r *http.Request) {
 	}
 	if enrollment == nil {
 		writeDomainError(w, apperrors.NewNotEnrolled())
+		return
+	}
+
+	// Check if enrollment is in ACTIVE state (can't start workout when BETWEEN_CYCLES)
+	if enrollment.State.EnrollmentStatus != userprogramstate.EnrollmentStatusActive {
+		writeDomainError(w, apperrors.NewInvalidEnrollmentState("start workout", string(enrollment.State.EnrollmentStatus)))
 		return
 	}
 
