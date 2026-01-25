@@ -598,3 +598,184 @@ func TestIsTestMode(t *testing.T) {
 		assert.False(t, isTestMode())
 	})
 }
+
+// expiredSessionValidator simulates a session validator that always returns "session expired" errors.
+// This is used to test HTTP-layer handling of expired sessions.
+type expiredSessionValidator struct{}
+
+func (e *expiredSessionValidator) ValidateSession(ctx context.Context, token string) (*AuthUser, error) {
+	return nil, errors.New("session expired")
+}
+
+// TestRequireAuth_ExpiredSession tests that expired sessions return 401 Unauthorized at the HTTP layer.
+// This addresses REQ-TD2-004: Session expiration handling.
+func TestRequireAuth_ExpiredSession(t *testing.T) {
+	t.Run("expired session returns 401 Unauthorized", func(t *testing.T) {
+		errWriter := &mockErrorWriter{}
+		cfg := AuthConfig{
+			WriteError:       errWriter.writeError,
+			SessionValidator: &expiredSessionValidator{},
+		}
+
+		handler := RequireAuth(cfg)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			t.Fatal("handler should not be called for expired session")
+		}))
+
+		req := httptest.NewRequest(http.MethodGet, "/protected", nil)
+		req.Header.Set("Authorization", "Bearer expired-session-token")
+
+		rr := httptest.NewRecorder()
+		handler.ServeHTTP(rr, req)
+
+		assert.Equal(t, http.StatusUnauthorized, rr.Code)
+		assert.Equal(t, "Invalid or expired session", errWriter.message)
+	})
+
+	t.Run("expired session with various HTTP methods all return 401", func(t *testing.T) {
+		methods := []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodDelete, http.MethodPatch}
+
+		for _, method := range methods {
+			t.Run(method, func(t *testing.T) {
+				errWriter := &mockErrorWriter{}
+				cfg := AuthConfig{
+					WriteError:       errWriter.writeError,
+					SessionValidator: &expiredSessionValidator{},
+				}
+
+				handler := RequireAuth(cfg)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					t.Fatal("handler should not be called")
+				}))
+
+				req := httptest.NewRequest(method, "/protected", nil)
+				req.Header.Set("Authorization", "Bearer expired-token")
+
+				rr := httptest.NewRecorder()
+				handler.ServeHTTP(rr, req)
+
+				assert.Equal(t, http.StatusUnauthorized, rr.Code)
+			})
+		}
+	})
+
+	t.Run("expired session does not set user context values", func(t *testing.T) {
+		errWriter := &mockErrorWriter{}
+		cfg := AuthConfig{
+			WriteError:       errWriter.writeError,
+			SessionValidator: &expiredSessionValidator{},
+		}
+
+		var contextChecked bool
+		handler := RequireAuth(cfg)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			contextChecked = true
+			// This should not be reached
+		}))
+
+		req := httptest.NewRequest(http.MethodGet, "/protected", nil)
+		req.Header.Set("Authorization", "Bearer expired-token")
+
+		rr := httptest.NewRecorder()
+		handler.ServeHTTP(rr, req)
+
+		assert.Equal(t, http.StatusUnauthorized, rr.Code)
+		assert.False(t, contextChecked, "handler should not have been called")
+	})
+}
+
+// stateTrackingValidator tracks validation attempts for testing multiple calls.
+type stateTrackingValidator struct {
+	validTokens   map[string]*AuthUser
+	callCount     int
+	lastToken     string
+	expiredTokens map[string]bool
+}
+
+func newStateTrackingValidator() *stateTrackingValidator {
+	return &stateTrackingValidator{
+		validTokens:   make(map[string]*AuthUser),
+		expiredTokens: make(map[string]bool),
+	}
+}
+
+func (s *stateTrackingValidator) ValidateSession(ctx context.Context, token string) (*AuthUser, error) {
+	s.callCount++
+	s.lastToken = token
+
+	if s.expiredTokens[token] {
+		return nil, errors.New("session expired")
+	}
+
+	user, ok := s.validTokens[token]
+	if !ok {
+		return nil, errors.New("invalid session")
+	}
+	return user, nil
+}
+
+// TestRequireAuth_ExpiredSessionCannotBeReused verifies that expired sessions
+// continue to be rejected on subsequent requests.
+func TestRequireAuth_ExpiredSessionCannotBeReused(t *testing.T) {
+	t.Run("multiple requests with expired token all fail", func(t *testing.T) {
+		validator := newStateTrackingValidator()
+		validator.expiredTokens["expired-token"] = true
+
+		errWriter := &mockErrorWriter{}
+		cfg := AuthConfig{
+			WriteError:       errWriter.writeError,
+			SessionValidator: validator,
+		}
+
+		handler := RequireAuth(cfg)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		}))
+
+		// Make multiple requests with the same expired token
+		for i := 0; i < 5; i++ {
+			req := httptest.NewRequest(http.MethodGet, "/protected", nil)
+			req.Header.Set("Authorization", "Bearer expired-token")
+
+			rr := httptest.NewRecorder()
+			handler.ServeHTTP(rr, req)
+
+			assert.Equal(t, http.StatusUnauthorized, rr.Code, "request %d should be unauthorized", i+1)
+		}
+
+		assert.Equal(t, 5, validator.callCount, "validator should be called for each request")
+	})
+
+	t.Run("valid token works while expired token fails", func(t *testing.T) {
+		validator := newStateTrackingValidator()
+		validator.validTokens["valid-token"] = &AuthUser{ID: "user-123", Email: "test@example.com"}
+		validator.expiredTokens["expired-token"] = true
+
+		errWriter := &mockErrorWriter{}
+		cfg := AuthConfig{
+			WriteError:       errWriter.writeError,
+			SessionValidator: validator,
+		}
+
+		handler := RequireAuth(cfg)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		}))
+
+		// Request with expired token - should fail
+		req1 := httptest.NewRequest(http.MethodGet, "/protected", nil)
+		req1.Header.Set("Authorization", "Bearer expired-token")
+		rr1 := httptest.NewRecorder()
+		handler.ServeHTTP(rr1, req1)
+		assert.Equal(t, http.StatusUnauthorized, rr1.Code)
+
+		// Request with valid token - should succeed
+		req2 := httptest.NewRequest(http.MethodGet, "/protected", nil)
+		req2.Header.Set("Authorization", "Bearer valid-token")
+		rr2 := httptest.NewRecorder()
+		handler.ServeHTTP(rr2, req2)
+		assert.Equal(t, http.StatusOK, rr2.Code)
+
+		// Request with expired token again - should still fail
+		req3 := httptest.NewRequest(http.MethodGet, "/protected", nil)
+		req3.Header.Set("Authorization", "Bearer expired-token")
+		rr3 := httptest.NewRecorder()
+		handler.ServeHTTP(rr3, req3)
+		assert.Equal(t, http.StatusUnauthorized, rr3.Code)
+	})
+}

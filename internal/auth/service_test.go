@@ -859,3 +859,378 @@ func TestMinPasswordLength(t *testing.T) {
 	// Verify minimum password length is 8
 	assert.Equal(t, 8, minPasswordLength)
 }
+
+// TestSessionExpirationBoundaries tests session expiration edge cases with deterministic time control.
+// This addresses REQ-TD2-004: Session expiration handling.
+func TestSessionExpirationBoundaries(t *testing.T) {
+	// Fixed base time for all tests
+	baseTime := time.Date(2024, 1, 15, 10, 0, 0, 0, time.UTC)
+
+	t.Run("session valid just before expiration (1 second before)", func(t *testing.T) {
+		userRepo := newMockUserRepo()
+		sessionRepo := newMockSessionRepo()
+
+		user := &User{
+			ID:        "user-123",
+			Email:     "test@example.com",
+			Name:      "Test User",
+			CreatedAt: baseTime.Add(-24 * time.Hour),
+			UpdatedAt: baseTime.Add(-24 * time.Hour),
+		}
+		userRepo.users[user.ID] = user
+
+		// Session expires exactly at baseTime + 7 days
+		sessionExpiry := baseTime.Add(7 * 24 * time.Hour)
+		sessionRepo.sessions["boundary-token"] = &Session{
+			ID:        "session-123",
+			UserID:    "user-123",
+			Token:     "boundary-token",
+			ExpiresAt: sessionExpiry,
+			CreatedAt: baseTime,
+		}
+
+		svc := NewService(userRepo, sessionRepo)
+		// Set current time to 1 second before expiration
+		svc.now = func() time.Time { return sessionExpiry.Add(-1 * time.Second) }
+
+		result, err := svc.ValidateSession(context.Background(), "boundary-token")
+		require.NoError(t, err, "session should be valid 1 second before expiration")
+		require.NotNil(t, result)
+		assert.Equal(t, "user-123", result.ID)
+	})
+
+	t.Run("session valid at exact expiration time (boundary)", func(t *testing.T) {
+		userRepo := newMockUserRepo()
+		sessionRepo := newMockSessionRepo()
+
+		user := &User{
+			ID:        "user-123",
+			Email:     "test@example.com",
+			Name:      "Test User",
+			CreatedAt: baseTime.Add(-24 * time.Hour),
+			UpdatedAt: baseTime.Add(-24 * time.Hour),
+		}
+		userRepo.users[user.ID] = user
+
+		sessionExpiry := baseTime.Add(7 * 24 * time.Hour)
+		sessionRepo.sessions["exact-token"] = &Session{
+			ID:        "session-123",
+			UserID:    "user-123",
+			Token:     "exact-token",
+			ExpiresAt: sessionExpiry,
+			CreatedAt: baseTime,
+		}
+
+		svc := NewService(userRepo, sessionRepo)
+		// Set current time to exactly the expiration time
+		// Note: now().After(ExpiresAt) is false when now == ExpiresAt
+		svc.now = func() time.Time { return sessionExpiry }
+
+		result, err := svc.ValidateSession(context.Background(), "exact-token")
+		require.NoError(t, err, "session should be valid at exact expiration time (not strictly after)")
+		require.NotNil(t, result)
+		assert.Equal(t, "user-123", result.ID)
+	})
+
+	t.Run("session expired just after expiration (1 nanosecond after)", func(t *testing.T) {
+		userRepo := newMockUserRepo()
+		sessionRepo := newMockSessionRepo()
+
+		sessionExpiry := baseTime.Add(7 * 24 * time.Hour)
+		sessionRepo.sessions["expired-token"] = &Session{
+			ID:        "session-123",
+			UserID:    "user-123",
+			Token:     "expired-token",
+			ExpiresAt: sessionExpiry,
+			CreatedAt: baseTime,
+		}
+
+		svc := NewService(userRepo, sessionRepo)
+		// Set current time to 1 nanosecond after expiration
+		svc.now = func() time.Time { return sessionExpiry.Add(1 * time.Nanosecond) }
+
+		result, err := svc.ValidateSession(context.Background(), "expired-token")
+		require.Error(t, err)
+		assert.Nil(t, result)
+		assert.Contains(t, err.Error(), "session expired")
+		assert.True(t, apperrors.IsUnauthorized(err))
+	})
+
+	t.Run("session expired 1 second after expiration", func(t *testing.T) {
+		userRepo := newMockUserRepo()
+		sessionRepo := newMockSessionRepo()
+
+		sessionExpiry := baseTime.Add(7 * 24 * time.Hour)
+		sessionRepo.sessions["expired-1s-token"] = &Session{
+			ID:        "session-123",
+			UserID:    "user-123",
+			Token:     "expired-1s-token",
+			ExpiresAt: sessionExpiry,
+			CreatedAt: baseTime,
+		}
+
+		svc := NewService(userRepo, sessionRepo)
+		svc.now = func() time.Time { return sessionExpiry.Add(1 * time.Second) }
+
+		result, err := svc.ValidateSession(context.Background(), "expired-1s-token")
+		require.Error(t, err)
+		assert.Nil(t, result)
+		assert.Contains(t, err.Error(), "session expired")
+	})
+
+	t.Run("session expired by 1 hour", func(t *testing.T) {
+		userRepo := newMockUserRepo()
+		sessionRepo := newMockSessionRepo()
+
+		sessionExpiry := baseTime.Add(7 * 24 * time.Hour)
+		sessionRepo.sessions["expired-1h-token"] = &Session{
+			ID:        "session-123",
+			UserID:    "user-123",
+			Token:     "expired-1h-token",
+			ExpiresAt: sessionExpiry,
+			CreatedAt: baseTime,
+		}
+
+		svc := NewService(userRepo, sessionRepo)
+		svc.now = func() time.Time { return sessionExpiry.Add(1 * time.Hour) }
+
+		result, err := svc.ValidateSession(context.Background(), "expired-1h-token")
+		require.Error(t, err)
+		assert.Nil(t, result)
+		assert.Contains(t, err.Error(), "session expired")
+	})
+
+	t.Run("session expired by 1 day", func(t *testing.T) {
+		userRepo := newMockUserRepo()
+		sessionRepo := newMockSessionRepo()
+
+		sessionExpiry := baseTime.Add(7 * 24 * time.Hour)
+		sessionRepo.sessions["expired-1d-token"] = &Session{
+			ID:        "session-123",
+			UserID:    "user-123",
+			Token:     "expired-1d-token",
+			ExpiresAt: sessionExpiry,
+			CreatedAt: baseTime,
+		}
+
+		svc := NewService(userRepo, sessionRepo)
+		svc.now = func() time.Time { return sessionExpiry.Add(24 * time.Hour) }
+
+		result, err := svc.ValidateSession(context.Background(), "expired-1d-token")
+		require.Error(t, err)
+		assert.Nil(t, result)
+		assert.Contains(t, err.Error(), "session expired")
+	})
+
+	t.Run("returns 401 Unauthorized for expired session", func(t *testing.T) {
+		userRepo := newMockUserRepo()
+		sessionRepo := newMockSessionRepo()
+
+		sessionExpiry := baseTime.Add(-1 * time.Hour) // Already expired
+		sessionRepo.sessions["already-expired"] = &Session{
+			ID:        "session-123",
+			UserID:    "user-123",
+			Token:     "already-expired",
+			ExpiresAt: sessionExpiry,
+			CreatedAt: baseTime.Add(-8 * 24 * time.Hour),
+		}
+
+		svc := NewService(userRepo, sessionRepo)
+		svc.now = func() time.Time { return baseTime }
+
+		_, err := svc.ValidateSession(context.Background(), "already-expired")
+		require.Error(t, err)
+		assert.True(t, apperrors.IsUnauthorized(err), "expired session should return Unauthorized error")
+	})
+
+	t.Run("session with different expiration times stored correctly", func(t *testing.T) {
+		userRepo := newMockUserRepo()
+		sessionRepo := newMockSessionRepo()
+
+		user := &User{
+			ID:        "user-123",
+			Email:     "test@example.com",
+			Name:      "Test User",
+			CreatedAt: baseTime,
+			UpdatedAt: baseTime,
+		}
+		userRepo.users[user.ID] = user
+
+		// Create a session with a custom (shorter) expiration time
+		shortExpiry := baseTime.Add(1 * time.Hour)
+		sessionRepo.sessions["short-lived-token"] = &Session{
+			ID:        "session-short",
+			UserID:    "user-123",
+			Token:     "short-lived-token",
+			ExpiresAt: shortExpiry,
+			CreatedAt: baseTime,
+		}
+
+		svc := NewService(userRepo, sessionRepo)
+
+		// Valid at 30 minutes
+		svc.now = func() time.Time { return baseTime.Add(30 * time.Minute) }
+		result, err := svc.ValidateSession(context.Background(), "short-lived-token")
+		require.NoError(t, err)
+		assert.NotNil(t, result)
+
+		// Expired at 1 hour + 1 second
+		svc.now = func() time.Time { return shortExpiry.Add(1 * time.Second) }
+		result, err = svc.ValidateSession(context.Background(), "short-lived-token")
+		require.Error(t, err)
+		assert.Nil(t, result)
+		assert.Contains(t, err.Error(), "session expired")
+	})
+}
+
+// TestSessionCannotBeRefreshedAfterExpiration verifies that once a session expires,
+// subsequent validation attempts continue to fail regardless of time.
+func TestSessionCannotBeRefreshedAfterExpiration(t *testing.T) {
+	baseTime := time.Date(2024, 1, 15, 10, 0, 0, 0, time.UTC)
+	sessionExpiry := baseTime.Add(7 * 24 * time.Hour)
+
+	userRepo := newMockUserRepo()
+	sessionRepo := newMockSessionRepo()
+
+	user := &User{
+		ID:        "user-123",
+		Email:     "test@example.com",
+		Name:      "Test User",
+		CreatedAt: baseTime,
+		UpdatedAt: baseTime,
+	}
+	userRepo.users[user.ID] = user
+
+	sessionRepo.sessions["test-token"] = &Session{
+		ID:        "session-123",
+		UserID:    "user-123",
+		Token:     "test-token",
+		ExpiresAt: sessionExpiry,
+		CreatedAt: baseTime,
+	}
+
+	svc := NewService(userRepo, sessionRepo)
+
+	t.Run("session valid before expiration", func(t *testing.T) {
+		svc.now = func() time.Time { return sessionExpiry.Add(-1 * time.Hour) }
+		result, err := svc.ValidateSession(context.Background(), "test-token")
+		require.NoError(t, err)
+		assert.NotNil(t, result)
+	})
+
+	t.Run("session expired after expiration time", func(t *testing.T) {
+		svc.now = func() time.Time { return sessionExpiry.Add(1 * time.Hour) }
+		result, err := svc.ValidateSession(context.Background(), "test-token")
+		require.Error(t, err)
+		assert.Nil(t, result)
+		assert.Contains(t, err.Error(), "session expired")
+	})
+
+	t.Run("session remains expired even if time somehow goes back (defensive check)", func(t *testing.T) {
+		// Even if we check again with an earlier time, the stored expiration is fixed
+		// This simulates that the stored ExpiresAt in the session doesn't change
+		svc.now = func() time.Time { return sessionExpiry.Add(1 * time.Minute) }
+		result, err := svc.ValidateSession(context.Background(), "test-token")
+		require.Error(t, err)
+		assert.Nil(t, result)
+		assert.Contains(t, err.Error(), "session expired")
+	})
+
+	t.Run("multiple validation calls on expired session all fail", func(t *testing.T) {
+		svc.now = func() time.Time { return sessionExpiry.Add(2 * time.Hour) }
+
+		for i := 0; i < 5; i++ {
+			result, err := svc.ValidateSession(context.Background(), "test-token")
+			require.Error(t, err, "attempt %d should fail", i+1)
+			assert.Nil(t, result)
+			assert.Contains(t, err.Error(), "session expired")
+		}
+	})
+}
+
+// TestLoginCreatesSessionWithCorrectExpiration verifies that Login creates
+// a session with the correct expiration time based on sessionDuration.
+func TestLoginCreatesSessionWithCorrectExpiration(t *testing.T) {
+	fixedTime := time.Date(2024, 1, 15, 10, 0, 0, 0, time.UTC)
+	hashedPassword, _ := bcrypt.GenerateFromPassword([]byte("password123"), bcryptCost)
+
+	userRepo := newMockUserRepo()
+	sessionRepo := newMockSessionRepo()
+
+	user := &User{
+		ID:           "user-123",
+		Email:        "test@example.com",
+		Name:         "Test User",
+		PasswordHash: string(hashedPassword),
+		CreatedAt:    fixedTime.Add(-24 * time.Hour),
+		UpdatedAt:    fixedTime.Add(-24 * time.Hour),
+	}
+	userRepo.users[user.ID] = user
+	userRepo.emailIndex[user.Email] = user.ID
+
+	svc := NewService(userRepo, sessionRepo)
+	svc.now = func() time.Time { return fixedTime }
+
+	result, err := svc.Login(context.Background(), LoginRequest{
+		Email:    "test@example.com",
+		Password: "password123",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	// Verify the session was created with correct expiration
+	session := sessionRepo.sessions[result.Token]
+	require.NotNil(t, session)
+
+	expectedExpiry := fixedTime.Add(sessionDuration)
+	assert.Equal(t, expectedExpiry, session.ExpiresAt, "session should expire after sessionDuration (7 days)")
+	assert.Equal(t, fixedTime, session.CreatedAt, "session created_at should match login time")
+}
+
+// TestExpirationTimeRespectedFromStorage verifies that the expiration time
+// stored in the session is respected, not recalculated from creation time.
+func TestExpirationTimeRespectedFromStorage(t *testing.T) {
+	baseTime := time.Date(2024, 1, 15, 10, 0, 0, 0, time.UTC)
+
+	userRepo := newMockUserRepo()
+	sessionRepo := newMockSessionRepo()
+
+	user := &User{
+		ID:        "user-123",
+		Email:     "test@example.com",
+		Name:      "Test User",
+		CreatedAt: baseTime,
+		UpdatedAt: baseTime,
+	}
+	userRepo.users[user.ID] = user
+
+	// Create a session with a specific expiration time
+	// that differs from what sessionDuration would calculate
+	customExpiry := baseTime.Add(1 * time.Hour) // Only 1 hour, not 7 days
+	sessionRepo.sessions["custom-expiry-token"] = &Session{
+		ID:        "session-123",
+		UserID:    "user-123",
+		Token:     "custom-expiry-token",
+		ExpiresAt: customExpiry,
+		CreatedAt: baseTime,
+	}
+
+	svc := NewService(userRepo, sessionRepo)
+
+	t.Run("session valid within custom expiry time", func(t *testing.T) {
+		svc.now = func() time.Time { return baseTime.Add(30 * time.Minute) }
+		result, err := svc.ValidateSession(context.Background(), "custom-expiry-token")
+		require.NoError(t, err)
+		assert.NotNil(t, result)
+	})
+
+	t.Run("session expired after custom expiry (even though within 7 days of creation)", func(t *testing.T) {
+		// 2 hours after creation - would be valid if using 7-day duration from creation
+		// but should be expired because stored ExpiresAt is only 1 hour after creation
+		svc.now = func() time.Time { return baseTime.Add(2 * time.Hour) }
+		result, err := svc.ValidateSession(context.Background(), "custom-expiry-token")
+		require.Error(t, err)
+		assert.Nil(t, result)
+		assert.Contains(t, err.Error(), "session expired")
+	})
+}
