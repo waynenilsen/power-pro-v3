@@ -49,7 +49,7 @@ func (h *ProfileHandler) Get(w http.ResponseWriter, r *http.Request) {
 	authUserID := middleware.GetUserID(r)
 	isAdmin := middleware.IsAdmin(r)
 	if authUserID != userID && !isAdmin {
-		writeDomainError(w, apperrors.NewForbidden("you can only view your own profile"))
+		writeDomainError(w, apperrors.NewForbidden("you can only access your own profile"))
 		return
 	}
 
@@ -73,11 +73,10 @@ func (h *ProfileHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Authorization check: only the user themselves or an admin can update profile
+	// Authorization check: only the profile owner can update (not even admins)
 	authUserID := middleware.GetUserID(r)
-	isAdmin := middleware.IsAdmin(r)
-	if authUserID != userID && !isAdmin {
-		writeDomainError(w, apperrors.NewForbidden("you can only update your own profile"))
+	if authUserID != userID {
+		writeDomainError(w, apperrors.NewForbidden("profile updates are owner-only"))
 		return
 	}
 

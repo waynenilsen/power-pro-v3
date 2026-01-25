@@ -318,7 +318,7 @@ func TestProfileUpdate(t *testing.T) {
 		}
 	})
 
-	t.Run("admin can update other user profile", func(t *testing.T) {
+	t.Run("admin cannot update other user profile", func(t *testing.T) {
 		body := `{"name": "Admin Updated"}`
 		resp, err := adminPut(ts.URL("/users/"+userID+"/profile"), body)
 		if err != nil {
@@ -326,18 +326,9 @@ func TestProfileUpdate(t *testing.T) {
 		}
 		defer resp.Body.Close()
 
-		if resp.StatusCode != http.StatusOK {
+		if resp.StatusCode != http.StatusForbidden {
 			respBody, _ := io.ReadAll(resp.Body)
-			t.Fatalf("Expected status 200, got %d: %s", resp.StatusCode, respBody)
-		}
-
-		var result ProfileResponseEnvelope
-		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-			t.Fatalf("Failed to decode response: %v", err)
-		}
-
-		if result.Data.Name == nil || *result.Data.Name != "Admin Updated" {
-			t.Errorf("Expected name 'Admin Updated', got %v", result.Data.Name)
+			t.Errorf("Expected status 403, got %d: %s", resp.StatusCode, respBody)
 		}
 	})
 
@@ -420,7 +411,9 @@ func TestProfileUpdate(t *testing.T) {
 		}
 	})
 
-	t.Run("returns 404 for non-existent user", func(t *testing.T) {
+	t.Run("returns 403 for non-owner trying to update non-existent user", func(t *testing.T) {
+		// Authorization check happens before database access, so even for non-existent users,
+		// non-owners (including admins) get 403 Forbidden, not 404.
 		nonExistentID := "non-existent-user-id"
 		body := `{"name": "Non Existent"}`
 		resp, err := adminPut(ts.URL("/users/"+nonExistentID+"/profile"), body)
@@ -429,9 +422,9 @@ func TestProfileUpdate(t *testing.T) {
 		}
 		defer resp.Body.Close()
 
-		if resp.StatusCode != http.StatusNotFound {
+		if resp.StatusCode != http.StatusForbidden {
 			respBody, _ := io.ReadAll(resp.Body)
-			t.Errorf("Expected status 404, got %d: %s", resp.StatusCode, respBody)
+			t.Errorf("Expected status 403, got %d: %s", resp.StatusCode, respBody)
 		}
 	})
 }
