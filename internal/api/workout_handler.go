@@ -9,6 +9,7 @@ import (
 
 	"github.com/waynenilsen/power-pro-v3/internal/domain/loadstrategy"
 	"github.com/waynenilsen/power-pro-v3/internal/domain/prescription"
+	"github.com/waynenilsen/power-pro-v3/internal/domain/rpechart"
 	"github.com/waynenilsen/power-pro-v3/internal/domain/setscheme"
 	"github.com/waynenilsen/power-pro-v3/internal/domain/workout"
 	apperrors "github.com/waynenilsen/power-pro-v3/internal/errors"
@@ -21,6 +22,7 @@ type WorkoutHandler struct {
 	workoutRepo *repository.WorkoutRepository
 	liftLookup  *repository.LiftLookupAdapter
 	maxLookup   *repository.MaxLookupAdapter
+	rpeChart    *rpechart.RPEChart
 }
 
 // NewWorkoutHandler creates a new WorkoutHandler.
@@ -29,6 +31,7 @@ func NewWorkoutHandler(workoutRepo *repository.WorkoutRepository, sqlDB *sql.DB)
 		workoutRepo: workoutRepo,
 		liftLookup:  repository.NewLiftLookupAdapter(sqlDB),
 		maxLookup:   repository.NewMaxLookupAdapter(sqlDB),
+		rpeChart:    rpechart.NewDefaultRPEChart(),
 	}
 }
 
@@ -167,8 +170,8 @@ func (h *WorkoutHandler) Generate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Inject MaxLookup into prescriptions for load strategy resolution
-	repository.InjectMaxLookup(data.Prescriptions, h.maxLookup)
+	// Inject dependencies (MaxLookup, RPE chart) into prescriptions for load strategy resolution
+	repository.InjectDependencies(data.Prescriptions, h.maxLookup, h.rpeChart)
 
 	// Determine date
 	workoutDate := workout.GetDateString()
@@ -298,8 +301,8 @@ func (h *WorkoutHandler) Preview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Inject MaxLookup into prescriptions for load strategy resolution
-	repository.InjectMaxLookup(data.Prescriptions, h.maxLookup)
+	// Inject dependencies (MaxLookup, RPE chart) into prescriptions for load strategy resolution
+	repository.InjectDependencies(data.Prescriptions, h.maxLookup, h.rpeChart)
 
 	// Build generation context with lookups
 	genCtx := workout.GenerationContext{

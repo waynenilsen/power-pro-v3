@@ -11,6 +11,7 @@ import (
 	"github.com/waynenilsen/power-pro-v3/internal/domain/dailylookup"
 	"github.com/waynenilsen/power-pro-v3/internal/domain/loadstrategy"
 	"github.com/waynenilsen/power-pro-v3/internal/domain/prescription"
+	"github.com/waynenilsen/power-pro-v3/internal/domain/rpechart"
 	"github.com/waynenilsen/power-pro-v3/internal/domain/setscheme"
 	"github.com/waynenilsen/power-pro-v3/internal/domain/weeklylookup"
 	"github.com/waynenilsen/power-pro-v3/internal/domain/workout"
@@ -299,6 +300,21 @@ func InjectMaxLookup(prescriptions []*prescription.Prescription, maxLookup loads
 		// Check if the load strategy has a SetMaxLookup method (like PercentOfLoadStrategy)
 		if setter, ok := p.LoadStrategy.(interface{ SetMaxLookup(loadstrategy.MaxLookup) }); ok {
 			setter.SetMaxLookup(maxLookup)
+		}
+	}
+}
+
+// InjectDependencies injects MaxLookup and RPE chart into prescriptions that need them.
+// This is the preferred function to use for complete dependency injection.
+func InjectDependencies(prescriptions []*prescription.Prescription, maxLookup loadstrategy.MaxLookup, rpeChart *rpechart.RPEChart) {
+	for _, p := range prescriptions {
+		// Inject MaxLookup if supported
+		if setter, ok := p.LoadStrategy.(interface{ SetMaxLookup(loadstrategy.MaxLookup) }); ok {
+			setter.SetMaxLookup(maxLookup)
+		}
+		// Inject RPE chart if supported (for RPE_TARGET strategy)
+		if setter, ok := p.LoadStrategy.(interface{ SetRPEChart(*rpechart.RPEChart) }); ok {
+			setter.SetRPEChart(rpeChart)
 		}
 	}
 }
