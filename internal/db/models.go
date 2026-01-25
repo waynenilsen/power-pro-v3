@@ -159,10 +159,23 @@ type RotationLookup struct {
 	UpdatedAt string         `json:"updated_at"`
 }
 
-type User struct {
+type Session struct {
 	ID        string `json:"id"`
+	UserID    string `json:"user_id"`
+	Token     string `json:"token"`
+	ExpiresAt string `json:"expires_at"`
 	CreatedAt string `json:"created_at"`
-	UpdatedAt string `json:"updated_at"`
+}
+
+type User struct {
+	ID           string         `json:"id"`
+	CreatedAt    string         `json:"created_at"`
+	UpdatedAt    string         `json:"updated_at"`
+	Email        sql.NullString `json:"email"`
+	PasswordHash sql.NullString `json:"password_hash"`
+	Name         sql.NullString `json:"name"`
+	IsAdmin      int64          `json:"is_admin"`
+	WeightUnit   string         `json:"weight_unit"`
 }
 
 type UserProgramState struct {

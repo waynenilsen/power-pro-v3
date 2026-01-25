@@ -27,6 +27,8 @@ type Querier interface {
 	CountLiftMaxesByUserFilterType(ctx context.Context, arg CountLiftMaxesByUserFilterTypeParams) (int64, error)
 	CountLifts(ctx context.Context) (int64, error)
 	CountLiftsFilteredByCompetition(ctx context.Context, isCompetitionLift int64) (int64, error)
+	// Count logged sets for a session
+	CountLoggedSetsBySession(ctx context.Context, sessionID string) (int64, error)
 	CountLoggedSetsByUser(ctx context.Context, userID string) (int64, error)
 	CountPrescriptions(ctx context.Context) (int64, error)
 	CountPrescriptionsFilterLift(ctx context.Context, liftID string) (int64, error)
@@ -102,6 +104,9 @@ type Querier interface {
 	GetActiveWorkoutSession(ctx context.Context, userProgramStateID string) (WorkoutSession, error)
 	GetActiveWorkoutSessionByUserID(ctx context.Context, userID string) (WorkoutSession, error)
 	GetCurrentMax(ctx context.Context, arg GetCurrentMaxParams) (LiftMax, error)
+	// Get the most recent max for each lift a user has recorded
+	// For each lift, find the record with the maximum effective_date
+	GetCurrentMaxesByUser(ctx context.Context, userID string) ([]GetCurrentMaxesByUserRow, error)
 	GetCurrentOneRM(ctx context.Context, arg GetCurrentOneRMParams) (LiftMax, error)
 	GetCycle(ctx context.Context, id string) (Cycle, error)
 	GetCycleByID(ctx context.Context, id string) (Cycle, error)
@@ -112,6 +117,11 @@ type Querier interface {
 	GetDayByIndexInWeek(ctx context.Context, arg GetDayByIndexInWeekParams) (Day, error)
 	GetDayBySlug(ctx context.Context, arg GetDayBySlugParams) (Day, error)
 	GetDayBySlugAndWeek(ctx context.Context, arg GetDayBySlugAndWeekParams) (Day, error)
+	// Count distinct exercises and estimate total sets for a day
+	GetDayExerciseAndSetCounts(ctx context.Context, dayID string) (GetDayExerciseAndSetCountsRow, error)
+	// Get the day at a specific position in a week for a program
+	// Uses day_index as an offset into the ordered days by day_of_week
+	GetDayForWeekPosition(ctx context.Context, arg GetDayForWeekPositionParams) (GetDayForWeekPositionRow, error)
 	// Day Prescriptions queries
 	GetDayPrescription(ctx context.Context, id string) (DayPrescription, error)
 	GetDayPrescriptionByDayAndPrescription(ctx context.Context, arg GetDayPrescriptionByDayAndPrescriptionParams) (DayPrescription, error)
@@ -135,8 +145,12 @@ type Querier interface {
 	GetProgramWithCycle(ctx context.Context, id string) (GetProgramWithCycleRow, error)
 	GetProgression(ctx context.Context, id string) (Progression, error)
 	GetProgressionLog(ctx context.Context, id string) (ProgressionLog, error)
+	// Dashboard aggregation queries
+	// Get recent completed workouts for a user with day name and sets completed
+	// day_index is used as an offset into the ordered days for the week
+	GetRecentCompletedWorkouts(ctx context.Context, arg GetRecentCompletedWorkoutsParams) ([]GetRecentCompletedWorkoutsRow, error)
 	GetStateAdvancementContext(ctx context.Context, userID string) (GetStateAdvancementContextRow, error)
-	GetUser(ctx context.Context, id string) (User, error)
+	GetUser(ctx context.Context, id string) (GetUserRow, error)
 	GetUserProgramStateByID(ctx context.Context, id string) (GetUserProgramStateByIDRow, error)
 	GetUserProgramStateByUserID(ctx context.Context, userID string) (GetUserProgramStateByUserIDRow, error)
 	GetUserProgressionState(ctx context.Context, arg GetUserProgressionStateParams) (UserProgressionState, error)

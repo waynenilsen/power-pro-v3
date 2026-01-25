@@ -11,6 +11,7 @@ import (
 
 	"github.com/waynenilsen/power-pro-v3/internal/api"
 	"github.com/waynenilsen/power-pro-v3/internal/auth"
+	"github.com/waynenilsen/power-pro-v3/internal/dashboard"
 	"github.com/waynenilsen/power-pro-v3/internal/domain/event"
 	"github.com/waynenilsen/power-pro-v3/internal/domain/loadstrategy"
 	"github.com/waynenilsen/power-pro-v3/internal/domain/setscheme"
@@ -55,6 +56,7 @@ type Server struct {
 	authService                *auth.Service
 	authValidator              *auth.SessionValidatorAdapter
 	profileService             *profile.Service
+	dashboardService           *dashboard.Service
 }
 
 // New creates a new Server instance.
@@ -106,6 +108,9 @@ func New(cfg Config) *Server {
 	profileRepo := profile.NewSQLiteProfileRepository(cfg.DB)
 	profileService := profile.NewService(profileRepo)
 
+	// Dashboard service
+	dashboardService := dashboard.NewService(cfg.DB, profileService)
+
 	s := &Server{
 		config:               cfg,
 		liftRepo:             liftRepo,
@@ -133,6 +138,7 @@ func New(cfg Config) *Server {
 		authService:                authService,
 		authValidator:              authValidator,
 		profileService:             profileService,
+		dashboardService:           dashboardService,
 	}
 
 	mux := http.NewServeMux()
@@ -410,6 +416,11 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	mux.Handle("POST /workouts/{id}/abandon", withAuth(workoutSessionHandler.Abandon))
 	mux.Handle("GET /users/{id}/workouts", withAuth(workoutSessionHandler.ListByUser))
 	mux.Handle("GET /users/{id}/workouts/current", withAuth(workoutSessionHandler.GetCurrentByUser))
+
+	// Dashboard routes:
+	// - Users can only view their own dashboard (owner-only, not even admins)
+	dashboardHandler := api.NewDashboardHandler(s.dashboardService)
+	mux.Handle("GET /users/{id}/dashboard", withAuth(dashboardHandler.Get))
 }
 
 // Start starts the HTTP server.
