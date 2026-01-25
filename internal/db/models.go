@@ -114,6 +114,10 @@ type Program struct {
 	DefaultRounding sql.NullFloat64 `json:"default_rounding"`
 	CreatedAt       string          `json:"created_at"`
 	UpdatedAt       string          `json:"updated_at"`
+	Difficulty      string          `json:"difficulty"`
+	DaysPerWeek     int64           `json:"days_per_week"`
+	Focus           string          `json:"focus"`
+	HasAmrap        int64           `json:"has_amrap"`
 }
 
 type ProgramProgression struct {

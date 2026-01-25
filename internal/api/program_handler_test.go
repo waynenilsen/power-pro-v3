@@ -21,6 +21,10 @@ type ProgramTestResponse struct {
 	WeeklyLookupID  *string   `json:"weeklyLookupId,omitempty"`
 	DailyLookupID   *string   `json:"dailyLookupId,omitempty"`
 	DefaultRounding *float64  `json:"defaultRounding,omitempty"`
+	Difficulty      string    `json:"difficulty"`
+	DaysPerWeek     int       `json:"daysPerWeek"`
+	Focus           string    `json:"focus"`
+	HasAmrap        bool      `json:"hasAmrap"`
 	CreatedAt       time.Time `json:"createdAt"`
 	UpdatedAt       time.Time `json:"updatedAt"`
 }
@@ -55,6 +59,10 @@ type ProgramDetailTestResponse struct {
 	WeeklyLookup    *LookupReferenceTestResponse `json:"weeklyLookup,omitempty"`
 	DailyLookup     *LookupReferenceTestResponse `json:"dailyLookup,omitempty"`
 	DefaultRounding *float64                     `json:"defaultRounding,omitempty"`
+	Difficulty      string                       `json:"difficulty"`
+	DaysPerWeek     int                          `json:"daysPerWeek"`
+	Focus           string                       `json:"focus"`
+	HasAmrap        bool                         `json:"hasAmrap"`
 	CreatedAt       time.Time                    `json:"createdAt"`
 	UpdatedAt       time.Time                    `json:"updatedAt"`
 }
@@ -893,6 +901,272 @@ func TestProgramPagination(t *testing.T) {
 		expectedHasMore := result.Meta.Total > int64(result.Meta.Offset+len(result.Data))
 		if result.Meta.HasMore != expectedHasMore {
 			t.Errorf("Expected hasMore %v, got %v", expectedHasMore, result.Meta.HasMore)
+		}
+	})
+}
+
+func TestProgramFiltering(t *testing.T) {
+	ts, err := testutil.NewTestServer()
+	if err != nil {
+		t.Fatalf("Failed to create test server: %v", err)
+	}
+	defer ts.Close()
+
+	t.Run("returns 400 for invalid difficulty filter", func(t *testing.T) {
+		resp, err := authGetProgram(ts.URL("/programs?difficulty=expert"))
+		if err != nil {
+			t.Fatalf("Failed to make request: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusBadRequest {
+			bodyBytes, _ := io.ReadAll(resp.Body)
+			t.Errorf("Expected status 400, got %d: %s", resp.StatusCode, bodyBytes)
+		}
+	})
+
+	t.Run("returns 400 for invalid days_per_week filter (non-integer)", func(t *testing.T) {
+		resp, err := authGetProgram(ts.URL("/programs?days_per_week=abc"))
+		if err != nil {
+			t.Fatalf("Failed to make request: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusBadRequest {
+			bodyBytes, _ := io.ReadAll(resp.Body)
+			t.Errorf("Expected status 400, got %d: %s", resp.StatusCode, bodyBytes)
+		}
+	})
+
+	t.Run("returns 400 for invalid days_per_week filter (out of range)", func(t *testing.T) {
+		resp, err := authGetProgram(ts.URL("/programs?days_per_week=8"))
+		if err != nil {
+			t.Fatalf("Failed to make request: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusBadRequest {
+			bodyBytes, _ := io.ReadAll(resp.Body)
+			t.Errorf("Expected status 400, got %d: %s", resp.StatusCode, bodyBytes)
+		}
+	})
+
+	t.Run("returns 400 for invalid focus filter", func(t *testing.T) {
+		resp, err := authGetProgram(ts.URL("/programs?focus=cardio"))
+		if err != nil {
+			t.Fatalf("Failed to make request: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusBadRequest {
+			bodyBytes, _ := io.ReadAll(resp.Body)
+			t.Errorf("Expected status 400, got %d: %s", resp.StatusCode, bodyBytes)
+		}
+	})
+
+	t.Run("returns 400 for invalid has_amrap filter", func(t *testing.T) {
+		resp, err := authGetProgram(ts.URL("/programs?has_amrap=maybe"))
+		if err != nil {
+			t.Fatalf("Failed to make request: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusBadRequest {
+			bodyBytes, _ := io.ReadAll(resp.Body)
+			t.Errorf("Expected status 400, got %d: %s", resp.StatusCode, bodyBytes)
+		}
+	})
+
+	t.Run("accepts valid difficulty filter", func(t *testing.T) {
+		resp, err := authGetProgram(ts.URL("/programs?difficulty=beginner"))
+		if err != nil {
+			t.Fatalf("Failed to make request: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			bodyBytes, _ := io.ReadAll(resp.Body)
+			t.Errorf("Expected status 200, got %d: %s", resp.StatusCode, bodyBytes)
+		}
+
+		var result PaginatedProgramsResponse
+		json.NewDecoder(resp.Body).Decode(&result)
+
+		// Verify all returned programs have the correct difficulty
+		for _, p := range result.Data {
+			if p.Difficulty != "beginner" {
+				t.Errorf("Expected difficulty 'beginner', got %s for program %s", p.Difficulty, p.Name)
+			}
+		}
+	})
+
+	t.Run("accepts valid days_per_week filter", func(t *testing.T) {
+		resp, err := authGetProgram(ts.URL("/programs?days_per_week=3"))
+		if err != nil {
+			t.Fatalf("Failed to make request: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			bodyBytes, _ := io.ReadAll(resp.Body)
+			t.Errorf("Expected status 200, got %d: %s", resp.StatusCode, bodyBytes)
+		}
+
+		var result PaginatedProgramsResponse
+		json.NewDecoder(resp.Body).Decode(&result)
+
+		// Verify all returned programs have the correct days_per_week
+		for _, p := range result.Data {
+			if p.DaysPerWeek != 3 {
+				t.Errorf("Expected daysPerWeek 3, got %d for program %s", p.DaysPerWeek, p.Name)
+			}
+		}
+	})
+
+	t.Run("accepts valid focus filter", func(t *testing.T) {
+		resp, err := authGetProgram(ts.URL("/programs?focus=strength"))
+		if err != nil {
+			t.Fatalf("Failed to make request: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			bodyBytes, _ := io.ReadAll(resp.Body)
+			t.Errorf("Expected status 200, got %d: %s", resp.StatusCode, bodyBytes)
+		}
+
+		var result PaginatedProgramsResponse
+		json.NewDecoder(resp.Body).Decode(&result)
+
+		// Verify all returned programs have the correct focus
+		for _, p := range result.Data {
+			if p.Focus != "strength" {
+				t.Errorf("Expected focus 'strength', got %s for program %s", p.Focus, p.Name)
+			}
+		}
+	})
+
+	t.Run("accepts valid has_amrap filter (true)", func(t *testing.T) {
+		resp, err := authGetProgram(ts.URL("/programs?has_amrap=true"))
+		if err != nil {
+			t.Fatalf("Failed to make request: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			bodyBytes, _ := io.ReadAll(resp.Body)
+			t.Errorf("Expected status 200, got %d: %s", resp.StatusCode, bodyBytes)
+		}
+
+		var result PaginatedProgramsResponse
+		json.NewDecoder(resp.Body).Decode(&result)
+
+		// Verify all returned programs have hasAmrap = true
+		for _, p := range result.Data {
+			if !p.HasAmrap {
+				t.Errorf("Expected hasAmrap true for program %s", p.Name)
+			}
+		}
+	})
+
+	t.Run("accepts valid has_amrap filter (false)", func(t *testing.T) {
+		resp, err := authGetProgram(ts.URL("/programs?has_amrap=false"))
+		if err != nil {
+			t.Fatalf("Failed to make request: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			bodyBytes, _ := io.ReadAll(resp.Body)
+			t.Errorf("Expected status 200, got %d: %s", resp.StatusCode, bodyBytes)
+		}
+
+		var result PaginatedProgramsResponse
+		json.NewDecoder(resp.Body).Decode(&result)
+
+		// Verify all returned programs have hasAmrap = false
+		for _, p := range result.Data {
+			if p.HasAmrap {
+				t.Errorf("Expected hasAmrap false for program %s", p.Name)
+			}
+		}
+	})
+
+	t.Run("combines multiple filters with AND logic", func(t *testing.T) {
+		resp, err := authGetProgram(ts.URL("/programs?difficulty=beginner&days_per_week=3&focus=strength"))
+		if err != nil {
+			t.Fatalf("Failed to make request: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			bodyBytes, _ := io.ReadAll(resp.Body)
+			t.Errorf("Expected status 200, got %d: %s", resp.StatusCode, bodyBytes)
+		}
+
+		var result PaginatedProgramsResponse
+		json.NewDecoder(resp.Body).Decode(&result)
+
+		// Verify all returned programs match ALL filters
+		for _, p := range result.Data {
+			if p.Difficulty != "beginner" {
+				t.Errorf("Expected difficulty 'beginner', got %s for program %s", p.Difficulty, p.Name)
+			}
+			if p.DaysPerWeek != 3 {
+				t.Errorf("Expected daysPerWeek 3, got %d for program %s", p.DaysPerWeek, p.Name)
+			}
+			if p.Focus != "strength" {
+				t.Errorf("Expected focus 'strength', got %s for program %s", p.Focus, p.Name)
+			}
+		}
+	})
+
+	t.Run("returns empty array (not 404) for no matching results", func(t *testing.T) {
+		// Use filters that won't match any programs
+		resp, err := authGetProgram(ts.URL("/programs?difficulty=advanced&days_per_week=7&focus=peaking"))
+		if err != nil {
+			t.Fatalf("Failed to make request: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			bodyBytes, _ := io.ReadAll(resp.Body)
+			t.Errorf("Expected status 200, got %d: %s", resp.StatusCode, bodyBytes)
+		}
+
+		var result PaginatedProgramsResponse
+		json.NewDecoder(resp.Body).Decode(&result)
+
+		if result.Data == nil {
+			t.Error("Expected non-nil data array")
+		}
+		if result.Meta == nil {
+			t.Error("Expected meta to be present")
+		}
+	})
+
+	t.Run("returns metadata fields in response", func(t *testing.T) {
+		resp, err := authGetProgram(ts.URL("/programs?difficulty=beginner"))
+		if err != nil {
+			t.Fatalf("Failed to make request: %v", err)
+		}
+		defer resp.Body.Close()
+
+		body, _ := io.ReadAll(resp.Body)
+		bodyStr := string(body)
+
+		// Check that metadata fields are present in response
+		expectedFields := []string{
+			`"difficulty"`,
+			`"daysPerWeek"`,
+			`"focus"`,
+			`"hasAmrap"`,
+		}
+
+		for _, field := range expectedFields {
+			if !bytes.Contains(body, []byte(field)) {
+				t.Errorf("Expected field %s in response, body: %s", field, bodyStr)
+			}
 		}
 	})
 }

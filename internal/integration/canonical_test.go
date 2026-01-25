@@ -98,7 +98,7 @@ type setSchemeJSON struct {
 }
 
 // getProgramBySlug retrieves a program by its slug.
-func getProgramBySlug(t *testing.T, queries *db.Queries, slug string) db.Program {
+func getProgramBySlug(t *testing.T, queries *db.Queries, slug string) db.GetProgramBySlugRow {
 	t.Helper()
 	prog, err := queries.GetProgramBySlug(context.Background(), slug)
 	if err != nil {

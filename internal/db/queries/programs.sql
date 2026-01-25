@@ -1,33 +1,80 @@
 -- name: GetProgram :one
-SELECT id, name, slug, description, cycle_id, weekly_lookup_id, daily_lookup_id, default_rounding, created_at, updated_at
+SELECT id, name, slug, description, cycle_id, weekly_lookup_id, daily_lookup_id, default_rounding, difficulty, days_per_week, focus, has_amrap, created_at, updated_at
 FROM programs
 WHERE id = ?;
 
 -- name: GetProgramBySlug :one
-SELECT id, name, slug, description, cycle_id, weekly_lookup_id, daily_lookup_id, default_rounding, created_at, updated_at
+SELECT id, name, slug, description, cycle_id, weekly_lookup_id, daily_lookup_id, default_rounding, difficulty, days_per_week, focus, has_amrap, created_at, updated_at
 FROM programs
 WHERE slug = ?;
 
+-- name: ListProgramsFilteredByNameAsc :many
+SELECT id, name, slug, description, cycle_id, weekly_lookup_id, daily_lookup_id, default_rounding, difficulty, days_per_week, focus, has_amrap, created_at, updated_at
+FROM programs
+WHERE (sqlc.narg('difficulty') IS NULL OR difficulty = sqlc.narg('difficulty'))
+  AND (sqlc.narg('days_per_week') IS NULL OR days_per_week = sqlc.narg('days_per_week'))
+  AND (sqlc.narg('focus') IS NULL OR focus = sqlc.narg('focus'))
+  AND (sqlc.narg('has_amrap') IS NULL OR has_amrap = sqlc.narg('has_amrap'))
+ORDER BY name ASC
+LIMIT sqlc.arg('limit') OFFSET sqlc.arg('offset');
+
+-- name: ListProgramsFilteredByNameDesc :many
+SELECT id, name, slug, description, cycle_id, weekly_lookup_id, daily_lookup_id, default_rounding, difficulty, days_per_week, focus, has_amrap, created_at, updated_at
+FROM programs
+WHERE (sqlc.narg('difficulty') IS NULL OR difficulty = sqlc.narg('difficulty'))
+  AND (sqlc.narg('days_per_week') IS NULL OR days_per_week = sqlc.narg('days_per_week'))
+  AND (sqlc.narg('focus') IS NULL OR focus = sqlc.narg('focus'))
+  AND (sqlc.narg('has_amrap') IS NULL OR has_amrap = sqlc.narg('has_amrap'))
+ORDER BY name DESC
+LIMIT sqlc.arg('limit') OFFSET sqlc.arg('offset');
+
+-- name: ListProgramsFilteredByCreatedAtAsc :many
+SELECT id, name, slug, description, cycle_id, weekly_lookup_id, daily_lookup_id, default_rounding, difficulty, days_per_week, focus, has_amrap, created_at, updated_at
+FROM programs
+WHERE (sqlc.narg('difficulty') IS NULL OR difficulty = sqlc.narg('difficulty'))
+  AND (sqlc.narg('days_per_week') IS NULL OR days_per_week = sqlc.narg('days_per_week'))
+  AND (sqlc.narg('focus') IS NULL OR focus = sqlc.narg('focus'))
+  AND (sqlc.narg('has_amrap') IS NULL OR has_amrap = sqlc.narg('has_amrap'))
+ORDER BY created_at ASC
+LIMIT sqlc.arg('limit') OFFSET sqlc.arg('offset');
+
+-- name: ListProgramsFilteredByCreatedAtDesc :many
+SELECT id, name, slug, description, cycle_id, weekly_lookup_id, daily_lookup_id, default_rounding, difficulty, days_per_week, focus, has_amrap, created_at, updated_at
+FROM programs
+WHERE (sqlc.narg('difficulty') IS NULL OR difficulty = sqlc.narg('difficulty'))
+  AND (sqlc.narg('days_per_week') IS NULL OR days_per_week = sqlc.narg('days_per_week'))
+  AND (sqlc.narg('focus') IS NULL OR focus = sqlc.narg('focus'))
+  AND (sqlc.narg('has_amrap') IS NULL OR has_amrap = sqlc.narg('has_amrap'))
+ORDER BY created_at DESC
+LIMIT sqlc.arg('limit') OFFSET sqlc.arg('offset');
+
+-- name: CountProgramsFiltered :one
+SELECT COUNT(*) FROM programs
+WHERE (sqlc.narg('difficulty') IS NULL OR difficulty = sqlc.narg('difficulty'))
+  AND (sqlc.narg('days_per_week') IS NULL OR days_per_week = sqlc.narg('days_per_week'))
+  AND (sqlc.narg('focus') IS NULL OR focus = sqlc.narg('focus'))
+  AND (sqlc.narg('has_amrap') IS NULL OR has_amrap = sqlc.narg('has_amrap'));
+
 -- name: ListProgramsByNameAsc :many
-SELECT id, name, slug, description, cycle_id, weekly_lookup_id, daily_lookup_id, default_rounding, created_at, updated_at
+SELECT id, name, slug, description, cycle_id, weekly_lookup_id, daily_lookup_id, default_rounding, difficulty, days_per_week, focus, has_amrap, created_at, updated_at
 FROM programs
 ORDER BY name ASC
 LIMIT ? OFFSET ?;
 
 -- name: ListProgramsByNameDesc :many
-SELECT id, name, slug, description, cycle_id, weekly_lookup_id, daily_lookup_id, default_rounding, created_at, updated_at
+SELECT id, name, slug, description, cycle_id, weekly_lookup_id, daily_lookup_id, default_rounding, difficulty, days_per_week, focus, has_amrap, created_at, updated_at
 FROM programs
 ORDER BY name DESC
 LIMIT ? OFFSET ?;
 
 -- name: ListProgramsByCreatedAtAsc :many
-SELECT id, name, slug, description, cycle_id, weekly_lookup_id, daily_lookup_id, default_rounding, created_at, updated_at
+SELECT id, name, slug, description, cycle_id, weekly_lookup_id, daily_lookup_id, default_rounding, difficulty, days_per_week, focus, has_amrap, created_at, updated_at
 FROM programs
 ORDER BY created_at ASC
 LIMIT ? OFFSET ?;
 
 -- name: ListProgramsByCreatedAtDesc :many
-SELECT id, name, slug, description, cycle_id, weekly_lookup_id, daily_lookup_id, default_rounding, created_at, updated_at
+SELECT id, name, slug, description, cycle_id, weekly_lookup_id, daily_lookup_id, default_rounding, difficulty, days_per_week, focus, has_amrap, created_at, updated_at
 FROM programs
 ORDER BY created_at DESC
 LIMIT ? OFFSET ?;
@@ -36,12 +83,12 @@ LIMIT ? OFFSET ?;
 SELECT COUNT(*) FROM programs;
 
 -- name: CreateProgram :exec
-INSERT INTO programs (id, name, slug, description, cycle_id, weekly_lookup_id, daily_lookup_id, default_rounding, created_at, updated_at)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+INSERT INTO programs (id, name, slug, description, cycle_id, weekly_lookup_id, daily_lookup_id, default_rounding, difficulty, days_per_week, focus, has_amrap, created_at, updated_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 -- name: UpdateProgram :exec
 UPDATE programs
-SET name = ?, slug = ?, description = ?, cycle_id = ?, weekly_lookup_id = ?, daily_lookup_id = ?, default_rounding = ?, updated_at = ?
+SET name = ?, slug = ?, description = ?, cycle_id = ?, weekly_lookup_id = ?, daily_lookup_id = ?, default_rounding = ?, difficulty = ?, days_per_week = ?, focus = ?, has_amrap = ?, updated_at = ?
 WHERE id = ?;
 
 -- name: DeleteProgram :exec

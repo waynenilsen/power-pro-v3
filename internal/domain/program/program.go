@@ -13,13 +13,22 @@ import (
 
 // Validation errors
 var (
-	ErrNameRequired          = errors.New("name is required")
-	ErrNameTooLong           = errors.New("name must be at most 100 characters")
-	ErrSlugRequired          = errors.New("slug is required")
-	ErrSlugTooLong           = errors.New("slug must be at most 100 characters")
-	ErrSlugInvalid           = errors.New("slug must contain only lowercase letters, numbers, and hyphens")
-	ErrCycleIDRequired       = errors.New("cycle_id is required")
+	ErrNameRequired           = errors.New("name is required")
+	ErrNameTooLong            = errors.New("name must be at most 100 characters")
+	ErrSlugRequired           = errors.New("slug is required")
+	ErrSlugTooLong            = errors.New("slug must be at most 100 characters")
+	ErrSlugInvalid            = errors.New("slug must contain only lowercase letters, numbers, and hyphens")
+	ErrCycleIDRequired        = errors.New("cycle_id is required")
 	ErrDefaultRoundingInvalid = errors.New("default_rounding must be positive if provided")
+	ErrInvalidDifficulty      = errors.New("difficulty must be one of: beginner, intermediate, advanced")
+	ErrInvalidDaysPerWeek     = errors.New("days_per_week must be between 1 and 7")
+	ErrInvalidFocus           = errors.New("focus must be one of: strength, hypertrophy, peaking")
+)
+
+// Valid values for filter fields
+var (
+	ValidDifficulties = []string{"beginner", "intermediate", "advanced"}
+	ValidFocusValues  = []string{"strength", "hypertrophy", "peaking"}
 )
 
 // MaxNameLength is the maximum length for a program name.
@@ -38,6 +47,10 @@ type Program struct {
 	WeeklyLookupID  *string
 	DailyLookupID   *string
 	DefaultRounding *float64
+	Difficulty      string
+	DaysPerWeek     int
+	Focus           string
+	HasAmrap        bool
 	CreatedAt       time.Time
 	UpdatedAt       time.Time
 }
@@ -66,6 +79,69 @@ type ProgramCycleWeek struct {
 type LookupReference struct {
 	ID   string
 	Name string
+}
+
+// FilterOptions represents optional filters for listing programs.
+type FilterOptions struct {
+	Difficulty  *string
+	DaysPerWeek *int
+	Focus       *string
+	HasAmrap    *bool
+}
+
+// ValidateDifficulty validates the difficulty value.
+func ValidateDifficulty(difficulty string) error {
+	for _, valid := range ValidDifficulties {
+		if difficulty == valid {
+			return nil
+		}
+	}
+	return ErrInvalidDifficulty
+}
+
+// ValidateDaysPerWeek validates the days_per_week value.
+func ValidateDaysPerWeek(days int) error {
+	if days < 1 || days > 7 {
+		return ErrInvalidDaysPerWeek
+	}
+	return nil
+}
+
+// ValidateFocus validates the focus value.
+func ValidateFocus(focus string) error {
+	for _, valid := range ValidFocusValues {
+		if focus == valid {
+			return nil
+		}
+	}
+	return ErrInvalidFocus
+}
+
+// Validate validates all filter options and returns a validation result.
+func (f *FilterOptions) Validate() *ValidationResult {
+	result := NewValidationResult()
+
+	if f.Difficulty != nil {
+		if err := ValidateDifficulty(*f.Difficulty); err != nil {
+			result.AddError(err)
+		}
+	}
+
+	if f.DaysPerWeek != nil {
+		if err := ValidateDaysPerWeek(*f.DaysPerWeek); err != nil {
+			result.AddError(err)
+		}
+	}
+
+	if f.Focus != nil {
+		if err := ValidateFocus(*f.Focus); err != nil {
+			result.AddError(err)
+		}
+	}
+
+	// HasAmrap is boolean, no validation needed (true/false always valid)
+
+	return result
 }
 
 // ValidationResult is an alias for the shared validation.Result type.
@@ -177,6 +253,10 @@ func CreateProgram(input CreateProgramInput, id string) (*Program, *ValidationRe
 		WeeklyLookupID:  trimStringPtr(input.WeeklyLookupID),
 		DailyLookupID:   trimStringPtr(input.DailyLookupID),
 		DefaultRounding: input.DefaultRounding,
+		Difficulty:      "beginner",  // Default per schema
+		DaysPerWeek:     3,           // Default per schema
+		Focus:           "strength",  // Default per schema
+		HasAmrap:        false,       // Default per schema
 		CreatedAt:       now,
 		UpdatedAt:       now,
 	}, result

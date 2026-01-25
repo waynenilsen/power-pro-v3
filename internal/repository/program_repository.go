@@ -37,35 +37,36 @@ type ProgramListParams struct {
 	Offset    int64
 	SortBy    ProgramSortField
 	SortOrder SortOrder
+	Filters   *program.FilterOptions
 }
 
 // GetByID retrieves a program by its ID.
 func (r *ProgramRepository) GetByID(id string) (*program.Program, error) {
 	ctx := context.Background()
-	dbProgram, err := r.queries.GetProgram(ctx, id)
+	row, err := r.queries.GetProgram(ctx, id)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
 		}
 		return nil, fmt.Errorf("failed to get program: %w", err)
 	}
-	return dbProgramToDomain(dbProgram), nil
+	return dbGetProgramRowToDomain(row), nil
 }
 
 // GetBySlug retrieves a program by its slug.
 func (r *ProgramRepository) GetBySlug(slug string) (*program.Program, error) {
 	ctx := context.Background()
-	dbProgram, err := r.queries.GetProgramBySlug(ctx, slug)
+	row, err := r.queries.GetProgramBySlug(ctx, slug)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
 		}
 		return nil, fmt.Errorf("failed to get program by slug: %w", err)
 	}
-	return dbProgramToDomain(dbProgram), nil
+	return dbGetProgramBySlugRowToDomain(row), nil
 }
 
-// List retrieves programs with pagination and sorting.
+// List retrieves programs with pagination, sorting, and optional filtering.
 func (r *ProgramRepository) List(params ProgramListParams) ([]program.Program, int64, error) {
 	ctx := context.Background()
 
@@ -80,57 +81,242 @@ func (r *ProgramRepository) List(params ProgramListParams) ([]program.Program, i
 		params.SortOrder = SortAsc
 	}
 
-	total, err := r.queries.CountPrograms(ctx)
+	// Check if we have any filters
+	hasFilters := params.Filters != nil && (params.Filters.Difficulty != nil ||
+		params.Filters.DaysPerWeek != nil ||
+		params.Filters.Focus != nil ||
+		params.Filters.HasAmrap != nil)
+
+	var total int64
+	var err error
+
+	if hasFilters {
+		// Use filtered count
+		filterParams := buildFilterParams(params.Filters)
+		total, err = r.queries.CountProgramsFiltered(ctx, db.CountProgramsFilteredParams{
+			Difficulty:  filterParams.difficulty,
+			DaysPerWeek: filterParams.daysPerWeek,
+			Focus:       filterParams.focus,
+			HasAmrap:    filterParams.hasAmrap,
+		})
+	} else {
+		total, err = r.queries.CountPrograms(ctx)
+	}
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to count programs: %w", err)
 	}
 
-	var dbPrograms []db.Program
+	var programs []program.Program
 
-	// Select appropriate query based on sort
-	switch {
-	case params.SortBy == ProgramSortByName && params.SortOrder == SortAsc:
-		dbPrograms, err = r.queries.ListProgramsByNameAsc(ctx, db.ListProgramsByNameAscParams{
-			Limit:  params.Limit,
-			Offset: params.Offset,
-		})
-	case params.SortBy == ProgramSortByName && params.SortOrder == SortDesc:
-		dbPrograms, err = r.queries.ListProgramsByNameDesc(ctx, db.ListProgramsByNameDescParams{
-			Limit:  params.Limit,
-			Offset: params.Offset,
-		})
-	case params.SortBy == ProgramSortByCreatedAt && params.SortOrder == SortAsc:
-		dbPrograms, err = r.queries.ListProgramsByCreatedAtAsc(ctx, db.ListProgramsByCreatedAtAscParams{
-			Limit:  params.Limit,
-			Offset: params.Offset,
-		})
-	case params.SortBy == ProgramSortByCreatedAt && params.SortOrder == SortDesc:
-		dbPrograms, err = r.queries.ListProgramsByCreatedAtDesc(ctx, db.ListProgramsByCreatedAtDescParams{
-			Limit:  params.Limit,
-			Offset: params.Offset,
-		})
-	default:
-		dbPrograms, err = r.queries.ListProgramsByNameAsc(ctx, db.ListProgramsByNameAscParams{
-			Limit:  params.Limit,
-			Offset: params.Offset,
-		})
+	if hasFilters {
+		programs, err = r.listProgramsFiltered(ctx, params)
+	} else {
+		programs, err = r.listProgramsUnfiltered(ctx, params)
 	}
 
 	if err != nil {
-		return nil, 0, fmt.Errorf("failed to list programs: %w", err)
-	}
-
-	programs := make([]program.Program, len(dbPrograms))
-	for i, dbProg := range dbPrograms {
-		programs[i] = *dbProgramToDomain(dbProg)
+		return nil, 0, err
 	}
 
 	return programs, total, nil
 }
 
+// filterParamsHelper holds the converted filter parameters for sqlc queries.
+type filterParamsHelper struct {
+	difficulty  interface{}
+	daysPerWeek interface{}
+	focus       interface{}
+	hasAmrap    interface{}
+}
+
+// buildFilterParams converts FilterOptions to the interface{} types sqlc expects.
+func buildFilterParams(filters *program.FilterOptions) filterParamsHelper {
+	var params filterParamsHelper
+	if filters == nil {
+		return params
+	}
+	if filters.Difficulty != nil {
+		params.difficulty = *filters.Difficulty
+	}
+	if filters.DaysPerWeek != nil {
+		params.daysPerWeek = int64(*filters.DaysPerWeek)
+	}
+	if filters.Focus != nil {
+		params.focus = *filters.Focus
+	}
+	if filters.HasAmrap != nil {
+		if *filters.HasAmrap {
+			params.hasAmrap = int64(1)
+		} else {
+			params.hasAmrap = int64(0)
+		}
+	}
+	return params
+}
+
+// listProgramsFiltered handles filtered program listing with sorting.
+func (r *ProgramRepository) listProgramsFiltered(ctx context.Context, params ProgramListParams) ([]program.Program, error) {
+	filterParams := buildFilterParams(params.Filters)
+
+	var rows []db.ListProgramsFilteredByNameAscRow
+	var err error
+
+	switch {
+	case params.SortBy == ProgramSortByName && params.SortOrder == SortAsc:
+		rows, err = r.queries.ListProgramsFilteredByNameAsc(ctx, db.ListProgramsFilteredByNameAscParams{
+			Difficulty:  filterParams.difficulty,
+			DaysPerWeek: filterParams.daysPerWeek,
+			Focus:       filterParams.focus,
+			HasAmrap:    filterParams.hasAmrap,
+			Limit:       params.Limit,
+			Offset:      params.Offset,
+		})
+	case params.SortBy == ProgramSortByName && params.SortOrder == SortDesc:
+		descRows, e := r.queries.ListProgramsFilteredByNameDesc(ctx, db.ListProgramsFilteredByNameDescParams{
+			Difficulty:  filterParams.difficulty,
+			DaysPerWeek: filterParams.daysPerWeek,
+			Focus:       filterParams.focus,
+			HasAmrap:    filterParams.hasAmrap,
+			Limit:       params.Limit,
+			Offset:      params.Offset,
+		})
+		if e != nil {
+			return nil, fmt.Errorf("failed to list programs: %w", e)
+		}
+		// Convert to common row type
+		rows = make([]db.ListProgramsFilteredByNameAscRow, len(descRows))
+		for i, r := range descRows {
+			rows[i] = db.ListProgramsFilteredByNameAscRow(r)
+		}
+	case params.SortBy == ProgramSortByCreatedAt && params.SortOrder == SortAsc:
+		ascRows, e := r.queries.ListProgramsFilteredByCreatedAtAsc(ctx, db.ListProgramsFilteredByCreatedAtAscParams{
+			Difficulty:  filterParams.difficulty,
+			DaysPerWeek: filterParams.daysPerWeek,
+			Focus:       filterParams.focus,
+			HasAmrap:    filterParams.hasAmrap,
+			Limit:       params.Limit,
+			Offset:      params.Offset,
+		})
+		if e != nil {
+			return nil, fmt.Errorf("failed to list programs: %w", e)
+		}
+		rows = make([]db.ListProgramsFilteredByNameAscRow, len(ascRows))
+		for i, r := range ascRows {
+			rows[i] = db.ListProgramsFilteredByNameAscRow(r)
+		}
+	case params.SortBy == ProgramSortByCreatedAt && params.SortOrder == SortDesc:
+		descRows, e := r.queries.ListProgramsFilteredByCreatedAtDesc(ctx, db.ListProgramsFilteredByCreatedAtDescParams{
+			Difficulty:  filterParams.difficulty,
+			DaysPerWeek: filterParams.daysPerWeek,
+			Focus:       filterParams.focus,
+			HasAmrap:    filterParams.hasAmrap,
+			Limit:       params.Limit,
+			Offset:      params.Offset,
+		})
+		if e != nil {
+			return nil, fmt.Errorf("failed to list programs: %w", e)
+		}
+		rows = make([]db.ListProgramsFilteredByNameAscRow, len(descRows))
+		for i, r := range descRows {
+			rows[i] = db.ListProgramsFilteredByNameAscRow(r)
+		}
+	default:
+		rows, err = r.queries.ListProgramsFilteredByNameAsc(ctx, db.ListProgramsFilteredByNameAscParams{
+			Difficulty:  filterParams.difficulty,
+			DaysPerWeek: filterParams.daysPerWeek,
+			Focus:       filterParams.focus,
+			HasAmrap:    filterParams.hasAmrap,
+			Limit:       params.Limit,
+			Offset:      params.Offset,
+		})
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to list programs: %w", err)
+	}
+
+	programs := make([]program.Program, len(rows))
+	for i, row := range rows {
+		programs[i] = *dbFilteredRowToDomain(row)
+	}
+
+	return programs, nil
+}
+
+// listProgramsUnfiltered handles unfiltered program listing with sorting.
+func (r *ProgramRepository) listProgramsUnfiltered(ctx context.Context, params ProgramListParams) ([]program.Program, error) {
+	var err error
+	var rows []db.ListProgramsByNameAscRow
+
+	switch {
+	case params.SortBy == ProgramSortByName && params.SortOrder == SortAsc:
+		rows, err = r.queries.ListProgramsByNameAsc(ctx, db.ListProgramsByNameAscParams{
+			Limit:  params.Limit,
+			Offset: params.Offset,
+		})
+	case params.SortBy == ProgramSortByName && params.SortOrder == SortDesc:
+		descRows, e := r.queries.ListProgramsByNameDesc(ctx, db.ListProgramsByNameDescParams{
+			Limit:  params.Limit,
+			Offset: params.Offset,
+		})
+		if e != nil {
+			return nil, fmt.Errorf("failed to list programs: %w", e)
+		}
+		rows = make([]db.ListProgramsByNameAscRow, len(descRows))
+		for i, r := range descRows {
+			rows[i] = db.ListProgramsByNameAscRow(r)
+		}
+	case params.SortBy == ProgramSortByCreatedAt && params.SortOrder == SortAsc:
+		ascRows, e := r.queries.ListProgramsByCreatedAtAsc(ctx, db.ListProgramsByCreatedAtAscParams{
+			Limit:  params.Limit,
+			Offset: params.Offset,
+		})
+		if e != nil {
+			return nil, fmt.Errorf("failed to list programs: %w", e)
+		}
+		rows = make([]db.ListProgramsByNameAscRow, len(ascRows))
+		for i, r := range ascRows {
+			rows[i] = db.ListProgramsByNameAscRow(r)
+		}
+	case params.SortBy == ProgramSortByCreatedAt && params.SortOrder == SortDesc:
+		descRows, e := r.queries.ListProgramsByCreatedAtDesc(ctx, db.ListProgramsByCreatedAtDescParams{
+			Limit:  params.Limit,
+			Offset: params.Offset,
+		})
+		if e != nil {
+			return nil, fmt.Errorf("failed to list programs: %w", e)
+		}
+		rows = make([]db.ListProgramsByNameAscRow, len(descRows))
+		for i, r := range descRows {
+			rows[i] = db.ListProgramsByNameAscRow(r)
+		}
+	default:
+		rows, err = r.queries.ListProgramsByNameAsc(ctx, db.ListProgramsByNameAscParams{
+			Limit:  params.Limit,
+			Offset: params.Offset,
+		})
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to list programs: %w", err)
+	}
+
+	programs := make([]program.Program, len(rows))
+	for i, row := range rows {
+		programs[i] = *dbUnfilteredRowToDomain(row)
+	}
+
+	return programs, nil
+}
+
 // Create persists a new program to the database.
 func (r *ProgramRepository) Create(p *program.Program) error {
 	ctx := context.Background()
+
+	var hasAmrap int64
+	if p.HasAmrap {
+		hasAmrap = 1
+	}
 
 	err := r.queries.CreateProgram(ctx, db.CreateProgramParams{
 		ID:              p.ID,
@@ -141,6 +327,10 @@ func (r *ProgramRepository) Create(p *program.Program) error {
 		WeeklyLookupID:  stringPtrToNullString(p.WeeklyLookupID),
 		DailyLookupID:   stringPtrToNullString(p.DailyLookupID),
 		DefaultRounding: programFloat64PtrToNullFloat64(p.DefaultRounding),
+		Difficulty:      p.Difficulty,
+		DaysPerWeek:     int64(p.DaysPerWeek),
+		Focus:           p.Focus,
+		HasAmrap:        hasAmrap,
 		CreatedAt:       p.CreatedAt.Format(time.RFC3339),
 		UpdatedAt:       p.UpdatedAt.Format(time.RFC3339),
 	})
@@ -154,6 +344,11 @@ func (r *ProgramRepository) Create(p *program.Program) error {
 func (r *ProgramRepository) Update(p *program.Program) error {
 	ctx := context.Background()
 
+	var hasAmrap int64
+	if p.HasAmrap {
+		hasAmrap = 1
+	}
+
 	err := r.queries.UpdateProgram(ctx, db.UpdateProgramParams{
 		ID:              p.ID,
 		Name:            p.Name,
@@ -163,6 +358,10 @@ func (r *ProgramRepository) Update(p *program.Program) error {
 		WeeklyLookupID:  stringPtrToNullString(p.WeeklyLookupID),
 		DailyLookupID:   stringPtrToNullString(p.DailyLookupID),
 		DefaultRounding: programFloat64PtrToNullFloat64(p.DefaultRounding),
+		Difficulty:      p.Difficulty,
+		DaysPerWeek:     int64(p.DaysPerWeek),
+		Focus:           p.Focus,
+		HasAmrap:        hasAmrap,
 		UpdatedAt:       p.UpdatedAt.Format(time.RFC3339),
 	})
 	if err != nil {
@@ -314,6 +513,102 @@ func dbProgramToDomain(dbProg db.Program) *program.Program {
 		WeeklyLookupID:  nullStringToStringPtr(dbProg.WeeklyLookupID),
 		DailyLookupID:   nullStringToStringPtr(dbProg.DailyLookupID),
 		DefaultRounding: programNullFloat64ToFloat64Ptr(dbProg.DefaultRounding),
+		Difficulty:      dbProg.Difficulty,
+		DaysPerWeek:     int(dbProg.DaysPerWeek),
+		Focus:           dbProg.Focus,
+		HasAmrap:        dbProg.HasAmrap == 1,
+		CreatedAt:       createdAt,
+		UpdatedAt:       updatedAt,
+	}
+}
+
+// dbFilteredRowToDomain converts a filtered list row to a domain Program.
+func dbFilteredRowToDomain(row db.ListProgramsFilteredByNameAscRow) *program.Program {
+	createdAt, _ := time.Parse(time.RFC3339, row.CreatedAt)
+	updatedAt, _ := time.Parse(time.RFC3339, row.UpdatedAt)
+
+	return &program.Program{
+		ID:              row.ID,
+		Name:            row.Name,
+		Slug:            row.Slug,
+		Description:     nullStringToStringPtr(row.Description),
+		CycleID:         row.CycleID,
+		WeeklyLookupID:  nullStringToStringPtr(row.WeeklyLookupID),
+		DailyLookupID:   nullStringToStringPtr(row.DailyLookupID),
+		DefaultRounding: programNullFloat64ToFloat64Ptr(row.DefaultRounding),
+		Difficulty:      row.Difficulty,
+		DaysPerWeek:     int(row.DaysPerWeek),
+		Focus:           row.Focus,
+		HasAmrap:        row.HasAmrap == 1,
+		CreatedAt:       createdAt,
+		UpdatedAt:       updatedAt,
+	}
+}
+
+// dbUnfilteredRowToDomain converts an unfiltered list row to a domain Program.
+func dbUnfilteredRowToDomain(row db.ListProgramsByNameAscRow) *program.Program {
+	createdAt, _ := time.Parse(time.RFC3339, row.CreatedAt)
+	updatedAt, _ := time.Parse(time.RFC3339, row.UpdatedAt)
+
+	return &program.Program{
+		ID:              row.ID,
+		Name:            row.Name,
+		Slug:            row.Slug,
+		Description:     nullStringToStringPtr(row.Description),
+		CycleID:         row.CycleID,
+		WeeklyLookupID:  nullStringToStringPtr(row.WeeklyLookupID),
+		DailyLookupID:   nullStringToStringPtr(row.DailyLookupID),
+		DefaultRounding: programNullFloat64ToFloat64Ptr(row.DefaultRounding),
+		Difficulty:      row.Difficulty,
+		DaysPerWeek:     int(row.DaysPerWeek),
+		Focus:           row.Focus,
+		HasAmrap:        row.HasAmrap == 1,
+		CreatedAt:       createdAt,
+		UpdatedAt:       updatedAt,
+	}
+}
+
+// dbGetProgramRowToDomain converts a GetProgram row to a domain Program.
+func dbGetProgramRowToDomain(row db.GetProgramRow) *program.Program {
+	createdAt, _ := time.Parse(time.RFC3339, row.CreatedAt)
+	updatedAt, _ := time.Parse(time.RFC3339, row.UpdatedAt)
+
+	return &program.Program{
+		ID:              row.ID,
+		Name:            row.Name,
+		Slug:            row.Slug,
+		Description:     nullStringToStringPtr(row.Description),
+		CycleID:         row.CycleID,
+		WeeklyLookupID:  nullStringToStringPtr(row.WeeklyLookupID),
+		DailyLookupID:   nullStringToStringPtr(row.DailyLookupID),
+		DefaultRounding: programNullFloat64ToFloat64Ptr(row.DefaultRounding),
+		Difficulty:      row.Difficulty,
+		DaysPerWeek:     int(row.DaysPerWeek),
+		Focus:           row.Focus,
+		HasAmrap:        row.HasAmrap == 1,
+		CreatedAt:       createdAt,
+		UpdatedAt:       updatedAt,
+	}
+}
+
+// dbGetProgramBySlugRowToDomain converts a GetProgramBySlug row to a domain Program.
+func dbGetProgramBySlugRowToDomain(row db.GetProgramBySlugRow) *program.Program {
+	createdAt, _ := time.Parse(time.RFC3339, row.CreatedAt)
+	updatedAt, _ := time.Parse(time.RFC3339, row.UpdatedAt)
+
+	return &program.Program{
+		ID:              row.ID,
+		Name:            row.Name,
+		Slug:            row.Slug,
+		Description:     nullStringToStringPtr(row.Description),
+		CycleID:         row.CycleID,
+		WeeklyLookupID:  nullStringToStringPtr(row.WeeklyLookupID),
+		DailyLookupID:   nullStringToStringPtr(row.DailyLookupID),
+		DefaultRounding: programNullFloat64ToFloat64Ptr(row.DefaultRounding),
+		Difficulty:      row.Difficulty,
+		DaysPerWeek:     int(row.DaysPerWeek),
+		Focus:           row.Focus,
+		HasAmrap:        row.HasAmrap == 1,
 		CreatedAt:       createdAt,
 		UpdatedAt:       updatedAt,
 	}

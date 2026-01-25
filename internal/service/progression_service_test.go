@@ -111,12 +111,16 @@ func setupTestData(t *testing.T, sqlDB *sql.DB) testData {
 	// Create a program
 	programID := uuid.New().String()
 	err = queries.CreateProgram(ctx, db.CreateProgramParams{
-		ID:        programID,
-		Name:      "Test Program",
-		Slug:      "test-program",
-		CycleID:   cycleID,
-		CreatedAt: now,
-		UpdatedAt: now,
+		ID:          programID,
+		Name:        "Test Program",
+		Slug:        "test-program",
+		CycleID:     cycleID,
+		Difficulty:  "beginner",
+		DaysPerWeek: 3,
+		Focus:       "strength",
+		HasAmrap:    0,
+		CreatedAt:   now,
+		UpdatedAt:   now,
 	})
 	if err != nil {
 		t.Fatalf("failed to create program: %v", err)

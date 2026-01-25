@@ -32,9 +32,36 @@ func (q *Queries) CountPrograms(ctx context.Context) (int64, error) {
 	return count, err
 }
 
+const countProgramsFiltered = `-- name: CountProgramsFiltered :one
+SELECT COUNT(*) FROM programs
+WHERE (?1 IS NULL OR difficulty = ?1)
+  AND (?2 IS NULL OR days_per_week = ?2)
+  AND (?3 IS NULL OR focus = ?3)
+  AND (?4 IS NULL OR has_amrap = ?4)
+`
+
+type CountProgramsFilteredParams struct {
+	Difficulty  interface{} `json:"difficulty"`
+	DaysPerWeek interface{} `json:"days_per_week"`
+	Focus       interface{} `json:"focus"`
+	HasAmrap    interface{} `json:"has_amrap"`
+}
+
+func (q *Queries) CountProgramsFiltered(ctx context.Context, arg CountProgramsFilteredParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countProgramsFiltered,
+		arg.Difficulty,
+		arg.DaysPerWeek,
+		arg.Focus,
+		arg.HasAmrap,
+	)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createProgram = `-- name: CreateProgram :exec
-INSERT INTO programs (id, name, slug, description, cycle_id, weekly_lookup_id, daily_lookup_id, default_rounding, created_at, updated_at)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+INSERT INTO programs (id, name, slug, description, cycle_id, weekly_lookup_id, daily_lookup_id, default_rounding, difficulty, days_per_week, focus, has_amrap, created_at, updated_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `
 
 type CreateProgramParams struct {
@@ -46,6 +73,10 @@ type CreateProgramParams struct {
 	WeeklyLookupID  sql.NullString  `json:"weekly_lookup_id"`
 	DailyLookupID   sql.NullString  `json:"daily_lookup_id"`
 	DefaultRounding sql.NullFloat64 `json:"default_rounding"`
+	Difficulty      string          `json:"difficulty"`
+	DaysPerWeek     int64           `json:"days_per_week"`
+	Focus           string          `json:"focus"`
+	HasAmrap        int64           `json:"has_amrap"`
 	CreatedAt       string          `json:"created_at"`
 	UpdatedAt       string          `json:"updated_at"`
 }
@@ -60,6 +91,10 @@ func (q *Queries) CreateProgram(ctx context.Context, arg CreateProgramParams) er
 		arg.WeeklyLookupID,
 		arg.DailyLookupID,
 		arg.DefaultRounding,
+		arg.Difficulty,
+		arg.DaysPerWeek,
+		arg.Focus,
+		arg.HasAmrap,
 		arg.CreatedAt,
 		arg.UpdatedAt,
 	)
@@ -115,14 +150,31 @@ func (q *Queries) GetDailyLookupForProgram(ctx context.Context, id string) (Dail
 }
 
 const getProgram = `-- name: GetProgram :one
-SELECT id, name, slug, description, cycle_id, weekly_lookup_id, daily_lookup_id, default_rounding, created_at, updated_at
+SELECT id, name, slug, description, cycle_id, weekly_lookup_id, daily_lookup_id, default_rounding, difficulty, days_per_week, focus, has_amrap, created_at, updated_at
 FROM programs
 WHERE id = ?
 `
 
-func (q *Queries) GetProgram(ctx context.Context, id string) (Program, error) {
+type GetProgramRow struct {
+	ID              string          `json:"id"`
+	Name            string          `json:"name"`
+	Slug            string          `json:"slug"`
+	Description     sql.NullString  `json:"description"`
+	CycleID         string          `json:"cycle_id"`
+	WeeklyLookupID  sql.NullString  `json:"weekly_lookup_id"`
+	DailyLookupID   sql.NullString  `json:"daily_lookup_id"`
+	DefaultRounding sql.NullFloat64 `json:"default_rounding"`
+	Difficulty      string          `json:"difficulty"`
+	DaysPerWeek     int64           `json:"days_per_week"`
+	Focus           string          `json:"focus"`
+	HasAmrap        int64           `json:"has_amrap"`
+	CreatedAt       string          `json:"created_at"`
+	UpdatedAt       string          `json:"updated_at"`
+}
+
+func (q *Queries) GetProgram(ctx context.Context, id string) (GetProgramRow, error) {
 	row := q.db.QueryRowContext(ctx, getProgram, id)
-	var i Program
+	var i GetProgramRow
 	err := row.Scan(
 		&i.ID,
 		&i.Name,
@@ -132,6 +184,10 @@ func (q *Queries) GetProgram(ctx context.Context, id string) (Program, error) {
 		&i.WeeklyLookupID,
 		&i.DailyLookupID,
 		&i.DefaultRounding,
+		&i.Difficulty,
+		&i.DaysPerWeek,
+		&i.Focus,
+		&i.HasAmrap,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -139,14 +195,31 @@ func (q *Queries) GetProgram(ctx context.Context, id string) (Program, error) {
 }
 
 const getProgramBySlug = `-- name: GetProgramBySlug :one
-SELECT id, name, slug, description, cycle_id, weekly_lookup_id, daily_lookup_id, default_rounding, created_at, updated_at
+SELECT id, name, slug, description, cycle_id, weekly_lookup_id, daily_lookup_id, default_rounding, difficulty, days_per_week, focus, has_amrap, created_at, updated_at
 FROM programs
 WHERE slug = ?
 `
 
-func (q *Queries) GetProgramBySlug(ctx context.Context, slug string) (Program, error) {
+type GetProgramBySlugRow struct {
+	ID              string          `json:"id"`
+	Name            string          `json:"name"`
+	Slug            string          `json:"slug"`
+	Description     sql.NullString  `json:"description"`
+	CycleID         string          `json:"cycle_id"`
+	WeeklyLookupID  sql.NullString  `json:"weekly_lookup_id"`
+	DailyLookupID   sql.NullString  `json:"daily_lookup_id"`
+	DefaultRounding sql.NullFloat64 `json:"default_rounding"`
+	Difficulty      string          `json:"difficulty"`
+	DaysPerWeek     int64           `json:"days_per_week"`
+	Focus           string          `json:"focus"`
+	HasAmrap        int64           `json:"has_amrap"`
+	CreatedAt       string          `json:"created_at"`
+	UpdatedAt       string          `json:"updated_at"`
+}
+
+func (q *Queries) GetProgramBySlug(ctx context.Context, slug string) (GetProgramBySlugRow, error) {
 	row := q.db.QueryRowContext(ctx, getProgramBySlug, slug)
-	var i Program
+	var i GetProgramBySlugRow
 	err := row.Scan(
 		&i.ID,
 		&i.Name,
@@ -156,6 +229,10 @@ func (q *Queries) GetProgramBySlug(ctx context.Context, slug string) (Program, e
 		&i.WeeklyLookupID,
 		&i.DailyLookupID,
 		&i.DefaultRounding,
+		&i.Difficulty,
+		&i.DaysPerWeek,
+		&i.Focus,
+		&i.HasAmrap,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -183,7 +260,7 @@ func (q *Queries) GetWeeklyLookupForProgram(ctx context.Context, id string) (Wee
 }
 
 const listProgramsByCreatedAtAsc = `-- name: ListProgramsByCreatedAtAsc :many
-SELECT id, name, slug, description, cycle_id, weekly_lookup_id, daily_lookup_id, default_rounding, created_at, updated_at
+SELECT id, name, slug, description, cycle_id, weekly_lookup_id, daily_lookup_id, default_rounding, difficulty, days_per_week, focus, has_amrap, created_at, updated_at
 FROM programs
 ORDER BY created_at ASC
 LIMIT ? OFFSET ?
@@ -194,15 +271,32 @@ type ListProgramsByCreatedAtAscParams struct {
 	Offset int64 `json:"offset"`
 }
 
-func (q *Queries) ListProgramsByCreatedAtAsc(ctx context.Context, arg ListProgramsByCreatedAtAscParams) ([]Program, error) {
+type ListProgramsByCreatedAtAscRow struct {
+	ID              string          `json:"id"`
+	Name            string          `json:"name"`
+	Slug            string          `json:"slug"`
+	Description     sql.NullString  `json:"description"`
+	CycleID         string          `json:"cycle_id"`
+	WeeklyLookupID  sql.NullString  `json:"weekly_lookup_id"`
+	DailyLookupID   sql.NullString  `json:"daily_lookup_id"`
+	DefaultRounding sql.NullFloat64 `json:"default_rounding"`
+	Difficulty      string          `json:"difficulty"`
+	DaysPerWeek     int64           `json:"days_per_week"`
+	Focus           string          `json:"focus"`
+	HasAmrap        int64           `json:"has_amrap"`
+	CreatedAt       string          `json:"created_at"`
+	UpdatedAt       string          `json:"updated_at"`
+}
+
+func (q *Queries) ListProgramsByCreatedAtAsc(ctx context.Context, arg ListProgramsByCreatedAtAscParams) ([]ListProgramsByCreatedAtAscRow, error) {
 	rows, err := q.db.QueryContext(ctx, listProgramsByCreatedAtAsc, arg.Limit, arg.Offset)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []Program{}
+	items := []ListProgramsByCreatedAtAscRow{}
 	for rows.Next() {
-		var i Program
+		var i ListProgramsByCreatedAtAscRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.Name,
@@ -212,6 +306,10 @@ func (q *Queries) ListProgramsByCreatedAtAsc(ctx context.Context, arg ListProgra
 			&i.WeeklyLookupID,
 			&i.DailyLookupID,
 			&i.DefaultRounding,
+			&i.Difficulty,
+			&i.DaysPerWeek,
+			&i.Focus,
+			&i.HasAmrap,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -229,7 +327,7 @@ func (q *Queries) ListProgramsByCreatedAtAsc(ctx context.Context, arg ListProgra
 }
 
 const listProgramsByCreatedAtDesc = `-- name: ListProgramsByCreatedAtDesc :many
-SELECT id, name, slug, description, cycle_id, weekly_lookup_id, daily_lookup_id, default_rounding, created_at, updated_at
+SELECT id, name, slug, description, cycle_id, weekly_lookup_id, daily_lookup_id, default_rounding, difficulty, days_per_week, focus, has_amrap, created_at, updated_at
 FROM programs
 ORDER BY created_at DESC
 LIMIT ? OFFSET ?
@@ -240,15 +338,32 @@ type ListProgramsByCreatedAtDescParams struct {
 	Offset int64 `json:"offset"`
 }
 
-func (q *Queries) ListProgramsByCreatedAtDesc(ctx context.Context, arg ListProgramsByCreatedAtDescParams) ([]Program, error) {
+type ListProgramsByCreatedAtDescRow struct {
+	ID              string          `json:"id"`
+	Name            string          `json:"name"`
+	Slug            string          `json:"slug"`
+	Description     sql.NullString  `json:"description"`
+	CycleID         string          `json:"cycle_id"`
+	WeeklyLookupID  sql.NullString  `json:"weekly_lookup_id"`
+	DailyLookupID   sql.NullString  `json:"daily_lookup_id"`
+	DefaultRounding sql.NullFloat64 `json:"default_rounding"`
+	Difficulty      string          `json:"difficulty"`
+	DaysPerWeek     int64           `json:"days_per_week"`
+	Focus           string          `json:"focus"`
+	HasAmrap        int64           `json:"has_amrap"`
+	CreatedAt       string          `json:"created_at"`
+	UpdatedAt       string          `json:"updated_at"`
+}
+
+func (q *Queries) ListProgramsByCreatedAtDesc(ctx context.Context, arg ListProgramsByCreatedAtDescParams) ([]ListProgramsByCreatedAtDescRow, error) {
 	rows, err := q.db.QueryContext(ctx, listProgramsByCreatedAtDesc, arg.Limit, arg.Offset)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []Program{}
+	items := []ListProgramsByCreatedAtDescRow{}
 	for rows.Next() {
-		var i Program
+		var i ListProgramsByCreatedAtDescRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.Name,
@@ -258,6 +373,10 @@ func (q *Queries) ListProgramsByCreatedAtDesc(ctx context.Context, arg ListProgr
 			&i.WeeklyLookupID,
 			&i.DailyLookupID,
 			&i.DefaultRounding,
+			&i.Difficulty,
+			&i.DaysPerWeek,
+			&i.Focus,
+			&i.HasAmrap,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -275,7 +394,7 @@ func (q *Queries) ListProgramsByCreatedAtDesc(ctx context.Context, arg ListProgr
 }
 
 const listProgramsByNameAsc = `-- name: ListProgramsByNameAsc :many
-SELECT id, name, slug, description, cycle_id, weekly_lookup_id, daily_lookup_id, default_rounding, created_at, updated_at
+SELECT id, name, slug, description, cycle_id, weekly_lookup_id, daily_lookup_id, default_rounding, difficulty, days_per_week, focus, has_amrap, created_at, updated_at
 FROM programs
 ORDER BY name ASC
 LIMIT ? OFFSET ?
@@ -286,15 +405,32 @@ type ListProgramsByNameAscParams struct {
 	Offset int64 `json:"offset"`
 }
 
-func (q *Queries) ListProgramsByNameAsc(ctx context.Context, arg ListProgramsByNameAscParams) ([]Program, error) {
+type ListProgramsByNameAscRow struct {
+	ID              string          `json:"id"`
+	Name            string          `json:"name"`
+	Slug            string          `json:"slug"`
+	Description     sql.NullString  `json:"description"`
+	CycleID         string          `json:"cycle_id"`
+	WeeklyLookupID  sql.NullString  `json:"weekly_lookup_id"`
+	DailyLookupID   sql.NullString  `json:"daily_lookup_id"`
+	DefaultRounding sql.NullFloat64 `json:"default_rounding"`
+	Difficulty      string          `json:"difficulty"`
+	DaysPerWeek     int64           `json:"days_per_week"`
+	Focus           string          `json:"focus"`
+	HasAmrap        int64           `json:"has_amrap"`
+	CreatedAt       string          `json:"created_at"`
+	UpdatedAt       string          `json:"updated_at"`
+}
+
+func (q *Queries) ListProgramsByNameAsc(ctx context.Context, arg ListProgramsByNameAscParams) ([]ListProgramsByNameAscRow, error) {
 	rows, err := q.db.QueryContext(ctx, listProgramsByNameAsc, arg.Limit, arg.Offset)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []Program{}
+	items := []ListProgramsByNameAscRow{}
 	for rows.Next() {
-		var i Program
+		var i ListProgramsByNameAscRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.Name,
@@ -304,6 +440,10 @@ func (q *Queries) ListProgramsByNameAsc(ctx context.Context, arg ListProgramsByN
 			&i.WeeklyLookupID,
 			&i.DailyLookupID,
 			&i.DefaultRounding,
+			&i.Difficulty,
+			&i.DaysPerWeek,
+			&i.Focus,
+			&i.HasAmrap,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -321,7 +461,7 @@ func (q *Queries) ListProgramsByNameAsc(ctx context.Context, arg ListProgramsByN
 }
 
 const listProgramsByNameDesc = `-- name: ListProgramsByNameDesc :many
-SELECT id, name, slug, description, cycle_id, weekly_lookup_id, daily_lookup_id, default_rounding, created_at, updated_at
+SELECT id, name, slug, description, cycle_id, weekly_lookup_id, daily_lookup_id, default_rounding, difficulty, days_per_week, focus, has_amrap, created_at, updated_at
 FROM programs
 ORDER BY name DESC
 LIMIT ? OFFSET ?
@@ -332,15 +472,32 @@ type ListProgramsByNameDescParams struct {
 	Offset int64 `json:"offset"`
 }
 
-func (q *Queries) ListProgramsByNameDesc(ctx context.Context, arg ListProgramsByNameDescParams) ([]Program, error) {
+type ListProgramsByNameDescRow struct {
+	ID              string          `json:"id"`
+	Name            string          `json:"name"`
+	Slug            string          `json:"slug"`
+	Description     sql.NullString  `json:"description"`
+	CycleID         string          `json:"cycle_id"`
+	WeeklyLookupID  sql.NullString  `json:"weekly_lookup_id"`
+	DailyLookupID   sql.NullString  `json:"daily_lookup_id"`
+	DefaultRounding sql.NullFloat64 `json:"default_rounding"`
+	Difficulty      string          `json:"difficulty"`
+	DaysPerWeek     int64           `json:"days_per_week"`
+	Focus           string          `json:"focus"`
+	HasAmrap        int64           `json:"has_amrap"`
+	CreatedAt       string          `json:"created_at"`
+	UpdatedAt       string          `json:"updated_at"`
+}
+
+func (q *Queries) ListProgramsByNameDesc(ctx context.Context, arg ListProgramsByNameDescParams) ([]ListProgramsByNameDescRow, error) {
 	rows, err := q.db.QueryContext(ctx, listProgramsByNameDesc, arg.Limit, arg.Offset)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []Program{}
+	items := []ListProgramsByNameDescRow{}
 	for rows.Next() {
-		var i Program
+		var i ListProgramsByNameDescRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.Name,
@@ -350,6 +507,338 @@ func (q *Queries) ListProgramsByNameDesc(ctx context.Context, arg ListProgramsBy
 			&i.WeeklyLookupID,
 			&i.DailyLookupID,
 			&i.DefaultRounding,
+			&i.Difficulty,
+			&i.DaysPerWeek,
+			&i.Focus,
+			&i.HasAmrap,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listProgramsFilteredByCreatedAtAsc = `-- name: ListProgramsFilteredByCreatedAtAsc :many
+SELECT id, name, slug, description, cycle_id, weekly_lookup_id, daily_lookup_id, default_rounding, difficulty, days_per_week, focus, has_amrap, created_at, updated_at
+FROM programs
+WHERE (?1 IS NULL OR difficulty = ?1)
+  AND (?2 IS NULL OR days_per_week = ?2)
+  AND (?3 IS NULL OR focus = ?3)
+  AND (?4 IS NULL OR has_amrap = ?4)
+ORDER BY created_at ASC
+LIMIT ?6 OFFSET ?5
+`
+
+type ListProgramsFilteredByCreatedAtAscParams struct {
+	Difficulty  interface{} `json:"difficulty"`
+	DaysPerWeek interface{} `json:"days_per_week"`
+	Focus       interface{} `json:"focus"`
+	HasAmrap    interface{} `json:"has_amrap"`
+	Offset      int64       `json:"offset"`
+	Limit       int64       `json:"limit"`
+}
+
+type ListProgramsFilteredByCreatedAtAscRow struct {
+	ID              string          `json:"id"`
+	Name            string          `json:"name"`
+	Slug            string          `json:"slug"`
+	Description     sql.NullString  `json:"description"`
+	CycleID         string          `json:"cycle_id"`
+	WeeklyLookupID  sql.NullString  `json:"weekly_lookup_id"`
+	DailyLookupID   sql.NullString  `json:"daily_lookup_id"`
+	DefaultRounding sql.NullFloat64 `json:"default_rounding"`
+	Difficulty      string          `json:"difficulty"`
+	DaysPerWeek     int64           `json:"days_per_week"`
+	Focus           string          `json:"focus"`
+	HasAmrap        int64           `json:"has_amrap"`
+	CreatedAt       string          `json:"created_at"`
+	UpdatedAt       string          `json:"updated_at"`
+}
+
+func (q *Queries) ListProgramsFilteredByCreatedAtAsc(ctx context.Context, arg ListProgramsFilteredByCreatedAtAscParams) ([]ListProgramsFilteredByCreatedAtAscRow, error) {
+	rows, err := q.db.QueryContext(ctx, listProgramsFilteredByCreatedAtAsc,
+		arg.Difficulty,
+		arg.DaysPerWeek,
+		arg.Focus,
+		arg.HasAmrap,
+		arg.Offset,
+		arg.Limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListProgramsFilteredByCreatedAtAscRow{}
+	for rows.Next() {
+		var i ListProgramsFilteredByCreatedAtAscRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Slug,
+			&i.Description,
+			&i.CycleID,
+			&i.WeeklyLookupID,
+			&i.DailyLookupID,
+			&i.DefaultRounding,
+			&i.Difficulty,
+			&i.DaysPerWeek,
+			&i.Focus,
+			&i.HasAmrap,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listProgramsFilteredByCreatedAtDesc = `-- name: ListProgramsFilteredByCreatedAtDesc :many
+SELECT id, name, slug, description, cycle_id, weekly_lookup_id, daily_lookup_id, default_rounding, difficulty, days_per_week, focus, has_amrap, created_at, updated_at
+FROM programs
+WHERE (?1 IS NULL OR difficulty = ?1)
+  AND (?2 IS NULL OR days_per_week = ?2)
+  AND (?3 IS NULL OR focus = ?3)
+  AND (?4 IS NULL OR has_amrap = ?4)
+ORDER BY created_at DESC
+LIMIT ?6 OFFSET ?5
+`
+
+type ListProgramsFilteredByCreatedAtDescParams struct {
+	Difficulty  interface{} `json:"difficulty"`
+	DaysPerWeek interface{} `json:"days_per_week"`
+	Focus       interface{} `json:"focus"`
+	HasAmrap    interface{} `json:"has_amrap"`
+	Offset      int64       `json:"offset"`
+	Limit       int64       `json:"limit"`
+}
+
+type ListProgramsFilteredByCreatedAtDescRow struct {
+	ID              string          `json:"id"`
+	Name            string          `json:"name"`
+	Slug            string          `json:"slug"`
+	Description     sql.NullString  `json:"description"`
+	CycleID         string          `json:"cycle_id"`
+	WeeklyLookupID  sql.NullString  `json:"weekly_lookup_id"`
+	DailyLookupID   sql.NullString  `json:"daily_lookup_id"`
+	DefaultRounding sql.NullFloat64 `json:"default_rounding"`
+	Difficulty      string          `json:"difficulty"`
+	DaysPerWeek     int64           `json:"days_per_week"`
+	Focus           string          `json:"focus"`
+	HasAmrap        int64           `json:"has_amrap"`
+	CreatedAt       string          `json:"created_at"`
+	UpdatedAt       string          `json:"updated_at"`
+}
+
+func (q *Queries) ListProgramsFilteredByCreatedAtDesc(ctx context.Context, arg ListProgramsFilteredByCreatedAtDescParams) ([]ListProgramsFilteredByCreatedAtDescRow, error) {
+	rows, err := q.db.QueryContext(ctx, listProgramsFilteredByCreatedAtDesc,
+		arg.Difficulty,
+		arg.DaysPerWeek,
+		arg.Focus,
+		arg.HasAmrap,
+		arg.Offset,
+		arg.Limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListProgramsFilteredByCreatedAtDescRow{}
+	for rows.Next() {
+		var i ListProgramsFilteredByCreatedAtDescRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Slug,
+			&i.Description,
+			&i.CycleID,
+			&i.WeeklyLookupID,
+			&i.DailyLookupID,
+			&i.DefaultRounding,
+			&i.Difficulty,
+			&i.DaysPerWeek,
+			&i.Focus,
+			&i.HasAmrap,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listProgramsFilteredByNameAsc = `-- name: ListProgramsFilteredByNameAsc :many
+SELECT id, name, slug, description, cycle_id, weekly_lookup_id, daily_lookup_id, default_rounding, difficulty, days_per_week, focus, has_amrap, created_at, updated_at
+FROM programs
+WHERE (?1 IS NULL OR difficulty = ?1)
+  AND (?2 IS NULL OR days_per_week = ?2)
+  AND (?3 IS NULL OR focus = ?3)
+  AND (?4 IS NULL OR has_amrap = ?4)
+ORDER BY name ASC
+LIMIT ?6 OFFSET ?5
+`
+
+type ListProgramsFilteredByNameAscParams struct {
+	Difficulty  interface{} `json:"difficulty"`
+	DaysPerWeek interface{} `json:"days_per_week"`
+	Focus       interface{} `json:"focus"`
+	HasAmrap    interface{} `json:"has_amrap"`
+	Offset      int64       `json:"offset"`
+	Limit       int64       `json:"limit"`
+}
+
+type ListProgramsFilteredByNameAscRow struct {
+	ID              string          `json:"id"`
+	Name            string          `json:"name"`
+	Slug            string          `json:"slug"`
+	Description     sql.NullString  `json:"description"`
+	CycleID         string          `json:"cycle_id"`
+	WeeklyLookupID  sql.NullString  `json:"weekly_lookup_id"`
+	DailyLookupID   sql.NullString  `json:"daily_lookup_id"`
+	DefaultRounding sql.NullFloat64 `json:"default_rounding"`
+	Difficulty      string          `json:"difficulty"`
+	DaysPerWeek     int64           `json:"days_per_week"`
+	Focus           string          `json:"focus"`
+	HasAmrap        int64           `json:"has_amrap"`
+	CreatedAt       string          `json:"created_at"`
+	UpdatedAt       string          `json:"updated_at"`
+}
+
+func (q *Queries) ListProgramsFilteredByNameAsc(ctx context.Context, arg ListProgramsFilteredByNameAscParams) ([]ListProgramsFilteredByNameAscRow, error) {
+	rows, err := q.db.QueryContext(ctx, listProgramsFilteredByNameAsc,
+		arg.Difficulty,
+		arg.DaysPerWeek,
+		arg.Focus,
+		arg.HasAmrap,
+		arg.Offset,
+		arg.Limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListProgramsFilteredByNameAscRow{}
+	for rows.Next() {
+		var i ListProgramsFilteredByNameAscRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Slug,
+			&i.Description,
+			&i.CycleID,
+			&i.WeeklyLookupID,
+			&i.DailyLookupID,
+			&i.DefaultRounding,
+			&i.Difficulty,
+			&i.DaysPerWeek,
+			&i.Focus,
+			&i.HasAmrap,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listProgramsFilteredByNameDesc = `-- name: ListProgramsFilteredByNameDesc :many
+SELECT id, name, slug, description, cycle_id, weekly_lookup_id, daily_lookup_id, default_rounding, difficulty, days_per_week, focus, has_amrap, created_at, updated_at
+FROM programs
+WHERE (?1 IS NULL OR difficulty = ?1)
+  AND (?2 IS NULL OR days_per_week = ?2)
+  AND (?3 IS NULL OR focus = ?3)
+  AND (?4 IS NULL OR has_amrap = ?4)
+ORDER BY name DESC
+LIMIT ?6 OFFSET ?5
+`
+
+type ListProgramsFilteredByNameDescParams struct {
+	Difficulty  interface{} `json:"difficulty"`
+	DaysPerWeek interface{} `json:"days_per_week"`
+	Focus       interface{} `json:"focus"`
+	HasAmrap    interface{} `json:"has_amrap"`
+	Offset      int64       `json:"offset"`
+	Limit       int64       `json:"limit"`
+}
+
+type ListProgramsFilteredByNameDescRow struct {
+	ID              string          `json:"id"`
+	Name            string          `json:"name"`
+	Slug            string          `json:"slug"`
+	Description     sql.NullString  `json:"description"`
+	CycleID         string          `json:"cycle_id"`
+	WeeklyLookupID  sql.NullString  `json:"weekly_lookup_id"`
+	DailyLookupID   sql.NullString  `json:"daily_lookup_id"`
+	DefaultRounding sql.NullFloat64 `json:"default_rounding"`
+	Difficulty      string          `json:"difficulty"`
+	DaysPerWeek     int64           `json:"days_per_week"`
+	Focus           string          `json:"focus"`
+	HasAmrap        int64           `json:"has_amrap"`
+	CreatedAt       string          `json:"created_at"`
+	UpdatedAt       string          `json:"updated_at"`
+}
+
+func (q *Queries) ListProgramsFilteredByNameDesc(ctx context.Context, arg ListProgramsFilteredByNameDescParams) ([]ListProgramsFilteredByNameDescRow, error) {
+	rows, err := q.db.QueryContext(ctx, listProgramsFilteredByNameDesc,
+		arg.Difficulty,
+		arg.DaysPerWeek,
+		arg.Focus,
+		arg.HasAmrap,
+		arg.Offset,
+		arg.Limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListProgramsFilteredByNameDescRow{}
+	for rows.Next() {
+		var i ListProgramsFilteredByNameDescRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Slug,
+			&i.Description,
+			&i.CycleID,
+			&i.WeeklyLookupID,
+			&i.DailyLookupID,
+			&i.DefaultRounding,
+			&i.Difficulty,
+			&i.DaysPerWeek,
+			&i.Focus,
+			&i.HasAmrap,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -413,7 +902,7 @@ func (q *Queries) ProgramSlugExistsExcluding(ctx context.Context, arg ProgramSlu
 
 const updateProgram = `-- name: UpdateProgram :exec
 UPDATE programs
-SET name = ?, slug = ?, description = ?, cycle_id = ?, weekly_lookup_id = ?, daily_lookup_id = ?, default_rounding = ?, updated_at = ?
+SET name = ?, slug = ?, description = ?, cycle_id = ?, weekly_lookup_id = ?, daily_lookup_id = ?, default_rounding = ?, difficulty = ?, days_per_week = ?, focus = ?, has_amrap = ?, updated_at = ?
 WHERE id = ?
 `
 
@@ -425,6 +914,10 @@ type UpdateProgramParams struct {
 	WeeklyLookupID  sql.NullString  `json:"weekly_lookup_id"`
 	DailyLookupID   sql.NullString  `json:"daily_lookup_id"`
 	DefaultRounding sql.NullFloat64 `json:"default_rounding"`
+	Difficulty      string          `json:"difficulty"`
+	DaysPerWeek     int64           `json:"days_per_week"`
+	Focus           string          `json:"focus"`
+	HasAmrap        int64           `json:"has_amrap"`
 	UpdatedAt       string          `json:"updated_at"`
 	ID              string          `json:"id"`
 }
@@ -438,6 +931,10 @@ func (q *Queries) UpdateProgram(ctx context.Context, arg UpdateProgramParams) er
 		arg.WeeklyLookupID,
 		arg.DailyLookupID,
 		arg.DefaultRounding,
+		arg.Difficulty,
+		arg.DaysPerWeek,
+		arg.Focus,
+		arg.HasAmrap,
 		arg.UpdatedAt,
 		arg.ID,
 	)

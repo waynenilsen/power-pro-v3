@@ -2,6 +2,7 @@ package api
 
 import (
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -35,6 +36,10 @@ type ProgramResponse struct {
 	WeeklyLookupID  *string   `json:"weeklyLookupId,omitempty"`
 	DailyLookupID   *string   `json:"dailyLookupId,omitempty"`
 	DefaultRounding *float64  `json:"defaultRounding,omitempty"`
+	Difficulty      string    `json:"difficulty"`
+	DaysPerWeek     int       `json:"daysPerWeek"`
+	Focus           string    `json:"focus"`
+	HasAmrap        bool      `json:"hasAmrap"`
 	CreatedAt       time.Time `json:"createdAt"`
 	UpdatedAt       time.Time `json:"updatedAt"`
 }
@@ -69,6 +74,10 @@ type ProgramDetailResponse struct {
 	WeeklyLookup    *LookupReferenceResponse `json:"weeklyLookup,omitempty"`
 	DailyLookup     *LookupReferenceResponse `json:"dailyLookup,omitempty"`
 	DefaultRounding *float64                 `json:"defaultRounding,omitempty"`
+	Difficulty      string                   `json:"difficulty"`
+	DaysPerWeek     int                      `json:"daysPerWeek"`
+	Focus           string                   `json:"focus"`
+	HasAmrap        bool                     `json:"hasAmrap"`
 	CreatedAt       time.Time                `json:"createdAt"`
 	UpdatedAt       time.Time                `json:"updatedAt"`
 }
@@ -105,6 +114,10 @@ func programToResponse(p *program.Program) ProgramResponse {
 		WeeklyLookupID:  p.WeeklyLookupID,
 		DailyLookupID:   p.DailyLookupID,
 		DefaultRounding: p.DefaultRounding,
+		Difficulty:      p.Difficulty,
+		DaysPerWeek:     p.DaysPerWeek,
+		Focus:           p.Focus,
+		HasAmrap:        p.HasAmrap,
 		CreatedAt:       p.CreatedAt,
 		UpdatedAt:       p.UpdatedAt,
 	}
@@ -153,6 +166,10 @@ func programToDetailResponse(p *program.Program, cycle *program.ProgramCycle, we
 		WeeklyLookup:    weeklyLookupResp,
 		DailyLookup:     dailyLookupResp,
 		DefaultRounding: p.DefaultRounding,
+		Difficulty:      p.Difficulty,
+		DaysPerWeek:     p.DaysPerWeek,
+		Focus:           p.Focus,
+		HasAmrap:        p.HasAmrap,
 		CreatedAt:       p.CreatedAt,
 		UpdatedAt:       p.UpdatedAt,
 	}
@@ -186,11 +203,31 @@ func (h *ProgramHandler) List(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Parse filter options
+	filters, err := parseFilterOptions(query)
+	if err != nil {
+		writeDomainError(w, apperrors.NewBadRequest(err.Error()))
+		return
+	}
+
+	// Validate filter options
+	if filters != nil {
+		if result := filters.Validate(); !result.Valid {
+			details := make([]string, len(result.Errors))
+			for i, e := range result.Errors {
+				details[i] = e.Error()
+			}
+			writeDomainError(w, apperrors.NewValidationMsg("invalid filter parameters"), details...)
+			return
+		}
+	}
+
 	params := repository.ProgramListParams{
 		Limit:     int64(pg.Limit),
 		Offset:    int64(pg.Offset),
 		SortBy:    sortBy,
 		SortOrder: sortOrder,
+		Filters:   filters,
 	}
 
 	programs, total, err := h.repo.List(params)
@@ -206,6 +243,58 @@ func (h *ProgramHandler) List(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writePaginatedData(w, http.StatusOK, data, total, pg.Limit, pg.Offset)
+}
+
+// parseFilterOptions extracts filter options from query parameters.
+func parseFilterOptions(query map[string][]string) (*program.FilterOptions, error) {
+	var filters program.FilterOptions
+	hasFilters := false
+
+	// Parse difficulty
+	if difficulty := query["difficulty"]; len(difficulty) > 0 && difficulty[0] != "" {
+		d := strings.ToLower(difficulty[0])
+		filters.Difficulty = &d
+		hasFilters = true
+	}
+
+	// Parse days_per_week
+	if daysPerWeek := query["days_per_week"]; len(daysPerWeek) > 0 && daysPerWeek[0] != "" {
+		days, err := strconv.Atoi(daysPerWeek[0])
+		if err != nil {
+			return nil, apperrors.ErrInvalidParameter("days_per_week", "must be an integer")
+		}
+		filters.DaysPerWeek = &days
+		hasFilters = true
+	}
+
+	// Parse focus
+	if focus := query["focus"]; len(focus) > 0 && focus[0] != "" {
+		f := strings.ToLower(focus[0])
+		filters.Focus = &f
+		hasFilters = true
+	}
+
+	// Parse has_amrap
+	if hasAmrap := query["has_amrap"]; len(hasAmrap) > 0 && hasAmrap[0] != "" {
+		val := strings.ToLower(hasAmrap[0])
+		switch val {
+		case "true", "1":
+			v := true
+			filters.HasAmrap = &v
+			hasFilters = true
+		case "false", "0":
+			v := false
+			filters.HasAmrap = &v
+			hasFilters = true
+		default:
+			return nil, apperrors.ErrInvalidParameter("has_amrap", "must be true or false")
+		}
+	}
+
+	if !hasFilters {
+		return nil, nil
+	}
+	return &filters, nil
 }
 
 // Get handles GET /programs/{id}

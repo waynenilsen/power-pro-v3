@@ -742,6 +742,201 @@ func TestValidationResult_Error_Invalid(t *testing.T) {
 	}
 }
 
+// ==================== Filter Validation Tests ====================
+
+func TestValidateDifficulty_Valid(t *testing.T) {
+	tests := []struct {
+		name       string
+		difficulty string
+	}{
+		{"beginner", "beginner"},
+		{"intermediate", "intermediate"},
+		{"advanced", "advanced"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateDifficulty(tt.difficulty)
+			if err != nil {
+				t.Errorf("ValidateDifficulty(%q) = %v, want nil", tt.difficulty, err)
+			}
+		})
+	}
+}
+
+func TestValidateDifficulty_Invalid(t *testing.T) {
+	tests := []struct {
+		name       string
+		difficulty string
+	}{
+		{"empty", ""},
+		{"capitalized", "Beginner"},
+		{"unknown", "expert"},
+		{"typo", "begginer"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateDifficulty(tt.difficulty)
+			if !errors.Is(err, ErrInvalidDifficulty) {
+				t.Errorf("ValidateDifficulty(%q) = %v, want %v", tt.difficulty, err, ErrInvalidDifficulty)
+			}
+		})
+	}
+}
+
+func TestValidateDaysPerWeek_Valid(t *testing.T) {
+	for days := 1; days <= 7; days++ {
+		t.Run(string(rune('0'+days)), func(t *testing.T) {
+			err := ValidateDaysPerWeek(days)
+			if err != nil {
+				t.Errorf("ValidateDaysPerWeek(%d) = %v, want nil", days, err)
+			}
+		})
+	}
+}
+
+func TestValidateDaysPerWeek_Invalid(t *testing.T) {
+	tests := []struct {
+		name string
+		days int
+	}{
+		{"zero", 0},
+		{"negative", -1},
+		{"too high", 8},
+		{"way too high", 100},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateDaysPerWeek(tt.days)
+			if !errors.Is(err, ErrInvalidDaysPerWeek) {
+				t.Errorf("ValidateDaysPerWeek(%d) = %v, want %v", tt.days, err, ErrInvalidDaysPerWeek)
+			}
+		})
+	}
+}
+
+func TestValidateFocus_Valid(t *testing.T) {
+	tests := []struct {
+		name  string
+		focus string
+	}{
+		{"strength", "strength"},
+		{"hypertrophy", "hypertrophy"},
+		{"peaking", "peaking"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateFocus(tt.focus)
+			if err != nil {
+				t.Errorf("ValidateFocus(%q) = %v, want nil", tt.focus, err)
+			}
+		})
+	}
+}
+
+func TestValidateFocus_Invalid(t *testing.T) {
+	tests := []struct {
+		name  string
+		focus string
+	}{
+		{"empty", ""},
+		{"capitalized", "Strength"},
+		{"unknown", "cardio"},
+		{"typo", "strenght"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateFocus(tt.focus)
+			if !errors.Is(err, ErrInvalidFocus) {
+				t.Errorf("ValidateFocus(%q) = %v, want %v", tt.focus, err, ErrInvalidFocus)
+			}
+		})
+	}
+}
+
+func TestFilterOptions_Validate_Valid(t *testing.T) {
+	tests := []struct {
+		name    string
+		filters FilterOptions
+	}{
+		{"empty filters", FilterOptions{}},
+		{"difficulty only", FilterOptions{Difficulty: ptrString("beginner")}},
+		{"days only", FilterOptions{DaysPerWeek: ptrInt(3)}},
+		{"focus only", FilterOptions{Focus: ptrString("strength")}},
+		{"has_amrap true", FilterOptions{HasAmrap: ptrBool(true)}},
+		{"has_amrap false", FilterOptions{HasAmrap: ptrBool(false)}},
+		{"all filters", FilterOptions{
+			Difficulty:  ptrString("advanced"),
+			DaysPerWeek: ptrInt(4),
+			Focus:       ptrString("hypertrophy"),
+			HasAmrap:    ptrBool(true),
+		}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := tt.filters.Validate()
+			if !result.Valid {
+				t.Errorf("FilterOptions.Validate() = invalid with errors: %v", result.Errors)
+			}
+		})
+	}
+}
+
+func TestFilterOptions_Validate_Invalid(t *testing.T) {
+	tests := []struct {
+		name          string
+		filters       FilterOptions
+		expectedError error
+	}{
+		{"invalid difficulty", FilterOptions{Difficulty: ptrString("expert")}, ErrInvalidDifficulty},
+		{"invalid days too low", FilterOptions{DaysPerWeek: ptrInt(0)}, ErrInvalidDaysPerWeek},
+		{"invalid days too high", FilterOptions{DaysPerWeek: ptrInt(8)}, ErrInvalidDaysPerWeek},
+		{"invalid focus", FilterOptions{Focus: ptrString("cardio")}, ErrInvalidFocus},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := tt.filters.Validate()
+			if result.Valid {
+				t.Errorf("FilterOptions.Validate() = valid, want invalid")
+			}
+			// Check that the expected error is in the errors list
+			found := false
+			for _, err := range result.Errors {
+				if errors.Is(err, tt.expectedError) {
+					found = true
+					break
+				}
+			}
+			if !found {
+				t.Errorf("Expected error %v not found in errors: %v", tt.expectedError, result.Errors)
+			}
+		})
+	}
+}
+
+func TestFilterOptions_Validate_MultipleErrors(t *testing.T) {
+	filters := FilterOptions{
+		Difficulty:  ptrString("expert"),    // invalid
+		DaysPerWeek: ptrInt(0),              // invalid
+		Focus:       ptrString("cardio"),    // invalid
+		HasAmrap:    ptrBool(true),          // valid (boolean always valid)
+	}
+
+	result := filters.Validate()
+	if result.Valid {
+		t.Error("FilterOptions.Validate() = valid, want invalid")
+	}
+	if len(result.Errors) != 3 {
+		t.Errorf("Expected 3 errors, got %d: %v", len(result.Errors), result.Errors)
+	}
+}
+
 // ==================== Helper Functions for Tests ====================
 
 func ptrString(s string) *string {
@@ -750,4 +945,12 @@ func ptrString(s string) *string {
 
 func ptrFloat64(f float64) *float64 {
 	return &f
+}
+
+func ptrInt(i int) *int {
+	return &i
+}
+
+func ptrBool(b bool) *bool {
+	return &b
 }

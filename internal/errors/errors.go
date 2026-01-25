@@ -133,6 +133,11 @@ func NewBadRequest(message string) *DomainError {
 	}
 }
 
+// ErrInvalidParameter creates an error for an invalid query parameter.
+func ErrInvalidParameter(param, reason string) error {
+	return fmt.Errorf("invalid parameter %s: %s", param, reason)
+}
+
 // Wrap wraps an error with additional context while preserving the category.
 func Wrap(err error, message string) error {
 	if err == nil {
