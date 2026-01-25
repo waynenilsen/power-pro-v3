@@ -3,6 +3,7 @@
 package e2e
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -576,8 +577,24 @@ func TestGreyskullLPProgram(t *testing.T) {
 		}
 	})
 
-	// Advance to Week 2
-	advanceUserState(t, ts, userID)
+	// Complete Day A2 workout and advance to Week 2 Day B2
+	t.Run("Complete Day A2 workout", func(t *testing.T) {
+		sessionIDa2 := startWorkoutSession(t, ts, userID)
+		// Get workout and log sets
+		workoutResp, _ := userGet(ts.URL("/users/"+userID+"/workout"), userID)
+		var workout WorkoutResponse
+		json.NewDecoder(workoutResp.Body).Decode(&workout)
+		workoutResp.Body.Close()
+
+		// Log sets for all exercises
+		for _, ex := range workout.Data.Exercises {
+			for _, set := range ex.Sets {
+				logGSLPSet(t, ts, userID, sessionIDa2, ex.PrescriptionID, ex.Lift.ID, set.SetNumber, set.Weight, set.TargetReps, set.TargetReps, false)
+			}
+		}
+		finishWorkoutSession(t, ts, sessionIDa2, userID)
+		advanceUserState(t, ts, userID) // Advance to Week 2 Day B2
+	})
 
 	// =============================================================================
 	// Week 2, Day B2: Verify Bench/Deadlift (B day in week 2 starts with Bench)
@@ -699,10 +716,43 @@ func TestGreyskullLPProgram(t *testing.T) {
 		}
 	})
 
-	// Complete the 2-week cycle and verify it repeats
+	// Complete B2 session and remaining workouts to cycle through
+	finishWorkoutSession(t, ts, sessionID3, userID)
 	advanceUserState(t, ts, userID) // W2 D2 (A1)
-	advanceUserState(t, ts, userID) // W2 D3 (B1)
-	advanceUserState(t, ts, userID) // Back to W1 D1 (A1)
+
+	// Complete W2 D2 (A1) workout
+	t.Run("Complete W2 D2 (A1)", func(t *testing.T) {
+		sessionIDw2d2 := startWorkoutSession(t, ts, userID)
+		workoutResp, _ := userGet(ts.URL("/users/"+userID+"/workout"), userID)
+		var workout WorkoutResponse
+		json.NewDecoder(workoutResp.Body).Decode(&workout)
+		workoutResp.Body.Close()
+
+		for _, ex := range workout.Data.Exercises {
+			for _, set := range ex.Sets {
+				logGSLPSet(t, ts, userID, sessionIDw2d2, ex.PrescriptionID, ex.Lift.ID, set.SetNumber, set.Weight, set.TargetReps, set.TargetReps, false)
+			}
+		}
+		finishWorkoutSession(t, ts, sessionIDw2d2, userID)
+		advanceUserState(t, ts, userID) // W2 D3 (B1)
+	})
+
+	// Complete W2 D3 (B1) workout
+	t.Run("Complete W2 D3 (B1)", func(t *testing.T) {
+		sessionIDw2d3 := startWorkoutSession(t, ts, userID)
+		workoutResp, _ := userGet(ts.URL("/users/"+userID+"/workout"), userID)
+		var workout WorkoutResponse
+		json.NewDecoder(workoutResp.Body).Decode(&workout)
+		workoutResp.Body.Close()
+
+		for _, ex := range workout.Data.Exercises {
+			for _, set := range ex.Sets {
+				logGSLPSet(t, ts, userID, sessionIDw2d3, ex.PrescriptionID, ex.Lift.ID, set.SetNumber, set.Weight, set.TargetReps, set.TargetReps, false)
+			}
+		}
+		finishWorkoutSession(t, ts, sessionIDw2d3, userID)
+		advanceUserState(t, ts, userID) // Back to W1 D1 (A1)
+	})
 
 	// =============================================================================
 	// Verify 2-week cycle repeats correctly
@@ -735,5 +785,46 @@ func TestGreyskullLPProgram(t *testing.T) {
 		t.Logf("Greyskull LP test completed successfully")
 		t.Logf("Demonstrates: A/B rotation (4 day types), 2-week cycle, AMRAP sets, progression storage, deload recording")
 	})
+}
+
+// logGSLPSet logs a single set for Greyskull LP workout.
+func logGSLPSet(t *testing.T, ts *testutil.TestServer, userID, sessionID, prescriptionID, liftID string, setNumber int, weight float64, targetReps, repsPerformed int, isAmrap bool) {
+	t.Helper()
+
+	type setRequest struct {
+		PrescriptionID string  `json:"prescriptionId"`
+		LiftID         string  `json:"liftId"`
+		SetNumber      int     `json:"setNumber"`
+		Weight         float64 `json:"weight"`
+		TargetReps     int     `json:"targetReps"`
+		RepsPerformed  int     `json:"repsPerformed"`
+		IsAMRAP        bool    `json:"isAmrap"`
+	}
+
+	setsReq := []setRequest{{
+		PrescriptionID: prescriptionID,
+		LiftID:         liftID,
+		SetNumber:      setNumber,
+		Weight:         weight,
+		TargetReps:     targetReps,
+		RepsPerformed:  repsPerformed,
+		IsAMRAP:        isAmrap,
+	}}
+
+	body, _ := json.Marshal(map[string]interface{}{"sets": setsReq})
+	req, _ := http.NewRequest(http.MethodPost, ts.URL("/sessions/"+sessionID+"/sets"), bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-User-ID", userID)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("Failed to log set: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated {
+		respBody, _ := io.ReadAll(resp.Body)
+		t.Fatalf("Failed to log set, status %d: %s", resp.StatusCode, respBody)
+	}
 }
 

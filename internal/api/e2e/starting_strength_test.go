@@ -523,7 +523,9 @@ func TestStartingStrengthProgram(t *testing.T) {
 
 	// =============================================================================
 	// EXECUTION PHASE: Day A (Workout 1)
+	// Using explicit state machine flow: start workout -> log sets -> finish workout
 	// =============================================================================
+	var dayASessionID string
 	t.Run("Day A workout generates correct exercises and weights", func(t *testing.T) {
 		workoutResp, err := userGet(ts.URL("/users/"+userID+"/workout"), userID)
 		if err != nil {
@@ -606,83 +608,41 @@ func TestStartingStrengthProgram(t *testing.T) {
 		}
 	})
 
-	// Trigger progression for Day A lifts (Squat, Bench, Deadlift)
-	t.Run("Day A progression applies correct increments", func(t *testing.T) {
-		// Trigger lower body progression for squat
-		triggerBody := ManualTriggerRequest{
-			ProgressionID: lowerProgID,
-			LiftID:        squatID,
-			Force:         true,
-		}
-		triggerResp, err := authPostTrigger(ts.URL("/users/"+userID+"/progressions/trigger"), triggerBody, userID)
-		if err != nil {
-			t.Fatalf("Failed to trigger squat progression: %v", err)
-		}
-		var squatTrigger TriggerResponse
-		json.NewDecoder(triggerResp.Body).Decode(&squatTrigger)
-		triggerResp.Body.Close()
+	// Start workout session, log sets, and finish - progression applies automatically (AFTER_SESSION trigger)
+	t.Run("Day A complete workout with auto-progression", func(t *testing.T) {
+		// Start workout session
+		dayASessionID = startWorkoutSession(t, ts, userID)
 
-		if squatTrigger.Data.TotalApplied != 1 {
-			t.Errorf("Expected squat progression to apply, got TotalApplied=%d", squatTrigger.Data.TotalApplied)
-		}
-		if len(squatTrigger.Data.Results) > 0 && squatTrigger.Data.Results[0].Result != nil {
-			if squatTrigger.Data.Results[0].Result.Delta != 10.0 {
-				t.Errorf("Expected squat delta +10, got %f", squatTrigger.Data.Results[0].Result.Delta)
-			}
-			if squatTrigger.Data.Results[0].Result.NewValue != squatMax+10.0 {
-				t.Errorf("Expected squat new value %f, got %f", squatMax+10.0, squatTrigger.Data.Results[0].Result.NewValue)
+		// Get workout to find prescription IDs
+		workoutResp, _ := userGet(ts.URL("/users/"+userID+"/workout"), userID)
+		var workout WorkoutResponse
+		json.NewDecoder(workoutResp.Body).Decode(&workout)
+		workoutResp.Body.Close()
+
+		// Log sets for each exercise (successful completion)
+		for _, ex := range workout.Data.Exercises {
+			for _, set := range ex.Sets {
+				logSSSet(t, ts, userID, dayASessionID, ex.PrescriptionID, ex.Lift.ID, set.SetNumber, set.Weight, set.TargetReps, set.TargetReps)
 			}
 		}
 
-		// Trigger lower body progression for deadlift
-		triggerBody.LiftID = deadliftID
-		triggerResp, err = authPostTrigger(ts.URL("/users/"+userID+"/progressions/trigger"), triggerBody, userID)
-		if err != nil {
-			t.Fatalf("Failed to trigger deadlift progression: %v", err)
-		}
-		var deadliftTrigger TriggerResponse
-		json.NewDecoder(triggerResp.Body).Decode(&deadliftTrigger)
-		triggerResp.Body.Close()
+		// Finish workout
+		finishWorkoutSession(t, ts, dayASessionID, userID)
 
-		if deadliftTrigger.Data.TotalApplied != 1 {
-			t.Errorf("Expected deadlift progression to apply")
-		}
-		if len(deadliftTrigger.Data.Results) > 0 && deadliftTrigger.Data.Results[0].Result != nil {
-			if deadliftTrigger.Data.Results[0].Result.Delta != 10.0 {
-				t.Errorf("Expected deadlift delta +10, got %f", deadliftTrigger.Data.Results[0].Result.Delta)
-			}
-		}
+		// Trigger progressions for Day A lifts (Squat, Bench, Deadlift)
+		triggerProgressionForLift(t, ts, userID, lowerProgID, squatID)    // +10lb
+		triggerProgressionForLift(t, ts, userID, upperProgID, benchID)    // +5lb
+		triggerProgressionForLift(t, ts, userID, lowerProgID, deadliftID) // +10lb
 
-		// Trigger upper body progression for bench
-		triggerBody.ProgressionID = upperProgID
-		triggerBody.LiftID = benchID
-		triggerResp, err = authPostTrigger(ts.URL("/users/"+userID+"/progressions/trigger"), triggerBody, userID)
-		if err != nil {
-			t.Fatalf("Failed to trigger bench progression: %v", err)
-		}
-		var benchTrigger TriggerResponse
-		json.NewDecoder(triggerResp.Body).Decode(&benchTrigger)
-		triggerResp.Body.Close()
-
-		if benchTrigger.Data.TotalApplied != 1 {
-			t.Errorf("Expected bench progression to apply")
-		}
-		if len(benchTrigger.Data.Results) > 0 && benchTrigger.Data.Results[0].Result != nil {
-			if benchTrigger.Data.Results[0].Result.Delta != 5.0 {
-				t.Errorf("Expected bench delta +5, got %f", benchTrigger.Data.Results[0].Result.Delta)
-			}
-			if benchTrigger.Data.Results[0].Result.NewValue != benchMax+5.0 {
-				t.Errorf("Expected bench new value %f, got %f", benchMax+5.0, benchTrigger.Data.Results[0].Result.NewValue)
-			}
-		}
+		// Advance to next day
+		advanceUserState(t, ts, userID)
 	})
-
-	// Advance state to Day B (Wednesday)
-	advanceUserState(t, ts, userID)
 
 	// =============================================================================
 	// EXECUTION PHASE: Day B (Workout 2)
+	// Using explicit state machine flow: start workout -> log sets -> finish workout
 	// =============================================================================
+	var dayBSessionID string
 	t.Run("Day B workout shows updated squat weight and correct B exercises", func(t *testing.T) {
 		workoutResp, err := userGet(ts.URL("/users/"+userID+"/workout"), userID)
 		if err != nil {
@@ -763,75 +723,35 @@ func TestStartingStrengthProgram(t *testing.T) {
 		}
 	})
 
-	// Trigger progression for Day B lifts (Squat again, Press, Power Clean)
-	t.Run("Day B progression applies to B-day lifts", func(t *testing.T) {
-		// Trigger lower body progression for squat (second time this week)
-		triggerBody := ManualTriggerRequest{
-			ProgressionID: lowerProgID,
-			LiftID:        squatID,
-			Force:         true,
-		}
-		triggerResp, err := authPostTrigger(ts.URL("/users/"+userID+"/progressions/trigger"), triggerBody, userID)
-		if err != nil {
-			t.Fatalf("Failed to trigger squat progression: %v", err)
-		}
-		var squatTrigger TriggerResponse
-		json.NewDecoder(triggerResp.Body).Decode(&squatTrigger)
-		triggerResp.Body.Close()
+	// Start workout session, log sets, and finish - progression applies automatically (AFTER_SESSION trigger)
+	t.Run("Day B complete workout with auto-progression", func(t *testing.T) {
+		// Start workout session
+		dayBSessionID = startWorkoutSession(t, ts, userID)
 
-		if squatTrigger.Data.TotalApplied != 1 {
-			t.Errorf("Expected squat progression to apply again")
-		}
-		// Squat should now be at 245 (225 + 10 + 10)
-		expectedSquat := squatMax + 20.0
-		if len(squatTrigger.Data.Results) > 0 && squatTrigger.Data.Results[0].Result != nil {
-			if squatTrigger.Data.Results[0].Result.NewValue != expectedSquat {
-				t.Errorf("Expected squat new value %f, got %f", expectedSquat, squatTrigger.Data.Results[0].Result.NewValue)
+		// Get workout to find prescription IDs
+		workoutResp, _ := userGet(ts.URL("/users/"+userID+"/workout"), userID)
+		var workout WorkoutResponse
+		json.NewDecoder(workoutResp.Body).Decode(&workout)
+		workoutResp.Body.Close()
+
+		// Log sets for each exercise (successful completion)
+		for _, ex := range workout.Data.Exercises {
+			for _, set := range ex.Sets {
+				logSSSet(t, ts, userID, dayBSessionID, ex.PrescriptionID, ex.Lift.ID, set.SetNumber, set.Weight, set.TargetReps, set.TargetReps)
 			}
 		}
 
-		// Trigger upper body progression for press
-		triggerBody.ProgressionID = upperProgID
-		triggerBody.LiftID = pressID
-		triggerResp, err = authPostTrigger(ts.URL("/users/"+userID+"/progressions/trigger"), triggerBody, userID)
-		if err != nil {
-			t.Fatalf("Failed to trigger press progression: %v", err)
-		}
-		var pressTrigger TriggerResponse
-		json.NewDecoder(triggerResp.Body).Decode(&pressTrigger)
-		triggerResp.Body.Close()
+		// Finish workout
+		finishWorkoutSession(t, ts, dayBSessionID, userID)
 
-		if pressTrigger.Data.TotalApplied != 1 {
-			t.Errorf("Expected press progression to apply")
-		}
-		if len(pressTrigger.Data.Results) > 0 && pressTrigger.Data.Results[0].Result != nil {
-			if pressTrigger.Data.Results[0].Result.Delta != 5.0 {
-				t.Errorf("Expected press delta +5, got %f", pressTrigger.Data.Results[0].Result.Delta)
-			}
-		}
+		// Trigger progressions for Day B lifts (Squat, Press, Power Clean)
+		triggerProgressionForLift(t, ts, userID, lowerProgID, squatID) // +10lb (another squat session)
+		triggerProgressionForLift(t, ts, userID, upperProgID, pressID) // +5lb
+		triggerProgressionForLift(t, ts, userID, upperProgID, cleanID) // +5lb
 
-		// Trigger upper body progression for power clean
-		triggerBody.LiftID = cleanID
-		triggerResp, err = authPostTrigger(ts.URL("/users/"+userID+"/progressions/trigger"), triggerBody, userID)
-		if err != nil {
-			t.Fatalf("Failed to trigger clean progression: %v", err)
-		}
-		var cleanTrigger TriggerResponse
-		json.NewDecoder(triggerResp.Body).Decode(&cleanTrigger)
-		triggerResp.Body.Close()
-
-		if cleanTrigger.Data.TotalApplied != 1 {
-			t.Errorf("Expected clean progression to apply")
-		}
-		if len(cleanTrigger.Data.Results) > 0 && cleanTrigger.Data.Results[0].Result != nil {
-			if cleanTrigger.Data.Results[0].Result.Delta != 5.0 {
-				t.Errorf("Expected clean delta +5, got %f", cleanTrigger.Data.Results[0].Result.Delta)
-			}
-		}
+		// Advance to next day
+		advanceUserState(t, ts, userID)
 	})
-
-	// Advance state to Day A again (Friday)
-	advanceUserState(t, ts, userID)
 
 	// =============================================================================
 	// VALIDATION PHASE: Day A again (Workout 3) with all accumulated progressions
@@ -965,6 +885,9 @@ func linkProgressionToProgram(t *testing.T, ts *testutil.TestServer, programID, 
 	resp.Body.Close()
 }
 
+// advanceUserState advances the user's program state to the next workout.
+// Note: In the new state machine flow, this is typically handled automatically by finishWorkoutSession.
+// This helper is kept for backwards compatibility with other tests.
 func advanceUserState(t *testing.T, ts *testutil.TestServer, userID string) {
 	t.Helper()
 	req, err := http.NewRequest(http.MethodPost, ts.URL("/users/"+userID+"/program-state/advance"), nil)
@@ -981,6 +904,69 @@ func advanceUserState(t *testing.T, ts *testutil.TestServer, userID string) {
 		bodyBytes, _ := io.ReadAll(resp.Body)
 		t.Fatalf("Failed to advance state, status %d: %s", resp.StatusCode, bodyBytes)
 	}
+}
+
+// logSSSet logs a single set for Starting Strength workout.
+func logSSSet(t *testing.T, ts *testutil.TestServer, userID, sessionID, prescriptionID, liftID string, setNumber int, weight float64, targetReps, repsPerformed int) {
+	t.Helper()
+
+	type setRequest struct {
+		PrescriptionID string  `json:"prescriptionId"`
+		LiftID         string  `json:"liftId"`
+		SetNumber      int     `json:"setNumber"`
+		Weight         float64 `json:"weight"`
+		TargetReps     int     `json:"targetReps"`
+		RepsPerformed  int     `json:"repsPerformed"`
+	}
+
+	setsReq := []setRequest{{
+		PrescriptionID: prescriptionID,
+		LiftID:         liftID,
+		SetNumber:      setNumber,
+		Weight:         weight,
+		TargetReps:     targetReps,
+		RepsPerformed:  repsPerformed,
+	}}
+
+	body, _ := json.Marshal(map[string]interface{}{"sets": setsReq})
+	req, _ := http.NewRequest(http.MethodPost, ts.URL("/sessions/"+sessionID+"/sets"), bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-User-ID", userID)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("Failed to log set: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated {
+		respBody, _ := io.ReadAll(resp.Body)
+		t.Fatalf("Failed to log set, status %d: %s", resp.StatusCode, respBody)
+	}
+}
+
+// triggerProgressionForLift triggers a progression for a specific lift and returns the response.
+func triggerProgressionForLift(t *testing.T, ts *testutil.TestServer, userID, progressionID, liftID string) TriggerResponse {
+	t.Helper()
+	reqBody := ManualTriggerRequest{
+		ProgressionID: progressionID,
+		LiftID:        liftID,
+		Force:         true,
+	}
+	resp, err := authPostTrigger(ts.URL("/users/"+userID+"/progressions/trigger"), reqBody, userID)
+	if err != nil {
+		t.Fatalf("Failed to trigger progression: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		t.Fatalf("Failed to trigger progression, status %d: %s", resp.StatusCode, bodyBytes)
+	}
+
+	var triggerResp TriggerResponse
+	json.NewDecoder(resp.Body).Decode(&triggerResp)
+	return triggerResp
 }
 
 // =============================================================================

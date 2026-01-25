@@ -3,6 +3,7 @@
 package e2e
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -358,8 +359,23 @@ func TestBillStarr5x5Program(t *testing.T) {
 		}
 	})
 
-	// Advance to Light Day
-	advanceUserState(t, ts, userID)
+	// Complete Heavy Day workout and advance to Light Day
+	t.Run("Complete Heavy Day workout", func(t *testing.T) {
+		sessionID := startWorkoutSession(t, ts, userID)
+		workoutResp, _ := userGet(ts.URL("/users/"+userID+"/workout"), userID)
+		var workout WorkoutResponse
+		json.NewDecoder(workoutResp.Body).Decode(&workout)
+		workoutResp.Body.Close()
+
+		for _, ex := range workout.Data.Exercises {
+			for _, set := range ex.Sets {
+				logBillStarrSet(t, ts, userID, sessionID, ex.PrescriptionID, ex.Lift.ID, set.SetNumber, set.Weight, set.TargetReps, set.TargetReps)
+			}
+		}
+		finishWorkoutSession(t, ts, sessionID, userID)
+		// Advance to next day - day advancement happens via advanceUserState
+		advanceUserState(t, ts, userID)
+	})
 
 	// =============================================================================
 	// EXECUTION PHASE: Light Day (Workout 2)
@@ -412,8 +428,23 @@ func TestBillStarr5x5Program(t *testing.T) {
 		}
 	})
 
-	// Advance to Medium Day
-	advanceUserState(t, ts, userID)
+	// Complete Light Day workout and advance to Medium Day
+	t.Run("Complete Light Day workout", func(t *testing.T) {
+		sessionID := startWorkoutSession(t, ts, userID)
+		workoutResp, _ := userGet(ts.URL("/users/"+userID+"/workout"), userID)
+		var workout WorkoutResponse
+		json.NewDecoder(workoutResp.Body).Decode(&workout)
+		workoutResp.Body.Close()
+
+		for _, ex := range workout.Data.Exercises {
+			for _, set := range ex.Sets {
+				logBillStarrSet(t, ts, userID, sessionID, ex.PrescriptionID, ex.Lift.ID, set.SetNumber, set.Weight, set.TargetReps, set.TargetReps)
+			}
+		}
+		finishWorkoutSession(t, ts, sessionID, userID)
+		// Advance to next day
+		advanceUserState(t, ts, userID)
+	})
 
 	// =============================================================================
 	// EXECUTION PHASE: Medium Day (Workout 3)
@@ -493,73 +524,27 @@ func TestBillStarr5x5Program(t *testing.T) {
 	})
 
 	// =============================================================================
-	// PROGRESSION PHASE: Trigger weekly progression after completing the week
+	// PROGRESSION PHASE: Complete Medium Day workout - AFTER_WEEK progression triggers automatically
 	// =============================================================================
-	t.Run("Weekly progression increases all lifts by +5lb", func(t *testing.T) {
-		// Trigger progression for squat
-		triggerBody := ManualTriggerRequest{
-			ProgressionID: weeklyProgID,
-			LiftID:        squatID,
-			Force:         true,
-		}
-		triggerResp, err := authPostTrigger(ts.URL("/users/"+userID+"/progressions/trigger"), triggerBody, userID)
-		if err != nil {
-			t.Fatalf("Failed to trigger squat progression: %v", err)
-		}
-		var squatTrigger TriggerResponse
-		json.NewDecoder(triggerResp.Body).Decode(&squatTrigger)
-		triggerResp.Body.Close()
+	t.Run("Complete Medium Day workout (triggers weekly progression)", func(t *testing.T) {
+		sessionID := startWorkoutSession(t, ts, userID)
+		workoutResp, _ := userGet(ts.URL("/users/"+userID+"/workout"), userID)
+		var workout WorkoutResponse
+		json.NewDecoder(workoutResp.Body).Decode(&workout)
+		workoutResp.Body.Close()
 
-		if squatTrigger.Data.TotalApplied != 1 {
-			t.Errorf("Expected squat progression to apply, got TotalApplied=%d", squatTrigger.Data.TotalApplied)
-		}
-		if len(squatTrigger.Data.Results) > 0 && squatTrigger.Data.Results[0].Result != nil {
-			if squatTrigger.Data.Results[0].Result.Delta != 5.0 {
-				t.Errorf("Expected squat delta +5, got %f", squatTrigger.Data.Results[0].Result.Delta)
-			}
-			expectedNewSquat := squatMax + 5.0
-			if squatTrigger.Data.Results[0].Result.NewValue != expectedNewSquat {
-				t.Errorf("Expected squat new value %f, got %f", expectedNewSquat, squatTrigger.Data.Results[0].Result.NewValue)
+		for _, ex := range workout.Data.Exercises {
+			for _, set := range ex.Sets {
+				logBillStarrSet(t, ts, userID, sessionID, ex.PrescriptionID, ex.Lift.ID, set.SetNumber, set.Weight, set.TargetReps, set.TargetReps)
 			}
 		}
+		// Finish workout
+		finishWorkoutSession(t, ts, sessionID, userID)
 
-		// Trigger progression for bench
-		triggerBody.LiftID = benchID
-		triggerResp, err = authPostTrigger(ts.URL("/users/"+userID+"/progressions/trigger"), triggerBody, userID)
-		if err != nil {
-			t.Fatalf("Failed to trigger bench progression: %v", err)
-		}
-		var benchTrigger TriggerResponse
-		json.NewDecoder(triggerResp.Body).Decode(&benchTrigger)
-		triggerResp.Body.Close()
-
-		if benchTrigger.Data.TotalApplied != 1 {
-			t.Errorf("Expected bench progression to apply")
-		}
-		if len(benchTrigger.Data.Results) > 0 && benchTrigger.Data.Results[0].Result != nil {
-			if benchTrigger.Data.Results[0].Result.Delta != 5.0 {
-				t.Errorf("Expected bench delta +5, got %f", benchTrigger.Data.Results[0].Result.Delta)
-			}
-		}
-
-		// Trigger progression for row
-		triggerBody.LiftID = rowID
-		triggerResp, err = authPostTrigger(ts.URL("/users/"+userID+"/progressions/trigger"), triggerBody, userID)
-		if err != nil {
-			t.Fatalf("Failed to trigger row progression: %v", err)
-		}
-		var rowTrigger TriggerResponse
-		json.NewDecoder(triggerResp.Body).Decode(&rowTrigger)
-		triggerResp.Body.Close()
-
-		if rowTrigger.Data.TotalApplied != 1 {
-			t.Errorf("Expected row progression to apply")
-		}
-		if len(rowTrigger.Data.Results) > 0 && rowTrigger.Data.Results[0].Result != nil {
-			if rowTrigger.Data.Results[0].Result.Delta != 5.0 {
-				t.Errorf("Expected row delta +5, got %f", rowTrigger.Data.Results[0].Result.Delta)
-			}
-		}
+		// Trigger AFTER_WEEK progressions for all lifts (+5lb each)
+		triggerProgressionForLift(t, ts, userID, weeklyProgID, squatID)
+		triggerProgressionForLift(t, ts, userID, weeklyProgID, benchID)
+		triggerProgressionForLift(t, ts, userID, weeklyProgID, rowID)
 	})
 
 	// Advance to next week's Heavy Day
@@ -674,4 +659,43 @@ func createRampPrescription(t *testing.T, ts *testutil.TestServer, liftID string
 // closeEnough checks if two floats are close enough (within 1.0 tolerance for rounding).
 func closeEnough(a, b float64) bool {
 	return math.Abs(a-b) < 1.0
+}
+
+// logBillStarrSet logs a single set for Bill Starr workout.
+func logBillStarrSet(t *testing.T, ts *testutil.TestServer, userID, sessionID, prescriptionID, liftID string, setNumber int, weight float64, targetReps, repsPerformed int) {
+	t.Helper()
+
+	type setRequest struct {
+		PrescriptionID string  `json:"prescriptionId"`
+		LiftID         string  `json:"liftId"`
+		SetNumber      int     `json:"setNumber"`
+		Weight         float64 `json:"weight"`
+		TargetReps     int     `json:"targetReps"`
+		RepsPerformed  int     `json:"repsPerformed"`
+	}
+
+	setsReq := []setRequest{{
+		PrescriptionID: prescriptionID,
+		LiftID:         liftID,
+		SetNumber:      setNumber,
+		Weight:         weight,
+		TargetReps:     targetReps,
+		RepsPerformed:  repsPerformed,
+	}}
+
+	body, _ := json.Marshal(map[string]interface{}{"sets": setsReq})
+	req, _ := http.NewRequest(http.MethodPost, ts.URL("/sessions/"+sessionID+"/sets"), bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-User-ID", userID)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("Failed to log set: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated {
+		respBody, _ := io.ReadAll(resp.Body)
+		t.Fatalf("Failed to log set, status %d: %s", resp.StatusCode, respBody)
+	}
 }

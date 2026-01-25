@@ -195,8 +195,8 @@ func TestGZCLPT1StageProgression(t *testing.T) {
 		}
 	})
 
-	// Test 2: Simulate failure at stage 0 (5x3+) and verify stage advances
-	t.Run("failure at stage 0 advances to stage 1", func(t *testing.T) {
+	// Test 2: Simulate failure at stage 0 (5x3+) - stage progression triggers on workout finish
+	t.Run("failure at stage 0 advances to stage 1 on workout finish", func(t *testing.T) {
 		// Log sets with failure (only 13 total reps < 15 minimum volume)
 		sessionID := startWorkoutSession(t, ts, userID)
 		logSets(t, ts, userID, sessionID, squatPrescID, squatID, []setLog{
@@ -212,15 +212,11 @@ func TestGZCLPT1StageProgression(t *testing.T) {
 		if failureCount != 1 {
 			t.Errorf("Expected failure count 1, got %d", failureCount)
 		}
+
+		// Finishing workout triggers AFTER_SESSION progression automatically
 		finishWorkoutSession(t, ts, sessionID, userID)
-	})
 
-	// Test 3: After stage advancement, verify stage 1 (6x2+)
-	t.Run("after stage advance, workout shows 6x2", func(t *testing.T) {
-		// Trigger the stage progression with force=true
-		triggerProgression(t, ts, userID, stageProgID, squatID)
-
-		// Get workout again - should now show 6x2+
+		// Get workout again - stage progression should have applied
 		workoutResp, err := userGet(ts.URL("/users/"+userID+"/workout"), userID)
 		if err != nil {
 			t.Fatalf("Failed to get workout: %v", err)

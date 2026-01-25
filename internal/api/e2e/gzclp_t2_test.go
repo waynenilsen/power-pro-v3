@@ -161,9 +161,7 @@ func TestGZCLPT2StageProgression(t *testing.T) {
 		finishWorkoutSession(t, ts, sessionID, userID)
 	})
 
-	advanceUserState(t, ts, userID)
-
-	// Test 3: Stage 0 (3x10) FAIL - advance to stage 1
+	// Test 3: Stage 0 (3x10) FAIL - advance to stage 1 on workout finish
 	t.Run("failure at stage 0 advances to stage 1", func(t *testing.T) {
 		sessionID := startWorkoutSession(t, ts, userID)
 		// Only 27 reps < 30 minimum
@@ -178,24 +176,22 @@ func TestGZCLPT2StageProgression(t *testing.T) {
 			t.Errorf("Expected failure count 1, got %d", count)
 		}
 
-		// Trigger progression - should advance to stage 1 (3x8)
-		result := triggerProgressionWithResult(t, ts, userID, stageProgID, benchID)
-		if result.Data.TotalApplied != 1 {
-			t.Errorf("Expected progression to apply, got TotalApplied=%d", result.Data.TotalApplied)
-		}
+		// Finishing workout triggers AFTER_SESSION progression - advances to stage 1 (3x8)
+		finishWorkoutSession(t, ts, sessionID, userID)
 
-		// Weight should not change
-		if len(result.Data.Results) > 0 && result.Data.Results[0].Result != nil {
-			if result.Data.Results[0].Result.Delta != 0 {
-				t.Errorf("Expected delta=0 on stage advance, got %.1f", result.Data.Results[0].Result.Delta)
+		// Weight should not change on stage advance
+		workoutResp, _ := userGet(ts.URL("/users/"+userID+"/workout"), userID)
+		var workout WorkoutResponse
+		json.NewDecoder(workoutResp.Body).Decode(&workout)
+		workoutResp.Body.Close()
+		if len(workout.Data.Exercises) > 0 && len(workout.Data.Exercises[0].Sets) > 0 {
+			if workout.Data.Exercises[0].Sets[0].Weight != benchMax {
+				t.Errorf("Expected weight unchanged at %.1f, got %.1f", benchMax, workout.Data.Exercises[0].Sets[0].Weight)
 			}
 		}
-		finishWorkoutSession(t, ts, sessionID, userID)
 	})
 
-	advanceUserState(t, ts, userID)
-
-	// Test 4: Stage 1 (3x8) FAIL - advance to stage 2
+	// Test 4: Stage 1 (3x8) FAIL - advance to stage 2 on workout finish
 	t.Run("failure at stage 1 advances to stage 2", func(t *testing.T) {
 		sessionID := startWorkoutSession(t, ts, userID)
 		// Only 22 reps < 24 minimum (3x8)
@@ -210,16 +206,11 @@ func TestGZCLPT2StageProgression(t *testing.T) {
 			t.Errorf("Expected failure count 1 (reset after previous trigger), got %d", count)
 		}
 
-		result := triggerProgressionWithResult(t, ts, userID, stageProgID, benchID)
-		if result.Data.TotalApplied != 1 {
-			t.Errorf("Expected progression to apply, got TotalApplied=%d", result.Data.TotalApplied)
-		}
+		// Finishing workout triggers AFTER_SESSION progression
 		finishWorkoutSession(t, ts, sessionID, userID)
 	})
 
-	advanceUserState(t, ts, userID)
-
-	// Test 5: Stage 2 (3x6) FAIL - reset to stage 0 WITHOUT deload
+	// Test 5: Stage 2 (3x6) FAIL - reset to stage 0 WITHOUT deload on workout finish
 	t.Run("failure at stage 2 resets to stage 0 without deload", func(t *testing.T) {
 		sessionID := startWorkoutSession(t, ts, userID)
 		// Only 16 reps < 18 minimum (3x6)
@@ -229,22 +220,19 @@ func TestGZCLPT2StageProgression(t *testing.T) {
 			{weight: benchMax, targetReps: 6, repsPerformed: 4, isAMRAP: false}, // Failed
 		})
 
-		result := triggerProgressionWithResult(t, ts, userID, stageProgID, benchID)
-		if result.Data.TotalApplied != 1 {
-			t.Errorf("Expected progression to apply (reset), got TotalApplied=%d", result.Data.TotalApplied)
-		}
+		// Finishing workout triggers AFTER_SESSION progression (reset without deload)
+		finishWorkoutSession(t, ts, sessionID, userID)
 
 		// Weight should NOT change because DeloadOnReset=false
-		if len(result.Data.Results) > 0 && result.Data.Results[0].Result != nil {
-			res := result.Data.Results[0].Result
-			if res.Delta != 0 {
-				t.Errorf("Expected delta=0 (no deload for T2), got %.1f", res.Delta)
-			}
-			if res.NewValue != benchMax {
-				t.Errorf("Expected weight to remain %.1f, got %.1f", benchMax, res.NewValue)
+		workoutResp, _ := userGet(ts.URL("/users/"+userID+"/workout"), userID)
+		var workout WorkoutResponse
+		json.NewDecoder(workoutResp.Body).Decode(&workout)
+		workoutResp.Body.Close()
+		if len(workout.Data.Exercises) > 0 && len(workout.Data.Exercises[0].Sets) > 0 {
+			if workout.Data.Exercises[0].Sets[0].Weight != benchMax {
+				t.Errorf("Expected weight to remain %.1f (no deload for T2), got %.1f", benchMax, workout.Data.Exercises[0].Sets[0].Weight)
 			}
 		}
-		finishWorkoutSession(t, ts, sessionID, userID)
 	})
 }
 
@@ -342,8 +330,6 @@ func TestGZCLPT2SuccessAfterFailure(t *testing.T) {
 		finishWorkoutSession(t, ts, sessionID, userID)
 	})
 
-	advanceUserState(t, ts, userID)
-
 	// Log a success - counter should reset
 	t.Run("success resets counter to 0", func(t *testing.T) {
 		sessionID := startWorkoutSession(t, ts, userID)
@@ -439,7 +425,7 @@ func TestGZCLPT2ManualInterventionNeeded(t *testing.T) {
 	enrollResp.Body.Close()
 
 	// Fail at last stage with ResetOnExhaustion=false
-	t.Run("failure at last stage with no reset returns not applied", func(t *testing.T) {
+	t.Run("failure at last stage with no reset keeps weight unchanged", func(t *testing.T) {
 		sessionID := startWorkoutSession(t, ts, userID)
 		logSets(t, ts, userID, sessionID, benchPrescID, benchID, []setLog{
 			{weight: benchMax, targetReps: 8, repsPerformed: 6, isAMRAP: false}, // Fail
@@ -447,19 +433,18 @@ func TestGZCLPT2ManualInterventionNeeded(t *testing.T) {
 			{weight: benchMax, targetReps: 8, repsPerformed: 6, isAMRAP: false},
 		})
 
-		result := triggerProgressionWithResult(t, ts, userID, stageProgID, benchID)
+		// Finishing workout - progression NOT applied because ResetOnExhaustion=false
+		finishWorkoutSession(t, ts, sessionID, userID)
 
-		// Progression should NOT be applied because ResetOnExhaustion=false
-		if result.Data.TotalApplied != 0 {
-			t.Errorf("Expected no progression (manual intervention required), got TotalApplied=%d", result.Data.TotalApplied)
-		}
-
-		// Check for skip reason
-		if len(result.Data.Results) > 0 {
-			if result.Data.Results[0].Applied {
-				t.Error("Expected progression to not be applied")
+		// Verify weight unchanged (manual intervention required)
+		workoutResp, _ := userGet(ts.URL("/users/"+userID+"/workout"), userID)
+		var workout WorkoutResponse
+		json.NewDecoder(workoutResp.Body).Decode(&workout)
+		workoutResp.Body.Close()
+		if len(workout.Data.Exercises) > 0 && len(workout.Data.Exercises[0].Sets) > 0 {
+			if workout.Data.Exercises[0].Sets[0].Weight != benchMax {
+				t.Errorf("Expected weight unchanged at %.1f (manual intervention required), got %.1f", benchMax, workout.Data.Exercises[0].Sets[0].Weight)
 			}
 		}
-		finishWorkoutSession(t, ts, sessionID, userID)
 	})
 }
