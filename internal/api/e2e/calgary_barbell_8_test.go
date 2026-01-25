@@ -3,6 +3,7 @@
 package e2e
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -473,9 +474,9 @@ func TestCalgaryBarbell8WeekPhase1Percentages(t *testing.T) {
 		}
 	})
 
-	// Advance through Week 1 (4 days)
+	// Complete Week 1 workouts (4 days) using explicit state machine flow
 	for i := 0; i < 4; i++ {
-		advanceUserState(t, ts, userID)
+		completeCB8WorkoutDay(t, ts, userID)
 	}
 
 	t.Run("Week 2 Phase 1 uses 82% heavy and 70% volume", func(t *testing.T) {
@@ -495,9 +496,9 @@ func TestCalgaryBarbell8WeekPhase1Percentages(t *testing.T) {
 		t.Logf("Week 2: Generated %d exercises", len(workout.Data.Exercises))
 	})
 
-	// Advance through Week 2 (4 days)
+	// Complete Week 2 workouts (4 days) using explicit state machine flow
 	for i := 0; i < 4; i++ {
-		advanceUserState(t, ts, userID)
+		completeCB8WorkoutDay(t, ts, userID)
 	}
 
 	t.Run("Week 3 Phase 1 uses 86% heavy (peak week)", func(t *testing.T) {
@@ -517,9 +518,9 @@ func TestCalgaryBarbell8WeekPhase1Percentages(t *testing.T) {
 		t.Logf("Week 3: Generated %d exercises (peak intensity week at 86%%)", len(workout.Data.Exercises))
 	})
 
-	// Advance through Week 3 (4 days)
+	// Complete Week 3 workouts (4 days) using explicit state machine flow
 	for i := 0; i < 4; i++ {
-		advanceUserState(t, ts, userID)
+		completeCB8WorkoutDay(t, ts, userID)
 	}
 
 	t.Run("Week 4 Phase 1 uses 85% heavy (transition/deload before Phase 2)", func(t *testing.T) {
@@ -572,9 +573,9 @@ func TestCalgaryBarbell8WeekPhaseTransition(t *testing.T) {
 	meetDate := time.Now().AddDate(0, 0, 63).Format("2006-01-02")
 	setMeetDate(t, ts, userID, programID, meetDate)
 
-	// Advance through Phase 1 (4 weeks x 4 days = 16 days)
+	// Complete Phase 1 workouts (4 weeks x 4 days = 16 days) using explicit state machine flow
 	for i := 0; i < 16; i++ {
-		advanceUserState(t, ts, userID)
+		completeCB8WorkoutDay(t, ts, userID)
 	}
 
 	t.Run("Week 5 transitions to Phase 2 with RPE-based structure", func(t *testing.T) {
@@ -706,9 +707,9 @@ func TestCalgaryBarbell8WeekFourDayStructure(t *testing.T) {
 			daysSeen[workout.Data.DaySlug] = true
 			t.Logf("Day %d: %s with %d exercises", day+1, workout.Data.DaySlug, len(workout.Data.Exercises))
 
-			// Advance to next day
+			// Complete the current day's workout (advances state automatically after finish)
 			if day < 3 {
-				advanceUserState(t, ts, userID)
+				completeCB8WorkoutDay(t, ts, userID)
 			}
 		}
 
@@ -762,9 +763,9 @@ func TestCalgaryBarbell8WeekWeekProgression(t *testing.T) {
 			t.Errorf("Expected week 1, got %d", workout.Data.WeekNumber)
 		}
 
-		// Advance through all 4 days of week 1
+		// Complete all 4 days of week 1 using explicit state machine flow
 		for i := 0; i < 4; i++ {
-			advanceUserState(t, ts, userID)
+			completeCB8WorkoutDay(t, ts, userID)
 		}
 
 		// Get week 2 day 1
@@ -890,9 +891,9 @@ func TestCalgaryBarbell8WeekVs16Week(t *testing.T) {
 				t.Errorf("Week %d: Expected week %d, got %d", week, week, workout.Data.WeekNumber)
 			}
 
-			// Advance through 4 days
+			// Complete 4 days of workouts using explicit state machine flow
 			for i := 0; i < 4; i++ {
-				advanceUserState(t, ts, userID)
+				completeCB8WorkoutDay(t, ts, userID)
 			}
 		}
 
@@ -906,4 +907,73 @@ func TestCalgaryBarbell8WeekVs16Week(t *testing.T) {
 			t.Errorf("After Phase 1, expected week 5, got %d", workout.Data.WeekNumber)
 		}
 	})
+}
+
+// =============================================================================
+// HELPER FUNCTIONS
+// =============================================================================
+
+// completeCB8WorkoutDay completes a Calgary Barbell 8-Week workout day using explicit state machine flow.
+// This function starts a session, logs all sets, finishes the session, and advances to the next day.
+func completeCB8WorkoutDay(t *testing.T, ts *testutil.TestServer, userID string) {
+	t.Helper()
+
+	sessionID := startWorkoutSession(t, ts, userID)
+
+	// Get the workout to find prescription IDs
+	workoutResp, _ := userGet(ts.URL("/users/"+userID+"/workout"), userID)
+	var workout WorkoutResponse
+	json.NewDecoder(workoutResp.Body).Decode(&workout)
+	workoutResp.Body.Close()
+
+	// Log sets for each exercise
+	for _, ex := range workout.Data.Exercises {
+		for _, set := range ex.Sets {
+			logCB8Set(t, ts, userID, sessionID, ex.PrescriptionID, ex.Lift.ID, set.SetNumber, set.Weight, set.TargetReps, set.TargetReps)
+		}
+	}
+
+	finishWorkoutSession(t, ts, sessionID, userID)
+
+	// Advance to next day
+	advanceUserState(t, ts, userID)
+}
+
+// logCB8Set logs a single set for Calgary Barbell 8-Week workout.
+func logCB8Set(t *testing.T, ts *testutil.TestServer, userID, sessionID, prescriptionID, liftID string, setNumber int, weight float64, targetReps, repsPerformed int) {
+	t.Helper()
+
+	type setRequest struct {
+		PrescriptionID string  `json:"prescriptionId"`
+		LiftID         string  `json:"liftId"`
+		SetNumber      int     `json:"setNumber"`
+		Weight         float64 `json:"weight"`
+		TargetReps     int     `json:"targetReps"`
+		RepsPerformed  int     `json:"repsPerformed"`
+	}
+
+	setsReq := []setRequest{{
+		PrescriptionID: prescriptionID,
+		LiftID:         liftID,
+		SetNumber:      setNumber,
+		Weight:         weight,
+		TargetReps:     targetReps,
+		RepsPerformed:  repsPerformed,
+	}}
+
+	body, _ := json.Marshal(map[string]interface{}{"sets": setsReq})
+	req, _ := http.NewRequest(http.MethodPost, ts.URL("/sessions/"+sessionID+"/sets"), bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-User-ID", userID)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("Failed to log set: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated {
+		respBody, _ := io.ReadAll(resp.Body)
+		t.Fatalf("Failed to log set, status %d: %s", resp.StatusCode, respBody)
+	}
 }

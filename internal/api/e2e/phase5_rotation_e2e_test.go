@@ -3,6 +3,7 @@
 package e2e
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -239,8 +240,8 @@ func TestGreySkullLPProgram(t *testing.T) {
 		}
 	})
 
-	// Advance to Week 1 Day 2 (Variant B)
-	advanceUserState(t, ts, userID)
+	// Complete Week 1 Day 1 and advance to Week 1 Day 2 (Variant B)
+	completeRotationWorkoutDay(t, ts, userID)
 
 	t.Run("Week 1 Day 2 - Variant B workout", func(t *testing.T) {
 		workoutResp, err := userGet(ts.URL("/users/"+userID+"/workout"), userID)
@@ -263,9 +264,9 @@ func TestGreySkullLPProgram(t *testing.T) {
 		}
 	})
 
-	// Advance through rest of Week 1 and into Week 2
-	advanceUserState(t, ts, userID) // Week 1 Day 3 (Variant A)
-	advanceUserState(t, ts, userID) // Week 2 Day 1 (Variant B)
+	// Complete remaining Week 1 workouts and advance to Week 2
+	completeRotationWorkoutDay(t, ts, userID) // Week 1 Day 3 (Variant A)
+	completeRotationWorkoutDay(t, ts, userID) // Week 2 Day 1 (Variant B)
 
 	t.Run("Week 2 Day 1 - Variant B workout (pattern flip)", func(t *testing.T) {
 		workoutResp, err := userGet(ts.URL("/users/"+userID+"/workout"), userID)
@@ -540,8 +541,8 @@ func TestCAP3Program(t *testing.T) {
 		}
 	})
 
-	// Advance to Week 2
-	advanceUserState(t, ts, userID)
+	// Complete Week 1 and advance to Week 2
+	completeRotationWorkoutDay(t, ts, userID)
 
 	t.Run("Week 2 - Squat AMRAP focus", func(t *testing.T) {
 		workoutResp, err := userGet(ts.URL("/users/"+userID+"/workout"), userID)
@@ -562,8 +563,8 @@ func TestCAP3Program(t *testing.T) {
 		}
 	})
 
-	// Advance to Week 3
-	advanceUserState(t, ts, userID)
+	// Complete Week 2 and advance to Week 3
+	completeRotationWorkoutDay(t, ts, userID)
 
 	t.Run("Week 3 - Bench AMRAP focus", func(t *testing.T) {
 		workoutResp, err := userGet(ts.URL("/users/"+userID+"/workout"), userID)
@@ -584,8 +585,8 @@ func TestCAP3Program(t *testing.T) {
 		}
 	})
 
-	// Advance to new cycle (Week 1 again)
-	advanceUserState(t, ts, userID)
+	// Complete Week 3 and advance to new cycle (Week 1 again)
+	completeRotationWorkoutDay(t, ts, userID)
 
 	t.Run("Rotation cycles back to Week 1", func(t *testing.T) {
 		workoutResp, err := userGet(ts.URL("/users/"+userID+"/workout"), userID)
@@ -758,9 +759,9 @@ func TestInvertedJuggernautProgram(t *testing.T) {
 		}
 	})
 
-	// Advance to Week 4 (Deload)
+	// Complete workouts to advance to Week 4 (Deload)
 	for i := 0; i < 3; i++ {
-		advanceUserState(t, ts, userID)
+		completeRotationWorkoutDay(t, ts, userID)
 	}
 
 	t.Run("Week 4 - 10s Wave Deload", func(t *testing.T) {
@@ -778,8 +779,8 @@ func TestInvertedJuggernautProgram(t *testing.T) {
 		}
 	})
 
-	// Advance to Week 5 (8s Wave start)
-	advanceUserState(t, ts, userID)
+	// Complete Week 4 and advance to Week 5 (8s Wave start)
+	completeRotationWorkoutDay(t, ts, userID)
 
 	t.Run("Week 5 - 8s Wave Accumulation", func(t *testing.T) {
 		workoutResp, err := userGet(ts.URL("/users/"+userID+"/workout"), userID)
@@ -796,4 +797,73 @@ func TestInvertedJuggernautProgram(t *testing.T) {
 			t.Errorf("Expected week 5 (8s wave start), got %d", workout.Data.WeekNumber)
 		}
 	})
+}
+
+// =============================================================================
+// SHARED HELPER FUNCTIONS
+// =============================================================================
+
+// completeRotationWorkoutDay completes a rotation-based workout day using explicit state machine flow.
+// This function starts a session, logs all sets, finishes the session, and advances to the next day.
+func completeRotationWorkoutDay(t *testing.T, ts *testutil.TestServer, userID string) {
+	t.Helper()
+
+	sessionID := startWorkoutSession(t, ts, userID)
+
+	// Get the workout to find prescription IDs
+	workoutResp, _ := userGet(ts.URL("/users/"+userID+"/workout"), userID)
+	var workout WorkoutResponse
+	json.NewDecoder(workoutResp.Body).Decode(&workout)
+	workoutResp.Body.Close()
+
+	// Log sets for each exercise
+	for _, ex := range workout.Data.Exercises {
+		for _, set := range ex.Sets {
+			logRotationSet(t, ts, userID, sessionID, ex.PrescriptionID, ex.Lift.ID, set.SetNumber, set.Weight, set.TargetReps, set.TargetReps)
+		}
+	}
+
+	finishWorkoutSession(t, ts, sessionID, userID)
+
+	// Advance to next day
+	advanceUserState(t, ts, userID)
+}
+
+// logRotationSet logs a single set for rotation-based program workouts.
+func logRotationSet(t *testing.T, ts *testutil.TestServer, userID, sessionID, prescriptionID, liftID string, setNumber int, weight float64, targetReps, repsPerformed int) {
+	t.Helper()
+
+	type setRequest struct {
+		PrescriptionID string  `json:"prescriptionId"`
+		LiftID         string  `json:"liftId"`
+		SetNumber      int     `json:"setNumber"`
+		Weight         float64 `json:"weight"`
+		TargetReps     int     `json:"targetReps"`
+		RepsPerformed  int     `json:"repsPerformed"`
+	}
+
+	setsReq := []setRequest{{
+		PrescriptionID: prescriptionID,
+		LiftID:         liftID,
+		SetNumber:      setNumber,
+		Weight:         weight,
+		TargetReps:     targetReps,
+		RepsPerformed:  repsPerformed,
+	}}
+
+	body, _ := json.Marshal(map[string]interface{}{"sets": setsReq})
+	req, _ := http.NewRequest(http.MethodPost, ts.URL("/sessions/"+sessionID+"/sets"), bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-User-ID", userID)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("Failed to log set: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated {
+		respBody, _ := io.ReadAll(resp.Body)
+		t.Fatalf("Failed to log set, status %d: %s", resp.StatusCode, respBody)
+	}
 }

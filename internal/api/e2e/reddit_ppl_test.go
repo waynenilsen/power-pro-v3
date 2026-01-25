@@ -3,6 +3,7 @@
 package e2e
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -302,15 +303,9 @@ func TestRedditPPL6DayProgram(t *testing.T) {
 		}
 	})
 
-	// Trigger progression for deadlift and advance to Push A
-	triggerBody := ManualTriggerRequest{
-		ProgressionID: lowerProgID,
-		LiftID:        deadliftID,
-		Force:         true,
-	}
-	triggerResp, _ := authPostTrigger(ts.URL("/users/"+userID+"/progressions/trigger"), triggerBody, userID)
-	triggerResp.Body.Close()
-	advanceUserState(t, ts, userID)
+	// Complete Pull A workout and trigger progression for deadlift, then advance to Push A
+	completePPLWorkoutDay(t, ts, userID)
+	triggerProgressionForLift(t, ts, userID, lowerProgID, deadliftID)
 
 	// =============================================================================
 	// EXECUTION PHASE: Day 2 - Push A (Bench 4x5, 1x5+)
@@ -361,12 +356,9 @@ func TestRedditPPL6DayProgram(t *testing.T) {
 		}
 	})
 
-	// Trigger progression for bench and advance to Legs A
-	triggerBody.ProgressionID = upperProgID
-	triggerBody.LiftID = benchID
-	triggerResp, _ = authPostTrigger(ts.URL("/users/"+userID+"/progressions/trigger"), triggerBody, userID)
-	triggerResp.Body.Close()
-	advanceUserState(t, ts, userID)
+	// Complete Push A workout and trigger progression for bench, then advance to Legs A
+	completePPLWorkoutDay(t, ts, userID)
+	triggerProgressionForLift(t, ts, userID, upperProgID, benchID)
 
 	// =============================================================================
 	// EXECUTION PHASE: Day 3 - Legs A (Squat 2x5, 1x5+)
@@ -417,12 +409,9 @@ func TestRedditPPL6DayProgram(t *testing.T) {
 		}
 	})
 
-	// Trigger progression for squat and advance to Pull B
-	triggerBody.ProgressionID = lowerProgID
-	triggerBody.LiftID = squatID
-	triggerResp, _ = authPostTrigger(ts.URL("/users/"+userID+"/progressions/trigger"), triggerBody, userID)
-	triggerResp.Body.Close()
-	advanceUserState(t, ts, userID)
+	// Complete Legs A workout and trigger progression for squat, then advance to Pull B
+	completePPLWorkoutDay(t, ts, userID)
+	triggerProgressionForLift(t, ts, userID, lowerProgID, squatID)
 
 	// =============================================================================
 	// EXECUTION PHASE: Day 4 - Pull B (Barbell Rows 4x5, 1x5+)
@@ -473,12 +462,9 @@ func TestRedditPPL6DayProgram(t *testing.T) {
 		}
 	})
 
-	// Trigger progression for rows and advance to Push B
-	triggerBody.ProgressionID = upperProgID
-	triggerBody.LiftID = rowsID
-	triggerResp, _ = authPostTrigger(ts.URL("/users/"+userID+"/progressions/trigger"), triggerBody, userID)
-	triggerResp.Body.Close()
-	advanceUserState(t, ts, userID)
+	// Complete Pull B workout and trigger progression for rows, then advance to Push B
+	completePPLWorkoutDay(t, ts, userID)
+	triggerProgressionForLift(t, ts, userID, upperProgID, rowsID)
 
 	// =============================================================================
 	// EXECUTION PHASE: Day 5 - Push B (OHP 4x5, 1x5+)
@@ -529,11 +515,9 @@ func TestRedditPPL6DayProgram(t *testing.T) {
 		}
 	})
 
-	// Trigger progression for OHP and advance to Legs B
-	triggerBody.LiftID = ohpID
-	triggerResp, _ = authPostTrigger(ts.URL("/users/"+userID+"/progressions/trigger"), triggerBody, userID)
-	triggerResp.Body.Close()
-	advanceUserState(t, ts, userID)
+	// Complete Push B workout and trigger progression for OHP, then advance to Legs B
+	completePPLWorkoutDay(t, ts, userID)
+	triggerProgressionForLift(t, ts, userID, upperProgID, ohpID)
 
 	// =============================================================================
 	// EXECUTION PHASE: Day 6 - Legs B (Squat 2x5, 1x5+)
@@ -586,14 +570,9 @@ func TestRedditPPL6DayProgram(t *testing.T) {
 	// VALIDATION PHASE: Full cycle complete - verify all accumulated progressions
 	// =============================================================================
 	t.Run("All progressions applied correctly after full 6-day cycle", func(t *testing.T) {
-		// Trigger squat progression for Legs B
-		triggerBody.ProgressionID = lowerProgID
-		triggerBody.LiftID = squatID
-		triggerResp, _ = authPostTrigger(ts.URL("/users/"+userID+"/progressions/trigger"), triggerBody, userID)
-		triggerResp.Body.Close()
-
-		// Advance to next week's Pull A
-		advanceUserState(t, ts, userID)
+		// Complete Legs B workout and trigger squat progression
+		completePPLWorkoutDay(t, ts, userID)
+		triggerProgressionForLift(t, ts, userID, lowerProgID, squatID)
 
 		workoutResp, err := userGet(ts.URL("/users/"+userID+"/workout"), userID)
 		if err != nil {
@@ -651,4 +630,69 @@ func createGreyskullPrescription(t *testing.T, ts *testutil.TestServer, liftID s
 	var envelope PrescriptionResponse
 	json.NewDecoder(resp.Body).Decode(&envelope)
 	return envelope.Data.ID
+}
+
+// completePPLWorkoutDay completes a Reddit PPL workout day using explicit state machine flow.
+// This function starts a session, logs all sets, finishes the session, and advances to the next day.
+func completePPLWorkoutDay(t *testing.T, ts *testutil.TestServer, userID string) {
+	t.Helper()
+
+	sessionID := startWorkoutSession(t, ts, userID)
+
+	// Get the workout to find prescription IDs
+	workoutResp, _ := userGet(ts.URL("/users/"+userID+"/workout"), userID)
+	var workout WorkoutResponse
+	json.NewDecoder(workoutResp.Body).Decode(&workout)
+	workoutResp.Body.Close()
+
+	// Log sets for each exercise
+	for _, ex := range workout.Data.Exercises {
+		for _, set := range ex.Sets {
+			logPPLSet(t, ts, userID, sessionID, ex.PrescriptionID, ex.Lift.ID, set.SetNumber, set.Weight, set.TargetReps, set.TargetReps)
+		}
+	}
+
+	finishWorkoutSession(t, ts, sessionID, userID)
+
+	// Advance to next day
+	advanceUserState(t, ts, userID)
+}
+
+// logPPLSet logs a single set for Reddit PPL workout.
+func logPPLSet(t *testing.T, ts *testutil.TestServer, userID, sessionID, prescriptionID, liftID string, setNumber int, weight float64, targetReps, repsPerformed int) {
+	t.Helper()
+
+	type setRequest struct {
+		PrescriptionID string  `json:"prescriptionId"`
+		LiftID         string  `json:"liftId"`
+		SetNumber      int     `json:"setNumber"`
+		Weight         float64 `json:"weight"`
+		TargetReps     int     `json:"targetReps"`
+		RepsPerformed  int     `json:"repsPerformed"`
+	}
+
+	setsReq := []setRequest{{
+		PrescriptionID: prescriptionID,
+		LiftID:         liftID,
+		SetNumber:      setNumber,
+		Weight:         weight,
+		TargetReps:     targetReps,
+		RepsPerformed:  repsPerformed,
+	}}
+
+	body, _ := json.Marshal(map[string]interface{}{"sets": setsReq})
+	req, _ := http.NewRequest(http.MethodPost, ts.URL("/sessions/"+sessionID+"/sets"), bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-User-ID", userID)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("Failed to log set: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated {
+		respBody, _ := io.ReadAll(resp.Body)
+		t.Fatalf("Failed to log set, status %d: %s", resp.StatusCode, respBody)
+	}
 }
