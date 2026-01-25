@@ -9,6 +9,7 @@ import (
 	"math"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/waynenilsen/power-pro-v3/internal/testutil"
@@ -36,6 +37,10 @@ func TestWendler531BBBProgram(t *testing.T) {
 	// Test-unique identifiers
 	testID := uuid.New().String()[:8]
 	userID := "wendler-531-test-user"
+
+	// Create the test user in the database
+	now := time.Now().Format(time.RFC3339)
+	_, err = ts.DB().Exec("INSERT OR IGNORE INTO users (id, created_at, updated_at) VALUES (?, ?, ?)", userID, now, now)
 
 	// Seeded lift IDs
 	squatID := "00000000-0000-0000-0000-000000000001"
@@ -255,8 +260,26 @@ func TestWendler531BBBProgram(t *testing.T) {
 	// =============================================================================
 	// Log AMRAP set with 8 reps
 	// =============================================================================
-	sessionID := "session-week1-" + testID
 	t.Run("Log AMRAP set with 8 reps", func(t *testing.T) {
+		// Start a workout session first
+		startResp, err := userPost(ts.URL("/workouts/start"), "", userID)
+		if err != nil {
+			t.Fatalf("Failed to start workout: %v", err)
+		}
+		if startResp.StatusCode != http.StatusCreated {
+			body, _ := io.ReadAll(startResp.Body)
+			startResp.Body.Close()
+			t.Fatalf("Failed to start workout, status %d: %s", startResp.StatusCode, body)
+		}
+		var sessionEnvelope struct {
+			Data struct {
+				ID string `json:"id"`
+			} `json:"data"`
+		}
+		json.NewDecoder(startResp.Body).Decode(&sessionEnvelope)
+		startResp.Body.Close()
+		sessionID := sessionEnvelope.Data.ID
+
 		// Get the workout first to extract prescription ID
 		workoutResp, _ := userGet(ts.URL("/users/"+userID+"/workout"), userID)
 		var workout WorkoutResponse
@@ -289,6 +312,10 @@ func TestWendler531BBBProgram(t *testing.T) {
 			t.Fatalf("Failed to log set, status %d: %s", logResp.StatusCode, body)
 		}
 		logResp.Body.Close()
+
+		// Finish the workout session
+		finishResp, _ := userPost(ts.URL("/workouts/"+sessionID+"/finish"), "", userID)
+		finishResp.Body.Close()
 	})
 
 	// Advance through Week 1

@@ -346,7 +346,7 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	// - Users can log sets for their own sessions
 	// - Users can query their own logged sets
 	// - Handler performs its own authorization check for user-specific data
-	loggedSetHandler := api.NewLoggedSetHandler(s.loggedSetRepo, s.failureService)
+	loggedSetHandler := api.NewLoggedSetHandler(s.loggedSetRepo, s.workoutSessionRepo, s.userProgramStateRepo, s.failureService, s.eventBus)
 	mux.Handle("POST /sessions/{sessionId}/sets", withAuth(loggedSetHandler.CreateBatch))
 	mux.Handle("GET /sessions/{sessionId}/sets", withAuth(loggedSetHandler.ListBySession))
 	mux.Handle("GET /users/{userId}/logged-sets", withAuth(loggedSetHandler.ListByUser))

@@ -1,11 +1,14 @@
 package api
 
 import (
+	"context"
 	"net/http"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/waynenilsen/power-pro-v3/internal/domain/event"
 	"github.com/waynenilsen/power-pro-v3/internal/domain/loggedset"
+	"github.com/waynenilsen/power-pro-v3/internal/domain/workoutsession"
 	apperrors "github.com/waynenilsen/power-pro-v3/internal/errors"
 	"github.com/waynenilsen/power-pro-v3/internal/middleware"
 	"github.com/waynenilsen/power-pro-v3/internal/repository"
@@ -14,13 +17,28 @@ import (
 
 // LoggedSetHandler handles HTTP requests for logged set operations.
 type LoggedSetHandler struct {
-	repo           *repository.LoggedSetRepository
-	failureService *service.FailureService
+	repo               *repository.LoggedSetRepository
+	workoutSessionRepo *repository.WorkoutSessionRepository
+	stateRepo          *repository.UserProgramStateRepository
+	failureService     *service.FailureService
+	eventBus           *event.Bus
 }
 
 // NewLoggedSetHandler creates a new LoggedSetHandler.
-func NewLoggedSetHandler(repo *repository.LoggedSetRepository, failureService *service.FailureService) *LoggedSetHandler {
-	return &LoggedSetHandler{repo: repo, failureService: failureService}
+func NewLoggedSetHandler(
+	repo *repository.LoggedSetRepository,
+	workoutSessionRepo *repository.WorkoutSessionRepository,
+	stateRepo *repository.UserProgramStateRepository,
+	failureService *service.FailureService,
+	eventBus *event.Bus,
+) *LoggedSetHandler {
+	return &LoggedSetHandler{
+		repo:               repo,
+		workoutSessionRepo: workoutSessionRepo,
+		stateRepo:          stateRepo,
+		failureService:     failureService,
+		eventBus:           eventBus,
+	}
 }
 
 // LoggedSetResponse represents the API response format for a logged set.
@@ -88,6 +106,32 @@ func (h *LoggedSetHandler) CreateBatch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Validate that the workout session exists and is IN_PROGRESS
+	var programID string
+	if h.workoutSessionRepo != nil {
+		session, err := h.workoutSessionRepo.GetByID(sessionID)
+		if err != nil {
+			writeDomainError(w, apperrors.NewInternal("failed to get workout session", err))
+			return
+		}
+		if session == nil {
+			writeDomainError(w, apperrors.NewNotFound("workout session", sessionID))
+			return
+		}
+		if session.Status != workoutsession.StatusInProgress {
+			writeDomainError(w, apperrors.NewBadRequest("cannot log sets to a session that is not in progress"))
+			return
+		}
+
+		// Get program ID for event emission
+		if h.stateRepo != nil {
+			state, err := h.stateRepo.GetByID(session.UserProgramStateID)
+			if err == nil && state != nil {
+				programID = state.ProgramID
+			}
+		}
+	}
+
 	var req CreateLoggedSetsBatchRequest
 	if err := readJSON(r, &req); err != nil {
 		writeDomainError(w, apperrors.NewBadRequest("invalid request body"))
@@ -138,6 +182,21 @@ func (h *LoggedSetHandler) CreateBatch(w http.ResponseWriter, r *http.Request) {
 			// Note: We don't fail the request if failure processing fails,
 			// as the set has been successfully logged. Failure processing is
 			// best-effort and logged separately.
+		}
+
+		// Emit SET_LOGGED event
+		if h.eventBus != nil {
+			isFailure := newSet.RepsPerformed < newSet.TargetReps
+			evt := event.NewStateEvent(event.EventSetLogged, userID, programID).
+				WithPayload(event.PayloadLoggedSetID, newSet.ID).
+				WithPayload(event.PayloadSessionID, sessionID).
+				WithPayload(event.PayloadLiftID, newSet.LiftID).
+				WithPayload(event.PayloadRepsPerformed, newSet.RepsPerformed).
+				WithPayload(event.PayloadTargetReps, newSet.TargetReps).
+				WithPayload(event.PayloadWeight, newSet.Weight).
+				WithPayload(event.PayloadIsAMRAP, newSet.IsAMRAP).
+				WithPayload(event.PayloadIsFailure, isFailure)
+			h.eventBus.PublishAsync(context.Background(), evt)
 		}
 
 		responses = append(responses, loggedSetToResponse(newSet))

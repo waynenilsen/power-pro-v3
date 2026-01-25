@@ -43,6 +43,14 @@ type LoggedSetTestPaginatedResponse struct {
 	} `json:"meta"`
 }
 
+// LSWorkoutSessionEnvelope wraps workout session response.
+type LSWorkoutSessionEnvelope struct {
+	Data struct {
+		ID     string `json:"id"`
+		Status string `json:"status"`
+	} `json:"data"`
+}
+
 // Helper functions for logged set tests
 
 func authPostLoggedSets(url string, body string, userID string) (*http.Response, error) {
@@ -74,6 +82,16 @@ func adminGetLoggedSets(url string) (*http.Response, error) {
 	return http.DefaultClient.Do(req)
 }
 
+// createLSTestUser creates a test user in the database
+func createLSTestUser(t *testing.T, ts *testutil.TestServer, userID string) {
+	t.Helper()
+	now := time.Now().Format(time.RFC3339)
+	_, err := ts.DB().Exec("INSERT OR IGNORE INTO users (id, created_at, updated_at) VALUES (?, ?, ?)", userID, now, now)
+	if err != nil {
+		t.Fatalf("Failed to create test user: %v", err)
+	}
+}
+
 // createLSTestLift creates a test lift and returns its ID
 func createLSTestLift(t *testing.T, ts *testutil.TestServer, name, slug string) string {
 	t.Helper()
@@ -94,6 +112,139 @@ func createLSTestLift(t *testing.T, ts *testutil.TestServer, name, slug string) 
 	return lift.Data.ID
 }
 
+// createLSTestCycle creates a test cycle and returns its ID
+func createLSTestCycle(t *testing.T, ts *testutil.TestServer, name string) string {
+	t.Helper()
+	body := `{"name": "` + name + `", "lengthWeeks": 4}`
+	req, err := http.NewRequest(http.MethodPost, ts.URL("/cycles"), bytes.NewBufferString(body))
+	if err != nil {
+		t.Fatalf("Failed to create request: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-User-ID", testutil.TestAdminID)
+	req.Header.Set("X-Admin", "true")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("Failed to create test cycle: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		t.Fatalf("Failed to create cycle (status %d): %s", resp.StatusCode, bodyBytes)
+	}
+
+	var envelope struct {
+		Data struct {
+			ID string `json:"id"`
+		} `json:"data"`
+	}
+	json.NewDecoder(resp.Body).Decode(&envelope)
+	return envelope.Data.ID
+}
+
+// createLSTestProgram creates a test program and returns its ID
+func createLSTestProgram(t *testing.T, ts *testutil.TestServer, name, slug, cycleID string) string {
+	t.Helper()
+	body := `{"name": "` + name + `", "slug": "` + slug + `", "cycleId": "` + cycleID + `"}`
+	req, err := http.NewRequest(http.MethodPost, ts.URL("/programs"), bytes.NewBufferString(body))
+	if err != nil {
+		t.Fatalf("Failed to create request: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-User-ID", testutil.TestAdminID)
+	req.Header.Set("X-Admin", "true")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("Failed to create test program: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		t.Fatalf("Failed to create program (status %d): %s", resp.StatusCode, bodyBytes)
+	}
+
+	var envelope struct {
+		Data struct {
+			ID string `json:"id"`
+		} `json:"data"`
+	}
+	json.NewDecoder(resp.Body).Decode(&envelope)
+	return envelope.Data.ID
+}
+
+// enrollLSTestUser enrolls a user in a program
+func enrollLSTestUser(t *testing.T, ts *testutil.TestServer, userID, programID string) {
+	t.Helper()
+	body := `{"programId": "` + programID + `"}`
+	req, err := http.NewRequest(http.MethodPost, ts.URL("/users/"+userID+"/program"), bytes.NewBufferString(body))
+	if err != nil {
+		t.Fatalf("Failed to create request: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-User-ID", userID)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("Failed to enroll user: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		t.Fatalf("Expected status 201 for enrollment, got %d: %s", resp.StatusCode, bodyBytes)
+	}
+}
+
+// startLSWorkoutSession starts a workout session and returns its ID
+func startLSWorkoutSession(t *testing.T, ts *testutil.TestServer, userID string) string {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodPost, ts.URL("/workouts/start"), nil)
+	if err != nil {
+		t.Fatalf("Failed to create request: %v", err)
+	}
+	req.Header.Set("X-User-ID", userID)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("Failed to start workout: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		t.Fatalf("Expected status 201, got %d: %s", resp.StatusCode, bodyBytes)
+	}
+
+	var envelope LSWorkoutSessionEnvelope
+	json.NewDecoder(resp.Body).Decode(&envelope)
+	return envelope.Data.ID
+}
+
+// finishLSWorkoutSession finishes a workout session
+func finishLSWorkoutSession(t *testing.T, ts *testutil.TestServer, sessionID, userID string) {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodPost, ts.URL("/workouts/"+sessionID+"/finish"), nil)
+	if err != nil {
+		t.Fatalf("Failed to create request: %v", err)
+	}
+	req.Header.Set("X-User-ID", userID)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("Failed to finish workout: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		t.Fatalf("Expected status 200, got %d: %s", resp.StatusCode, bodyBytes)
+	}
+}
+
 func TestLoggedSetHandler_CreateBatch(t *testing.T) {
 	ts, err := testutil.NewTestServer()
 	if err != nil {
@@ -101,9 +252,14 @@ func TestLoggedSetHandler_CreateBatch(t *testing.T) {
 	}
 	defer ts.Close()
 
-	// Create a test lift
+	// Create test fixtures: user, lift, cycle, program, enrollment, and workout session
+	userID := "ls-test-user"
+	createLSTestUser(t, ts, userID)
 	liftID := createLSTestLift(t, ts, "Squat", "squat-ls-test")
-	sessionID := uuid.New().String()
+	cycleID := createLSTestCycle(t, ts, "LS Test Cycle")
+	programID := createLSTestProgram(t, ts, "LS Test Program", "ls-test-program", cycleID)
+	enrollLSTestUser(t, ts, userID, programID)
+	sessionID := startLSWorkoutSession(t, ts, userID)
 	prescriptionID := uuid.New().String()
 
 	t.Run("creates logged sets successfully", func(t *testing.T) {
@@ -130,7 +286,7 @@ func TestLoggedSetHandler_CreateBatch(t *testing.T) {
 			]
 		}`
 
-		resp, err := authPostLoggedSets(ts.URL("/sessions/"+sessionID+"/sets"), body, testutil.TestUserID)
+		resp, err := authPostLoggedSets(ts.URL("/sessions/"+sessionID+"/sets"), body, userID)
 		if err != nil {
 			t.Fatalf("Failed to make request: %v", err)
 		}
@@ -187,7 +343,7 @@ func TestLoggedSetHandler_CreateBatch(t *testing.T) {
 
 	t.Run("returns 400 for empty sets array", func(t *testing.T) {
 		body := `{"sets": []}`
-		resp, err := authPostLoggedSets(ts.URL("/sessions/"+sessionID+"/sets"), body, testutil.TestUserID)
+		resp, err := authPostLoggedSets(ts.URL("/sessions/"+sessionID+"/sets"), body, userID)
 		if err != nil {
 			t.Fatalf("Failed to make request: %v", err)
 		}
@@ -200,7 +356,7 @@ func TestLoggedSetHandler_CreateBatch(t *testing.T) {
 
 	t.Run("returns 400 for invalid JSON", func(t *testing.T) {
 		body := `{invalid json}`
-		resp, err := authPostLoggedSets(ts.URL("/sessions/"+sessionID+"/sets"), body, testutil.TestUserID)
+		resp, err := authPostLoggedSets(ts.URL("/sessions/"+sessionID+"/sets"), body, userID)
 		if err != nil {
 			t.Fatalf("Failed to make request: %v", err)
 		}
@@ -226,7 +382,7 @@ func TestLoggedSetHandler_CreateBatch(t *testing.T) {
 			]
 		}`
 
-		resp, err := authPostLoggedSets(ts.URL("/sessions/"+sessionID+"/sets"), body, testutil.TestUserID)
+		resp, err := authPostLoggedSets(ts.URL("/sessions/"+sessionID+"/sets"), body, userID)
 		if err != nil {
 			t.Fatalf("Failed to make request: %v", err)
 		}
@@ -234,6 +390,63 @@ func TestLoggedSetHandler_CreateBatch(t *testing.T) {
 
 		if resp.StatusCode != http.StatusBadRequest {
 			t.Errorf("Expected status 400, got %d", resp.StatusCode)
+		}
+	})
+
+	t.Run("returns 404 for non-existent session", func(t *testing.T) {
+		nonExistentSessionID := uuid.New().String()
+		body := `{
+			"sets": [
+				{
+					"prescriptionId": "` + prescriptionID + `",
+					"liftId": "` + liftID + `",
+					"setNumber": 1,
+					"weight": 225.0,
+					"targetReps": 5,
+					"repsPerformed": 5,
+					"isAmrap": false
+				}
+			]
+		}`
+
+		resp, err := authPostLoggedSets(ts.URL("/sessions/"+nonExistentSessionID+"/sets"), body, userID)
+		if err != nil {
+			t.Fatalf("Failed to make request: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusNotFound {
+			t.Errorf("Expected status 404, got %d", resp.StatusCode)
+		}
+	})
+
+	t.Run("returns 400 for completed session", func(t *testing.T) {
+		// First finish the session
+		finishLSWorkoutSession(t, ts, sessionID, userID)
+
+		body := `{
+			"sets": [
+				{
+					"prescriptionId": "` + prescriptionID + `",
+					"liftId": "` + liftID + `",
+					"setNumber": 3,
+					"weight": 225.0,
+					"targetReps": 5,
+					"repsPerformed": 5,
+					"isAmrap": false
+				}
+			]
+		}`
+
+		resp, err := authPostLoggedSets(ts.URL("/sessions/"+sessionID+"/sets"), body, userID)
+		if err != nil {
+			t.Fatalf("Failed to make request: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusBadRequest {
+			bodyBytes, _ := io.ReadAll(resp.Body)
+			t.Errorf("Expected status 400 for completed session, got %d: %s", resp.StatusCode, bodyBytes)
 		}
 	})
 }
@@ -245,9 +458,14 @@ func TestLoggedSetHandler_ListBySession(t *testing.T) {
 	}
 	defer ts.Close()
 
-	// Create a test lift
+	// Create test fixtures
+	userID := "ls-list-session-user"
+	createLSTestUser(t, ts, userID)
 	liftID := createLSTestLift(t, ts, "Bench Press", "bench-ls-test")
-	sessionID := uuid.New().String()
+	cycleID := createLSTestCycle(t, ts, "LS List Session Cycle")
+	programID := createLSTestProgram(t, ts, "LS List Session Program", "ls-list-session-program", cycleID)
+	enrollLSTestUser(t, ts, userID, programID)
+	sessionID := startLSWorkoutSession(t, ts, userID)
 	prescriptionID := uuid.New().String()
 
 	// Create some logged sets
@@ -264,11 +482,11 @@ func TestLoggedSetHandler_ListBySession(t *testing.T) {
 			}
 		]
 	}`
-	resp, _ := authPostLoggedSets(ts.URL("/sessions/"+sessionID+"/sets"), body, testutil.TestUserID)
+	resp, _ := authPostLoggedSets(ts.URL("/sessions/"+sessionID+"/sets"), body, userID)
 	resp.Body.Close()
 
 	t.Run("lists sets by session", func(t *testing.T) {
-		resp, err := authGetLoggedSets(ts.URL("/sessions/"+sessionID+"/sets"), testutil.TestUserID)
+		resp, err := authGetLoggedSets(ts.URL("/sessions/"+sessionID+"/sets"), userID)
 		if err != nil {
 			t.Fatalf("Failed to make request: %v", err)
 		}
@@ -294,7 +512,7 @@ func TestLoggedSetHandler_ListBySession(t *testing.T) {
 
 	t.Run("returns empty list for non-existent session", func(t *testing.T) {
 		nonExistentSessionID := uuid.New().String()
-		resp, err := authGetLoggedSets(ts.URL("/sessions/"+nonExistentSessionID+"/sets"), testutil.TestUserID)
+		resp, err := authGetLoggedSets(ts.URL("/sessions/"+nonExistentSessionID+"/sets"), userID)
 		if err != nil {
 			t.Fatalf("Failed to make request: %v", err)
 		}
@@ -322,9 +540,14 @@ func TestLoggedSetHandler_ListByUser(t *testing.T) {
 	}
 	defer ts.Close()
 
-	// Create a test lift
+	// Create test fixtures
+	userID := "ls-list-user-test"
+	createLSTestUser(t, ts, userID)
 	liftID := createLSTestLift(t, ts, "Deadlift", "deadlift-ls-test")
-	sessionID := uuid.New().String()
+	cycleID := createLSTestCycle(t, ts, "LS List User Cycle")
+	programID := createLSTestProgram(t, ts, "LS List User Program", "ls-list-user-program", cycleID)
+	enrollLSTestUser(t, ts, userID, programID)
+	sessionID := startLSWorkoutSession(t, ts, userID)
 	prescriptionID := uuid.New().String()
 
 	// Create some logged sets
@@ -341,11 +564,11 @@ func TestLoggedSetHandler_ListByUser(t *testing.T) {
 			}
 		]
 	}`
-	resp, _ := authPostLoggedSets(ts.URL("/sessions/"+sessionID+"/sets"), body, testutil.TestUserID)
+	resp, _ := authPostLoggedSets(ts.URL("/sessions/"+sessionID+"/sets"), body, userID)
 	resp.Body.Close()
 
 	t.Run("user can list their own logged sets", func(t *testing.T) {
-		resp, err := authGetLoggedSets(ts.URL("/users/"+testutil.TestUserID+"/logged-sets"), testutil.TestUserID)
+		resp, err := authGetLoggedSets(ts.URL("/users/"+userID+"/logged-sets"), userID)
 		if err != nil {
 			t.Fatalf("Failed to make request: %v", err)
 		}
@@ -371,7 +594,7 @@ func TestLoggedSetHandler_ListByUser(t *testing.T) {
 
 	t.Run("user cannot list other user's logged sets", func(t *testing.T) {
 		otherUserID := uuid.New().String()
-		resp, err := authGetLoggedSets(ts.URL("/users/"+otherUserID+"/logged-sets"), testutil.TestUserID)
+		resp, err := authGetLoggedSets(ts.URL("/users/"+otherUserID+"/logged-sets"), userID)
 		if err != nil {
 			t.Fatalf("Failed to make request: %v", err)
 		}
@@ -383,7 +606,7 @@ func TestLoggedSetHandler_ListByUser(t *testing.T) {
 	})
 
 	t.Run("admin can list any user's logged sets", func(t *testing.T) {
-		resp, err := adminGetLoggedSets(ts.URL("/users/" + testutil.TestUserID + "/logged-sets"))
+		resp, err := adminGetLoggedSets(ts.URL("/users/" + userID + "/logged-sets"))
 		if err != nil {
 			t.Fatalf("Failed to make request: %v", err)
 		}
@@ -396,7 +619,7 @@ func TestLoggedSetHandler_ListByUser(t *testing.T) {
 	})
 
 	t.Run("returns 401 for unauthenticated request", func(t *testing.T) {
-		resp, err := http.Get(ts.URL("/users/" + testutil.TestUserID + "/logged-sets"))
+		resp, err := http.Get(ts.URL("/users/" + userID + "/logged-sets"))
 		if err != nil {
 			t.Fatalf("Failed to make request: %v", err)
 		}
