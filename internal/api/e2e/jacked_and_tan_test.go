@@ -343,7 +343,7 @@ func TestJackedAndTan2Program(t *testing.T) {
 
 	// Advance through Week 1 (4 days: Mon/Tue/Thu/Fri)
 	for i := 0; i < 4; i++ {
-		advanceUserState(t, ts, userID)
+		completeJT2WorkoutDay(t, ts, userID)
 	}
 
 	// =============================================================================
@@ -379,7 +379,7 @@ func TestJackedAndTan2Program(t *testing.T) {
 
 	// Advance through Week 2
 	for i := 0; i < 4; i++ {
-		advanceUserState(t, ts, userID)
+		completeJT2WorkoutDay(t, ts, userID)
 	}
 
 	// =============================================================================
@@ -410,7 +410,7 @@ func TestJackedAndTan2Program(t *testing.T) {
 
 	// Advance through Week 3 to start Mesocycle B
 	for i := 0; i < 4; i++ {
-		advanceUserState(t, ts, userID)
+		completeJT2WorkoutDay(t, ts, userID)
 	}
 
 	// =============================================================================
@@ -439,9 +439,9 @@ func TestJackedAndTan2Program(t *testing.T) {
 		t.Logf("Week 4 (Mesocycle B): Generated %d exercises", len(workout.Data.Exercises))
 	})
 
-	// Advance through Weeks 4-5-6 (Mesocycle B)
+	// Complete Weeks 4-5-6 (Mesocycle B)
 	for i := 0; i < 12; i++ { // 4 days * 3 weeks
-		advanceUserState(t, ts, userID)
+		completeJT2WorkoutDay(t, ts, userID)
 	}
 
 	// =============================================================================
@@ -472,7 +472,7 @@ func TestJackedAndTan2Program(t *testing.T) {
 
 	// Advance through Weeks 7-8-9 (Mesocycle C)
 	for i := 0; i < 12; i++ {
-		advanceUserState(t, ts, userID)
+		completeJT2WorkoutDay(t, ts, userID)
 	}
 
 	// =============================================================================
@@ -501,9 +501,9 @@ func TestJackedAndTan2Program(t *testing.T) {
 		t.Logf("Week 10 (Mesocycle D peaking): Generated %d exercises", len(workout.Data.Exercises))
 	})
 
-	// Advance through Weeks 10-11 to get to Week 12
+	// Complete Weeks 10-11 to get to Week 12
 	for i := 0; i < 8; i++ { // 4 days * 2 weeks
-		advanceUserState(t, ts, userID)
+		completeJT2WorkoutDay(t, ts, userID)
 	}
 
 	// =============================================================================
@@ -539,7 +539,7 @@ func TestJackedAndTan2Program(t *testing.T) {
 
 	// Advance through Week 12 to trigger cycle completion
 	for i := 0; i < 4; i++ {
-		advanceUserState(t, ts, userID)
+		completeJT2WorkoutDay(t, ts, userID)
 	}
 
 	// =============================================================================
@@ -547,18 +547,7 @@ func TestJackedAndTan2Program(t *testing.T) {
 	// =============================================================================
 	t.Run("Cycle progression triggers after 12-week cycle", func(t *testing.T) {
 		// Trigger progression for squat
-		triggerBody := ManualTriggerRequest{
-			ProgressionID: cycleProgID,
-			LiftID:        squatID,
-			Force:         true,
-		}
-		triggerResp, err := authPostTrigger(ts.URL("/users/"+userID+"/progressions/trigger"), triggerBody, userID)
-		if err != nil {
-			t.Fatalf("Failed to trigger squat progression: %v", err)
-		}
-		var squatTrigger TriggerResponse
-		json.NewDecoder(triggerResp.Body).Decode(&squatTrigger)
-		triggerResp.Body.Close()
+		squatTrigger := triggerProgressionForLift(t, ts, userID, cycleProgID, squatID)
 
 		if squatTrigger.Data.TotalApplied != 1 {
 			t.Errorf("Expected squat progression to apply, got TotalApplied=%d", squatTrigger.Data.TotalApplied)
@@ -610,6 +599,54 @@ func TestJackedAndTan2Program(t *testing.T) {
 // =============================================================================
 // HELPER FUNCTIONS (specific to J&T2 test)
 // =============================================================================
+
+// completeJT2WorkoutDay completes a Jacked & Tan 2.0 workout day using explicit state machine flow.
+func completeJT2WorkoutDay(t *testing.T, ts *testutil.TestServer, userID string) {
+	t.Helper()
+
+	sessionID := startWorkoutSession(t, ts, userID)
+
+	workoutResp, _ := userGet(ts.URL("/users/"+userID+"/workout"), userID)
+	var workout WorkoutResponse
+	json.NewDecoder(workoutResp.Body).Decode(&workout)
+	workoutResp.Body.Close()
+
+	for _, ex := range workout.Data.Exercises {
+		for _, set := range ex.Sets {
+			logJT2Set(t, ts, userID, sessionID, ex.PrescriptionID, ex.Lift.ID, set.SetNumber, set.Weight, set.TargetReps, set.TargetReps)
+		}
+	}
+
+	finishWorkoutSession(t, ts, sessionID, userID)
+	advanceUserState(t, ts, userID)
+}
+
+// logJT2Set logs a single set for Jacked & Tan 2.0 workout.
+func logJT2Set(t *testing.T, ts *testutil.TestServer, userID, sessionID, prescriptionID, liftID string, setNumber int, weight float64, targetReps, repsPerformed int) {
+	t.Helper()
+
+	loggedSetBody := fmt.Sprintf(`{
+		"sets": [{
+			"prescriptionId": "%s",
+			"liftId": "%s",
+			"setNumber": %d,
+			"weight": %.1f,
+			"targetReps": %d,
+			"repsPerformed": %d
+		}]
+	}`, prescriptionID, liftID, setNumber, weight, targetReps, repsPerformed)
+
+	logResp, err := userPost(ts.URL("/sessions/"+sessionID+"/sets"), loggedSetBody, userID)
+	if err != nil {
+		t.Fatalf("Failed to log set: %v", err)
+	}
+	if logResp.StatusCode != http.StatusCreated {
+		body, _ := io.ReadAll(logResp.Body)
+		logResp.Body.Close()
+		t.Fatalf("Failed to log set, status %d: %s", logResp.StatusCode, body)
+	}
+	logResp.Body.Close()
+}
 
 // createJT2Prescription creates a prescription with weekly lookup for RM targets.
 func createJT2Prescription(t *testing.T, ts *testutil.TestServer, liftID string, sets, reps int, percentage float64, order int, lookupKey string) string {

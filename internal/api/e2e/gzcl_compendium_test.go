@@ -418,15 +418,9 @@ func TestGZCLCompendiumVDIPProgram(t *testing.T) {
 		}
 	})
 
-	// Trigger progression for Day 1 lifts and advance
-	triggerBody := ManualTriggerRequest{
-		ProgressionID: t1ProgID,
-		LiftID:        squatID,
-		Force:         true,
-	}
-	triggerResp, _ := authPostTrigger(ts.URL("/users/"+userID+"/progressions/trigger"), triggerBody, userID)
-	triggerResp.Body.Close()
-	advanceUserState(t, ts, userID)
+	// Trigger progression for Day 1 squat and complete workout
+	triggerProgressionForLift(t, ts, userID, t1ProgID, squatID)
+	completeVDIPWorkoutDay(t, ts, userID)
 
 	// =============================================================================
 	// EXECUTION PHASE: Day 2 - Bench Press (T1), Spoto Bench (T2)
@@ -489,10 +483,10 @@ func TestGZCLCompendiumVDIPProgram(t *testing.T) {
 		}
 	})
 
-	// Advance through remaining days
-	advanceUserState(t, ts, userID) // Day 2 -> Day 3
-	advanceUserState(t, ts, userID) // Day 3 -> Day 4
-	advanceUserState(t, ts, userID) // Day 4 -> Day 5
+	// Complete remaining days using explicit session lifecycle
+	completeVDIPWorkoutDay(t, ts, userID) // Day 2 -> Day 3
+	completeVDIPWorkoutDay(t, ts, userID) // Day 3 -> Day 4
+	completeVDIPWorkoutDay(t, ts, userID) // Day 4 -> Day 5
 
 	// =============================================================================
 	// EXECUTION PHASE: Day 5 - Front Squat (T1), Back Squat (T2)
@@ -563,18 +557,7 @@ func TestGZCLCompendiumVDIPProgram(t *testing.T) {
 	// =============================================================================
 	t.Run("VDIP T1 progression applies +10lb on 15+ total reps", func(t *testing.T) {
 		// Trigger T1 progression for bench (simulating 15+ total reps achieved)
-		triggerBody := ManualTriggerRequest{
-			ProgressionID: t1ProgID,
-			LiftID:        benchID,
-			Force:         true,
-		}
-		triggerResp, err := authPostTrigger(ts.URL("/users/"+userID+"/progressions/trigger"), triggerBody, userID)
-		if err != nil {
-			t.Fatalf("Failed to trigger bench progression: %v", err)
-		}
-		var benchTrigger TriggerResponse
-		json.NewDecoder(triggerResp.Body).Decode(&benchTrigger)
-		triggerResp.Body.Close()
+		benchTrigger := triggerProgressionForLift(t, ts, userID, t1ProgID, benchID)
 
 		if benchTrigger.Data.TotalApplied != 1 {
 			t.Errorf("Expected bench progression to apply, got TotalApplied=%d", benchTrigger.Data.TotalApplied)
@@ -593,18 +576,7 @@ func TestGZCLCompendiumVDIPProgram(t *testing.T) {
 
 	t.Run("VDIP T3 progression applies +5lb on 50+ total reps", func(t *testing.T) {
 		// Trigger T3 progression for lunges (simulating 50+ total reps achieved)
-		triggerBody := ManualTriggerRequest{
-			ProgressionID: t3ProgID,
-			LiftID:        lungesID,
-			Force:         true,
-		}
-		triggerResp, err := authPostTrigger(ts.URL("/users/"+userID+"/progressions/trigger"), triggerBody, userID)
-		if err != nil {
-			t.Fatalf("Failed to trigger lunges progression: %v", err)
-		}
-		var lungesTrigger TriggerResponse
-		json.NewDecoder(triggerResp.Body).Decode(&lungesTrigger)
-		triggerResp.Body.Close()
+		lungesTrigger := triggerProgressionForLift(t, ts, userID, t3ProgID, lungesID)
 
 		if lungesTrigger.Data.TotalApplied != 1 {
 			t.Errorf("Expected lunges progression to apply, got TotalApplied=%d", lungesTrigger.Data.TotalApplied)
@@ -624,7 +596,7 @@ func TestGZCLCompendiumVDIPProgram(t *testing.T) {
 	// =============================================================================
 	// WEEK 2: Verify new week starts with updated training maxes
 	// =============================================================================
-	advanceUserState(t, ts, userID) // Day 5 -> Day 1 (Week 2)
+	completeVDIPWorkoutDay(t, ts, userID) // Day 5 -> Day 1 (Week 2)
 
 	t.Run("Week 2 Day 1 shows updated training maxes", func(t *testing.T) {
 		workoutResp, err := userGet(ts.URL("/users/"+userID+"/workout"), userID)
@@ -655,4 +627,57 @@ func TestGZCLCompendiumVDIPProgram(t *testing.T) {
 			t.Errorf("Week 2 T1 Squat: expected weight ~%.1f (85%% of updated TM), got %.1f", expectedSquatWeight, squat.Sets[0].Weight)
 		}
 	})
+}
+
+// =============================================================================
+// HELPER FUNCTIONS
+// =============================================================================
+
+// completeVDIPWorkoutDay completes a GZCL VDIP workout day using explicit state machine flow.
+func completeVDIPWorkoutDay(t *testing.T, ts *testutil.TestServer, userID string) {
+	t.Helper()
+
+	sessionID := startWorkoutSession(t, ts, userID)
+
+	workoutResp, _ := userGet(ts.URL("/users/"+userID+"/workout"), userID)
+	var workout WorkoutResponse
+	json.NewDecoder(workoutResp.Body).Decode(&workout)
+	workoutResp.Body.Close()
+
+	for _, ex := range workout.Data.Exercises {
+		for _, set := range ex.Sets {
+			logVDIPSet(t, ts, userID, sessionID, ex.PrescriptionID, ex.Lift.ID, set.SetNumber, set.Weight, set.TargetReps, set.TargetReps, false)
+		}
+	}
+
+	finishWorkoutSession(t, ts, sessionID, userID)
+	advanceUserState(t, ts, userID)
+}
+
+// logVDIPSet logs a single set for GZCL VDIP workout.
+func logVDIPSet(t *testing.T, ts *testutil.TestServer, userID, sessionID, prescriptionID, liftID string, setNumber int, weight float64, targetReps, repsPerformed int, isAmrap bool) {
+	t.Helper()
+
+	loggedSetBody := fmt.Sprintf(`{
+		"sets": [{
+			"prescriptionId": "%s",
+			"liftId": "%s",
+			"setNumber": %d,
+			"weight": %.1f,
+			"targetReps": %d,
+			"repsPerformed": %d,
+			"isAmrap": %t
+		}]
+	}`, prescriptionID, liftID, setNumber, weight, targetReps, repsPerformed, isAmrap)
+
+	logResp, err := userPost(ts.URL("/sessions/"+sessionID+"/sets"), loggedSetBody, userID)
+	if err != nil {
+		t.Fatalf("Failed to log set: %v", err)
+	}
+	if logResp.StatusCode != http.StatusCreated {
+		body, _ := io.ReadAll(logResp.Body)
+		logResp.Body.Close()
+		t.Fatalf("Failed to log set, status %d: %s", logResp.StatusCode, body)
+	}
+	logResp.Body.Close()
 }

@@ -406,8 +406,8 @@ func TestInvertedJuggernaut531Program(t *testing.T) {
 		t.Logf("Wave 1 Week 1: OHP AMRAP at %.1f lbs (85%% of %.1f TM)", ohp.Sets[0].Weight, ohpTM)
 	})
 
-	// Advance through Week 1 Day 1 to Day 2 (Squat)
-	advanceUserState(t, ts, userID)
+	// Complete Week 1 Day 1 (OHP) using explicit state machine flow
+	completeIJ531WorkoutDay(t, ts, userID)
 
 	t.Run("Wave 1 Week 1 Day 2 - Squat session with back-offs", func(t *testing.T) {
 		workoutResp, err := userGet(ts.URL("/users/"+userID+"/workout"), userID)
@@ -443,9 +443,10 @@ func TestInvertedJuggernaut531Program(t *testing.T) {
 		t.Logf("Wave 1 Week 1: Squat at %.1f lbs", squat.Sets[0].Weight)
 	})
 
-	// Advance through rest of Week 1 (Bench and Deadlift)
-	advanceUserState(t, ts, userID) // Week 1, Day 3 (Bench)
-	advanceUserState(t, ts, userID) // Week 1, Day 4 (Deadlift)
+	// Complete rest of Week 1 (Day 2 Squat, Day 3 Bench, Day 4 Deadlift)
+	completeIJ531WorkoutDay(t, ts, userID) // Week 1, Day 2 (Squat)
+	completeIJ531WorkoutDay(t, ts, userID) // Week 1, Day 3 (Bench)
+	completeIJ531WorkoutDay(t, ts, userID) // Week 1, Day 4 (Deadlift)
 
 	// =============================================================================
 	// WAVE 1 - WEEK 4: Deload Phase
@@ -456,9 +457,9 @@ func TestInvertedJuggernaut531Program(t *testing.T) {
 	// - Week 2: 4 days
 	// - Week 3: 4 days
 	// - To Week 4 Day 1: 1 more advance
-	// Total: 9 advances to reach Week 4 Day 1
+	// Total: 9 workout completions to reach Week 4 Day 1
 	for i := 0; i < 9; i++ {
-		advanceUserState(t, ts, userID)
+		completeIJ531WorkoutDay(t, ts, userID)
 	}
 
 	t.Run("Wave 1 Week 4 - Deload with reduced volume", func(t *testing.T) {
@@ -504,7 +505,7 @@ func TestInvertedJuggernaut531Program(t *testing.T) {
 	// Advance through Week 4 deload to Week 5 Day 1
 	// From Week 4 Day 1, need 4 advances to complete Week 4, then we're at Week 5 Day 1
 	for i := 0; i < 4; i++ {
-		advanceUserState(t, ts, userID)
+		completeIJ531WorkoutDay(t, ts, userID)
 	}
 
 	t.Run("Wave 2 Week 5 - 8s Wave Accumulation begins", func(t *testing.T) {
@@ -537,7 +538,7 @@ func TestInvertedJuggernaut531Program(t *testing.T) {
 	// Advance from Week 5 Day 1 to Week 9 Day 1
 	// Week 5: 4 days, Week 6: 4 days, Week 7: 4 days, Week 8: 4 days = 16 days
 	for i := 0; i < 16; i++ {
-		advanceUserState(t, ts, userID)
+		completeIJ531WorkoutDay(t, ts, userID)
 	}
 
 	t.Run("Wave 3 Week 9 - 5s Wave Accumulation", func(t *testing.T) {
@@ -565,7 +566,7 @@ func TestInvertedJuggernaut531Program(t *testing.T) {
 	// Advance from Week 9 Day 1 to Week 13 Day 1
 	// Week 9: 4 days, Week 10: 4 days, Week 11: 4 days, Week 12: 4 days = 16 days
 	for i := 0; i < 16; i++ {
-		advanceUserState(t, ts, userID)
+		completeIJ531WorkoutDay(t, ts, userID)
 	}
 
 	t.Run("Wave 4 Week 13 - 3s Wave Peak Intensity begins", func(t *testing.T) {
@@ -598,7 +599,7 @@ func TestInvertedJuggernaut531Program(t *testing.T) {
 	// Advance from Week 13 Day 1 to Week 16 Day 1
 	// Week 13: 4 days, Week 14: 4 days, Week 15: 4 days = 12 days
 	for i := 0; i < 12; i++ {
-		advanceUserState(t, ts, userID)
+		completeIJ531WorkoutDay(t, ts, userID)
 	}
 
 	t.Run("Week 16 - Final Deload of 16-week cycle", func(t *testing.T) {
@@ -627,7 +628,7 @@ func TestInvertedJuggernaut531Program(t *testing.T) {
 	// Advance through Week 16 to complete the cycle
 	// Week 16: 4 days to complete, cycle wraps to Week 1 Day 1
 	for i := 0; i < 4; i++ {
-		advanceUserState(t, ts, userID)
+		completeIJ531WorkoutDay(t, ts, userID)
 	}
 
 	// =============================================================================
@@ -635,18 +636,7 @@ func TestInvertedJuggernaut531Program(t *testing.T) {
 	// =============================================================================
 	t.Run("Cycle progression applies at end of 16-week cycle", func(t *testing.T) {
 		// Trigger lower body progression for squat (+10lb)
-		triggerBody := ManualTriggerRequest{
-			ProgressionID: lowerProgID,
-			LiftID:        squatID,
-			Force:         true,
-		}
-		triggerResp, err := authPostTrigger(ts.URL("/users/"+userID+"/progressions/trigger"), triggerBody, userID)
-		if err != nil {
-			t.Fatalf("Failed to trigger squat progression: %v", err)
-		}
-		var squatTrigger TriggerResponse
-		json.NewDecoder(triggerResp.Body).Decode(&squatTrigger)
-		triggerResp.Body.Close()
+		squatTrigger := triggerProgressionForLift(t, ts, userID, lowerProgID, squatID)
 
 		if squatTrigger.Data.TotalApplied != 1 {
 			t.Errorf("Expected squat progression to apply, got TotalApplied=%d", squatTrigger.Data.TotalApplied)
@@ -663,14 +653,7 @@ func TestInvertedJuggernaut531Program(t *testing.T) {
 		}
 
 		// Trigger lower body progression for deadlift (+10lb)
-		triggerBody.LiftID = deadliftID
-		triggerResp, err = authPostTrigger(ts.URL("/users/"+userID+"/progressions/trigger"), triggerBody, userID)
-		if err != nil {
-			t.Fatalf("Failed to trigger deadlift progression: %v", err)
-		}
-		var deadliftTrigger TriggerResponse
-		json.NewDecoder(triggerResp.Body).Decode(&deadliftTrigger)
-		triggerResp.Body.Close()
+		deadliftTrigger := triggerProgressionForLift(t, ts, userID, lowerProgID, deadliftID)
 
 		if deadliftTrigger.Data.TotalApplied != 1 {
 			t.Errorf("Expected deadlift progression to apply")
@@ -680,15 +663,7 @@ func TestInvertedJuggernaut531Program(t *testing.T) {
 		}
 
 		// Trigger upper body progression for bench (+5lb)
-		triggerBody.ProgressionID = upperProgID
-		triggerBody.LiftID = benchID
-		triggerResp, err = authPostTrigger(ts.URL("/users/"+userID+"/progressions/trigger"), triggerBody, userID)
-		if err != nil {
-			t.Fatalf("Failed to trigger bench progression: %v", err)
-		}
-		var benchTrigger TriggerResponse
-		json.NewDecoder(triggerResp.Body).Decode(&benchTrigger)
-		triggerResp.Body.Close()
+		benchTrigger := triggerProgressionForLift(t, ts, userID, upperProgID, benchID)
 
 		if benchTrigger.Data.TotalApplied != 1 {
 			t.Errorf("Expected bench progression to apply")
@@ -701,14 +676,7 @@ func TestInvertedJuggernaut531Program(t *testing.T) {
 		}
 
 		// Trigger upper body progression for OHP (+5lb)
-		triggerBody.LiftID = ohpID
-		triggerResp, err = authPostTrigger(ts.URL("/users/"+userID+"/progressions/trigger"), triggerBody, userID)
-		if err != nil {
-			t.Fatalf("Failed to trigger OHP progression: %v", err)
-		}
-		var ohpTrigger TriggerResponse
-		json.NewDecoder(triggerResp.Body).Decode(&ohpTrigger)
-		triggerResp.Body.Close()
+		ohpTrigger := triggerProgressionForLift(t, ts, userID, upperProgID, ohpID)
 
 		if ohpTrigger.Data.TotalApplied != 1 {
 			t.Errorf("Expected OHP progression to apply")
@@ -762,4 +730,57 @@ func TestInvertedJuggernaut531Program(t *testing.T) {
 		t.Logf("Inverted Juggernaut 5/3/1 test completed successfully")
 		t.Logf("Validated: 16-week cycle, 4 rep waves, 5/3/1 structure, deloads, cycle progression")
 	})
+}
+
+// =============================================================================
+// HELPER FUNCTIONS
+// =============================================================================
+
+// completeIJ531WorkoutDay completes an Inverted Juggernaut 5/3/1 workout day using explicit state machine flow.
+func completeIJ531WorkoutDay(t *testing.T, ts *testutil.TestServer, userID string) {
+	t.Helper()
+
+	sessionID := startWorkoutSession(t, ts, userID)
+
+	workoutResp, _ := userGet(ts.URL("/users/"+userID+"/workout"), userID)
+	var workout WorkoutResponse
+	json.NewDecoder(workoutResp.Body).Decode(&workout)
+	workoutResp.Body.Close()
+
+	for _, ex := range workout.Data.Exercises {
+		for _, set := range ex.Sets {
+			logIJ531Set(t, ts, userID, sessionID, ex.PrescriptionID, ex.Lift.ID, set.SetNumber, set.Weight, set.TargetReps, set.TargetReps, false)
+		}
+	}
+
+	finishWorkoutSession(t, ts, sessionID, userID)
+	advanceUserState(t, ts, userID)
+}
+
+// logIJ531Set logs a single set for Inverted Juggernaut 5/3/1 workout.
+func logIJ531Set(t *testing.T, ts *testutil.TestServer, userID, sessionID, prescriptionID, liftID string, setNumber int, weight float64, targetReps, repsPerformed int, isAmrap bool) {
+	t.Helper()
+
+	loggedSetBody := fmt.Sprintf(`{
+		"sets": [{
+			"prescriptionId": "%s",
+			"liftId": "%s",
+			"setNumber": %d,
+			"weight": %.1f,
+			"targetReps": %d,
+			"repsPerformed": %d,
+			"isAmrap": %t
+		}]
+	}`, prescriptionID, liftID, setNumber, weight, targetReps, repsPerformed, isAmrap)
+
+	logResp, err := userPost(ts.URL("/sessions/"+sessionID+"/sets"), loggedSetBody, userID)
+	if err != nil {
+		t.Fatalf("Failed to log set: %v", err)
+	}
+	if logResp.StatusCode != http.StatusCreated {
+		body, _ := io.ReadAll(logResp.Body)
+		logResp.Body.Close()
+		t.Fatalf("Failed to log set, status %d: %s", logResp.StatusCode, body)
+	}
+	logResp.Body.Close()
 }

@@ -946,6 +946,8 @@ func logSSSet(t *testing.T, ts *testutil.TestServer, userID, sessionID, prescrip
 }
 
 // triggerProgressionForLift triggers a progression for a specific lift and returns the response.
+// NOTE: Uses Force: true because auto-progression via events is not yet fully implemented.
+// This should be changed to Force: false once event-driven progressions are working.
 func triggerProgressionForLift(t *testing.T, ts *testutil.TestServer, userID, progressionID, liftID string) TriggerResponse {
 	t.Helper()
 	reqBody := ManualTriggerRequest{

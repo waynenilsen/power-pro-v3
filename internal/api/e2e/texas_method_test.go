@@ -308,8 +308,8 @@ func TestTexasMethodProgram(t *testing.T) {
 		}
 	})
 
-	// Advance to Recovery Day
-	advanceUserState(t, ts, userID)
+	// Complete Volume Day workout using explicit state machine flow
+	completeTMWorkoutDay(t, ts, userID)
 
 	// =============================================================================
 	// EXECUTION PHASE: Recovery Day (Wednesday - Workout 2)
@@ -382,8 +382,8 @@ func TestTexasMethodProgram(t *testing.T) {
 		}
 	})
 
-	// Advance to Intensity Day
-	advanceUserState(t, ts, userID)
+	// Complete Recovery Day workout using explicit state machine flow
+	completeTMWorkoutDay(t, ts, userID)
 
 	// =============================================================================
 	// EXECUTION PHASE: Intensity Day (Friday - Workout 3)
@@ -461,18 +461,7 @@ func TestTexasMethodProgram(t *testing.T) {
 	// =============================================================================
 	t.Run("Weekly progression applies correct increments (+5lb lower, +2.5lb upper)", func(t *testing.T) {
 		// Trigger lower body progression for squat (+5lb)
-		triggerBody := ManualTriggerRequest{
-			ProgressionID: lowerProgID,
-			LiftID:        squatID,
-			Force:         true,
-		}
-		triggerResp, err := authPostTrigger(ts.URL("/users/"+userID+"/progressions/trigger"), triggerBody, userID)
-		if err != nil {
-			t.Fatalf("Failed to trigger squat progression: %v", err)
-		}
-		var squatTrigger TriggerResponse
-		json.NewDecoder(triggerResp.Body).Decode(&squatTrigger)
-		triggerResp.Body.Close()
+		squatTrigger := triggerProgressionForLift(t, ts, userID, lowerProgID, squatID)
 
 		if squatTrigger.Data.TotalApplied != 1 {
 			t.Errorf("Expected squat progression to apply, got TotalApplied=%d", squatTrigger.Data.TotalApplied)
@@ -488,15 +477,7 @@ func TestTexasMethodProgram(t *testing.T) {
 		}
 
 		// Trigger upper body progression for bench (+2.5lb)
-		triggerBody.ProgressionID = upperProgID
-		triggerBody.LiftID = benchID
-		triggerResp, err = authPostTrigger(ts.URL("/users/"+userID+"/progressions/trigger"), triggerBody, userID)
-		if err != nil {
-			t.Fatalf("Failed to trigger bench progression: %v", err)
-		}
-		var benchTrigger TriggerResponse
-		json.NewDecoder(triggerResp.Body).Decode(&benchTrigger)
-		triggerResp.Body.Close()
+		benchTrigger := triggerProgressionForLift(t, ts, userID, upperProgID, benchID)
 
 		if benchTrigger.Data.TotalApplied != 1 {
 			t.Errorf("Expected bench progression to apply")
@@ -512,14 +493,7 @@ func TestTexasMethodProgram(t *testing.T) {
 		}
 
 		// Trigger upper body progression for press (+2.5lb)
-		triggerBody.LiftID = pressID
-		triggerResp, err = authPostTrigger(ts.URL("/users/"+userID+"/progressions/trigger"), triggerBody, userID)
-		if err != nil {
-			t.Fatalf("Failed to trigger press progression: %v", err)
-		}
-		var pressTrigger TriggerResponse
-		json.NewDecoder(triggerResp.Body).Decode(&pressTrigger)
-		triggerResp.Body.Close()
+		pressTrigger := triggerProgressionForLift(t, ts, userID, upperProgID, pressID)
 
 		if pressTrigger.Data.TotalApplied != 1 {
 			t.Errorf("Expected press progression to apply")
@@ -535,8 +509,8 @@ func TestTexasMethodProgram(t *testing.T) {
 		}
 	})
 
-	// Advance to next week's Volume Day
-	advanceUserState(t, ts, userID)
+	// Complete Intensity Day workout using explicit state machine flow
+	completeTMWorkoutDay(t, ts, userID)
 
 	// =============================================================================
 	// VALIDATION PHASE: Next week's Volume Day should show increased weights
@@ -587,8 +561,8 @@ func TestTexasMethodProgram(t *testing.T) {
 		}
 	})
 
-	// Advance to next week's Recovery Day
-	advanceUserState(t, ts, userID)
+	// Complete Week 2 Volume Day workout using explicit state machine flow
+	completeTMWorkoutDay(t, ts, userID)
 
 	// =============================================================================
 	// VALIDATION PHASE: Next week's Recovery Day should show increased weights
@@ -639,8 +613,8 @@ func TestTexasMethodProgram(t *testing.T) {
 		}
 	})
 
-	// Advance to next week's Intensity Day
-	advanceUserState(t, ts, userID)
+	// Complete Week 2 Recovery Day workout using explicit state machine flow
+	completeTMWorkoutDay(t, ts, userID)
 
 	// =============================================================================
 	// VALIDATION PHASE: Next week's Intensity Day should show increased weights
@@ -699,8 +673,56 @@ func TestTexasMethodProgram(t *testing.T) {
 }
 
 // =============================================================================
-// HELPER FUNCTION (specific to this test file)
+// HELPER FUNCTIONS (specific to this test file)
 // =============================================================================
+
+// completeTMWorkoutDay completes a Texas Method workout day using explicit state machine flow.
+func completeTMWorkoutDay(t *testing.T, ts *testutil.TestServer, userID string) {
+	t.Helper()
+
+	sessionID := startWorkoutSession(t, ts, userID)
+
+	workoutResp, _ := userGet(ts.URL("/users/"+userID+"/workout"), userID)
+	var workout WorkoutResponse
+	json.NewDecoder(workoutResp.Body).Decode(&workout)
+	workoutResp.Body.Close()
+
+	for _, ex := range workout.Data.Exercises {
+		for _, set := range ex.Sets {
+			logTMSet(t, ts, userID, sessionID, ex.PrescriptionID, ex.Lift.ID, set.SetNumber, set.Weight, set.TargetReps, set.TargetReps)
+		}
+	}
+
+	finishWorkoutSession(t, ts, sessionID, userID)
+	advanceUserState(t, ts, userID)
+}
+
+// logTMSet logs a single set for Texas Method workout.
+func logTMSet(t *testing.T, ts *testutil.TestServer, userID, sessionID, prescriptionID, liftID string, setNumber int, weight float64, targetReps, repsPerformed int) {
+	t.Helper()
+
+	loggedSetBody := fmt.Sprintf(`{
+		"sets": [{
+			"prescriptionId": "%s",
+			"liftId": "%s",
+			"setNumber": %d,
+			"weight": %.1f,
+			"targetReps": %d,
+			"repsPerformed": %d
+		}]
+	}`, prescriptionID, liftID, setNumber, weight, targetReps, repsPerformed)
+
+	logResp, err := userPost(ts.URL("/sessions/"+sessionID+"/sets"), loggedSetBody, userID)
+	if err != nil {
+		t.Fatalf("Failed to log set: %v", err)
+	}
+	if logResp.StatusCode != http.StatusCreated {
+		body, _ := io.ReadAll(logResp.Body)
+		logResp.Body.Close()
+		t.Fatalf("Failed to log set, status %d: %s", logResp.StatusCode, body)
+	}
+	logResp.Body.Close()
+}
 
 // createFixedPrescriptionWithLookup creates a prescription with FIXED set scheme and daily lookup.
 func createFixedPrescriptionWithLookup(t *testing.T, ts *testutil.TestServer, liftID string, sets, reps int, percentage float64, order int, lookupKey string) string {
