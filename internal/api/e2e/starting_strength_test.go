@@ -193,10 +193,40 @@ type TriggerResponse struct {
 	Data TriggerResponseData `json:"data"`
 }
 
-// EnrollmentData matches the enrollment data format.
+// EnrollmentProgramData represents program info in an enrollment response.
+type EnrollmentProgramData struct {
+	ID               string  `json:"id"`
+	Name             string  `json:"name"`
+	Slug             string  `json:"slug"`
+	Description      *string `json:"description,omitempty"`
+	CycleLengthWeeks int     `json:"cycleLengthWeeks"`
+}
+
+// EnrollmentStateData represents the state portion of an enrollment response.
+type EnrollmentStateData struct {
+	CurrentWeek           int  `json:"currentWeek"`
+	CurrentCycleIteration int  `json:"currentCycleIteration"`
+	CurrentDayIndex       *int `json:"currentDayIndex,omitempty"`
+}
+
+// CurrentWorkoutSessionData represents the current workout session in an enrollment response.
+type CurrentWorkoutSessionData struct {
+	ID         string `json:"id"`
+	WeekNumber int    `json:"weekNumber"`
+	DayIndex   int    `json:"dayIndex"`
+	Status     string `json:"status"`
+}
+
+// EnrollmentData matches the enrollment data format with all state fields.
 type EnrollmentData struct {
-	ProgramID string `json:"programId"`
-	UserID    string `json:"userId"`
+	ID                    string                     `json:"id"`
+	UserID                string                     `json:"userId"`
+	Program               EnrollmentProgramData      `json:"program"`
+	State                 EnrollmentStateData        `json:"state"`
+	EnrollmentStatus      string                     `json:"enrollmentStatus"`
+	CycleStatus           string                     `json:"cycleStatus"`
+	WeekStatus            string                     `json:"weekStatus"`
+	CurrentWorkoutSession *CurrentWorkoutSessionData `json:"currentWorkoutSession"`
 }
 
 // EnrollmentResponse is the standard envelope for enrollment responses.
@@ -951,4 +981,224 @@ func advanceUserState(t *testing.T, ts *testutil.TestServer, userID string) {
 		bodyBytes, _ := io.ReadAll(resp.Body)
 		t.Fatalf("Failed to advance state, status %d: %s", resp.StatusCode, bodyBytes)
 	}
+}
+
+// =============================================================================
+// STATE ASSERTION HELPERS
+// =============================================================================
+
+// ExpectedEnrollmentState defines expected state values for assertions.
+type ExpectedEnrollmentState struct {
+	EnrollmentStatus string
+	CycleStatus      string
+	WeekStatus       string
+	CurrentWeek      int
+	CycleIteration   int
+	HasActiveSession bool
+	SessionStatus    string // Optional, only checked if HasActiveSession is true
+}
+
+// assertEnrollmentState verifies all state fields in an enrollment response.
+func assertEnrollmentState(t *testing.T, enrollment EnrollmentData, expected ExpectedEnrollmentState) {
+	t.Helper()
+
+	if enrollment.EnrollmentStatus != expected.EnrollmentStatus {
+		t.Errorf("EnrollmentStatus: expected %q, got %q", expected.EnrollmentStatus, enrollment.EnrollmentStatus)
+	}
+	if enrollment.CycleStatus != expected.CycleStatus {
+		t.Errorf("CycleStatus: expected %q, got %q", expected.CycleStatus, enrollment.CycleStatus)
+	}
+	if enrollment.WeekStatus != expected.WeekStatus {
+		t.Errorf("WeekStatus: expected %q, got %q", expected.WeekStatus, enrollment.WeekStatus)
+	}
+	if enrollment.State.CurrentWeek != expected.CurrentWeek {
+		t.Errorf("CurrentWeek: expected %d, got %d", expected.CurrentWeek, enrollment.State.CurrentWeek)
+	}
+	if enrollment.State.CurrentCycleIteration != expected.CycleIteration {
+		t.Errorf("CycleIteration: expected %d, got %d", expected.CycleIteration, enrollment.State.CurrentCycleIteration)
+	}
+
+	hasSession := enrollment.CurrentWorkoutSession != nil
+	if hasSession != expected.HasActiveSession {
+		t.Errorf("HasActiveSession: expected %v, got %v", expected.HasActiveSession, hasSession)
+	}
+
+	if expected.HasActiveSession && hasSession && expected.SessionStatus != "" {
+		if enrollment.CurrentWorkoutSession.Status != expected.SessionStatus {
+			t.Errorf("SessionStatus: expected %q, got %q", expected.SessionStatus, enrollment.CurrentWorkoutSession.Status)
+		}
+	}
+}
+
+// getEnrollment fetches the current enrollment state for a user.
+func getEnrollment(t *testing.T, ts *testutil.TestServer, userID string) EnrollmentData {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodGet, ts.URL("/users/"+userID+"/program"), nil)
+	if err != nil {
+		t.Fatalf("Failed to create request: %v", err)
+	}
+	req.Header.Set("X-User-ID", userID)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("Failed to get enrollment: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("Failed to get enrollment, status %d: %s", resp.StatusCode, body)
+	}
+
+	var envelope EnrollmentResponse
+	if err := json.NewDecoder(resp.Body).Decode(&envelope); err != nil {
+		t.Fatalf("Failed to decode enrollment response: %v", err)
+	}
+	return envelope.Data
+}
+
+// enrollUser enrolls a user in a program and returns the enrollment data.
+func enrollUser(t *testing.T, ts *testutil.TestServer, userID, programID string) EnrollmentData {
+	t.Helper()
+	body := fmt.Sprintf(`{"programId": "%s"}`, programID)
+	resp, err := userPost(ts.URL("/users/"+userID+"/program"), body, userID)
+	if err != nil {
+		t.Fatalf("Failed to enroll user: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		t.Fatalf("Failed to enroll user, status %d: %s", resp.StatusCode, bodyBytes)
+	}
+
+	var envelope EnrollmentResponse
+	if err := json.NewDecoder(resp.Body).Decode(&envelope); err != nil {
+		t.Fatalf("Failed to decode enrollment response: %v", err)
+	}
+	return envelope.Data
+}
+
+// unenrollUser removes enrollment for a user.
+func unenrollUser(t *testing.T, ts *testutil.TestServer, userID string) {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodDelete, ts.URL("/users/"+userID+"/program"), nil)
+	if err != nil {
+		t.Fatalf("Failed to create request: %v", err)
+	}
+	req.Header.Set("X-User-ID", userID)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("Failed to unenroll user: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNoContent {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("Failed to unenroll user, status %d: %s", resp.StatusCode, body)
+	}
+}
+
+// startWorkoutAndVerify starts a workout and verifies state transitions.
+// Returns the session ID of the started workout.
+func startWorkoutAndVerify(t *testing.T, ts *testutil.TestServer, userID string,
+	expectedCycleStatus, expectedWeekStatus string) string {
+	t.Helper()
+
+	// Start workout
+	sessionID := startWorkoutSession(t, ts, userID)
+
+	// Verify enrollment state changed appropriately
+	enrollment := getEnrollment(t, ts, userID)
+
+	if enrollment.CycleStatus != expectedCycleStatus {
+		t.Errorf("After starting workout, CycleStatus: expected %q, got %q", expectedCycleStatus, enrollment.CycleStatus)
+	}
+	if enrollment.WeekStatus != expectedWeekStatus {
+		t.Errorf("After starting workout, WeekStatus: expected %q, got %q", expectedWeekStatus, enrollment.WeekStatus)
+	}
+	if enrollment.CurrentWorkoutSession == nil {
+		t.Error("After starting workout, expected an active session but got none")
+	} else if enrollment.CurrentWorkoutSession.Status != "IN_PROGRESS" {
+		t.Errorf("After starting workout, SessionStatus: expected %q, got %q", "IN_PROGRESS", enrollment.CurrentWorkoutSession.Status)
+	}
+
+	return sessionID
+}
+
+// finishWorkoutAndVerify finishes a workout and verifies state transitions.
+func finishWorkoutAndVerify(t *testing.T, ts *testutil.TestServer, sessionID, userID string,
+	expectedEnrollmentStatus, expectedCycleStatus, expectedWeekStatus string) {
+	t.Helper()
+
+	// Finish workout
+	finishWorkoutSession(t, ts, sessionID, userID)
+
+	// Verify enrollment state changed appropriately
+	enrollment := getEnrollment(t, ts, userID)
+
+	if enrollment.EnrollmentStatus != expectedEnrollmentStatus {
+		t.Errorf("After finishing workout, EnrollmentStatus: expected %q, got %q", expectedEnrollmentStatus, enrollment.EnrollmentStatus)
+	}
+	if enrollment.CycleStatus != expectedCycleStatus {
+		t.Errorf("After finishing workout, CycleStatus: expected %q, got %q", expectedCycleStatus, enrollment.CycleStatus)
+	}
+	if enrollment.WeekStatus != expectedWeekStatus {
+		t.Errorf("After finishing workout, WeekStatus: expected %q, got %q", expectedWeekStatus, enrollment.WeekStatus)
+	}
+}
+
+// advanceWeek advances to the next week and returns updated enrollment.
+func advanceWeek(t *testing.T, ts *testutil.TestServer, userID string) EnrollmentData {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodPost, ts.URL("/users/"+userID+"/enrollment/advance-week"), nil)
+	if err != nil {
+		t.Fatalf("Failed to create request: %v", err)
+	}
+	req.Header.Set("X-User-ID", userID)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("Failed to advance week: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("Failed to advance week, status %d: %s", resp.StatusCode, body)
+	}
+
+	var envelope EnrollmentResponse
+	if err := json.NewDecoder(resp.Body).Decode(&envelope); err != nil {
+		t.Fatalf("Failed to decode enrollment response: %v", err)
+	}
+	return envelope.Data
+}
+
+// startNextCycle starts a new cycle when in BETWEEN_CYCLES state.
+func startNextCycle(t *testing.T, ts *testutil.TestServer, userID string) EnrollmentData {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodPost, ts.URL("/users/"+userID+"/enrollment/next-cycle"), nil)
+	if err != nil {
+		t.Fatalf("Failed to create request: %v", err)
+	}
+	req.Header.Set("X-User-ID", userID)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("Failed to start next cycle: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("Failed to start next cycle, status %d: %s", resp.StatusCode, body)
+	}
+
+	var envelope EnrollmentResponse
+	if err := json.NewDecoder(resp.Body).Decode(&envelope); err != nil {
+		t.Fatalf("Failed to decode enrollment response: %v", err)
+	}
+	return envelope.Data
 }
