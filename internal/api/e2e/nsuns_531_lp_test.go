@@ -417,10 +417,12 @@ func TestNSuns531LP5DayProgram(t *testing.T) {
 		logResp.Body.Close()
 	})
 
-	// Finish session and advance to Day 3 and Day 4
+	// Finish session and advance to Day 3
 	finishWorkoutSession(t, ts, sessionID2, userID)
-	advanceUserState(t, ts, userID) // Day 2 -> Day 3
-	advanceUserState(t, ts, userID) // Day 3 -> Day 4
+	advanceUserState(t, ts, userID)
+
+	// Complete Day 3 workout using state machine flow
+	completeNSunsWorkoutDay(t, ts, userID)
 
 	// =============================================================================
 	// DAY 4: Verify Deadlift generates correctly
@@ -460,9 +462,9 @@ func TestNSuns531LP5DayProgram(t *testing.T) {
 		}
 	})
 
-	// Complete the week
-	advanceUserState(t, ts, userID) // Day 4 -> Day 5
-	advanceUserState(t, ts, userID) // Day 5 -> Day 1 (new week)
+	// Complete Day 4 and Day 5 workouts using state machine flow
+	completeNSunsWorkoutDay(t, ts, userID) // Day 4
+	completeNSunsWorkoutDay(t, ts, userID) // Day 5
 
 	// =============================================================================
 	// Verify program cycles back to Day 1
@@ -513,4 +515,52 @@ type LoggedSetData struct {
 	RepsPerformed int     `json:"repsPerformed"`
 	Weight        float64 `json:"weight"`
 	IsAMRAP       bool    `json:"isAmrap"`
+}
+
+// completeNSunsWorkoutDay starts a workout session, logs all sets, finishes, and advances state.
+// This is used for simple workout completion without specific assertions.
+func completeNSunsWorkoutDay(t *testing.T, ts *testutil.TestServer, userID string) {
+	t.Helper()
+
+	sessionID := startWorkoutSession(t, ts, userID)
+
+	// Get the workout to find prescription IDs
+	workoutResp, _ := userGet(ts.URL("/users/"+userID+"/workout"), userID)
+	var workout WorkoutResponse
+	json.NewDecoder(workoutResp.Body).Decode(&workout)
+	workoutResp.Body.Close()
+
+	// Log sets for each exercise
+	for _, ex := range workout.Data.Exercises {
+		for _, set := range ex.Sets {
+			// Log successful completion (reps performed = target reps)
+			loggedSetBody := fmt.Sprintf(`{
+				"sets": [{
+					"prescriptionId": "%s",
+					"liftId": "%s",
+					"setNumber": %d,
+					"weight": %.1f,
+					"targetReps": %d,
+					"repsPerformed": %d,
+					"isAmrap": false
+				}]
+			}`, ex.PrescriptionID, ex.Lift.ID, set.SetNumber, set.Weight, set.TargetReps, set.TargetReps)
+
+			logResp, err := userPost(ts.URL("/sessions/"+sessionID+"/sets"), loggedSetBody, userID)
+			if err != nil {
+				t.Fatalf("Failed to log set: %v", err)
+			}
+			if logResp.StatusCode != http.StatusCreated {
+				body, _ := io.ReadAll(logResp.Body)
+				logResp.Body.Close()
+				t.Fatalf("Failed to log set, status %d: %s", logResp.StatusCode, body)
+			}
+			logResp.Body.Close()
+		}
+	}
+
+	finishWorkoutSession(t, ts, sessionID, userID)
+
+	// Advance to next day (required until automatic triggering is implemented)
+	advanceUserState(t, ts, userID)
 }

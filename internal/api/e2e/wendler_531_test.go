@@ -258,27 +258,12 @@ func TestWendler531BBBProgram(t *testing.T) {
 	})
 
 	// =============================================================================
-	// Log AMRAP set with 8 reps
+	// Complete Week 1 workouts using explicit state machine flow
 	// =============================================================================
-	t.Run("Log AMRAP set with 8 reps", func(t *testing.T) {
-		// Start a workout session first
-		startResp, err := userPost(ts.URL("/workouts/start"), "", userID)
-		if err != nil {
-			t.Fatalf("Failed to start workout: %v", err)
-		}
-		if startResp.StatusCode != http.StatusCreated {
-			body, _ := io.ReadAll(startResp.Body)
-			startResp.Body.Close()
-			t.Fatalf("Failed to start workout, status %d: %s", startResp.StatusCode, body)
-		}
-		var sessionEnvelope struct {
-			Data struct {
-				ID string `json:"id"`
-			} `json:"data"`
-		}
-		json.NewDecoder(startResp.Body).Decode(&sessionEnvelope)
-		startResp.Body.Close()
-		sessionID := sessionEnvelope.Data.ID
+
+	// Week 1, Day 1: Squat Day
+	t.Run("Week 1 Day 1 - Squat AMRAP with 8 reps", func(t *testing.T) {
+		sessionID := startWorkoutSession(t, ts, userID)
 
 		// Get the workout first to extract prescription ID
 		workoutResp, _ := userGet(ts.URL("/users/"+userID+"/workout"), userID)
@@ -290,71 +275,39 @@ func TestWendler531BBBProgram(t *testing.T) {
 		weight := workout.Data.Exercises[0].Sets[0].Weight
 
 		// Log the AMRAP set with 8 reps
-		loggedSetBody := fmt.Sprintf(`{
-			"sets": [{
-				"prescriptionId": "%s",
-				"liftId": "%s",
-				"setNumber": 1,
-				"weight": %.1f,
-				"targetReps": 5,
-				"repsPerformed": 8,
-				"isAmrap": true
-			}]
-		}`, prescID, squatID, weight)
+		log531Set(t, ts, userID, sessionID, prescID, squatID, 1, weight, 5, 8, true)
 
-		logResp, err := userPost(ts.URL("/sessions/"+sessionID+"/sets"), loggedSetBody, userID)
-		if err != nil {
-			t.Fatalf("Failed to log set: %v", err)
-		}
-		if logResp.StatusCode != http.StatusCreated {
-			body, _ := io.ReadAll(logResp.Body)
-			logResp.Body.Close()
-			t.Fatalf("Failed to log set, status %d: %s", logResp.StatusCode, body)
-		}
-		logResp.Body.Close()
+		finishWorkoutSession(t, ts, sessionID, userID)
 
-		// Finish the workout session
-		finishResp, _ := userPost(ts.URL("/workouts/"+sessionID+"/finish"), "", userID)
-		finishResp.Body.Close()
+		// Advance to next day (Bench Day)
+		advanceUserState(t, ts, userID)
 	})
 
-	// Advance through Week 1
-	advanceUserState(t, ts, userID) // Squat -> Bench (Week 1)
-	advanceUserState(t, ts, userID) // Bench -> Squat (Week 2)
+	// Week 1, Day 2: Bench Day
+	completeWorkoutDay(t, ts, userID, benchID)
 
 	// =============================================================================
-	// Advance through weeks 2-4 (simplified, just verifying progression at end)
+	// Complete remaining weeks using explicit state machine flow
 	// =============================================================================
 
-	// Week 2
-	advanceUserState(t, ts, userID) // Squat -> Bench
-	advanceUserState(t, ts, userID) // Bench -> Squat (Week 3)
+	// Week 2: Squat Day, Bench Day
+	completeWorkoutDay(t, ts, userID, squatID)
+	completeWorkoutDay(t, ts, userID, benchID)
 
-	// Week 3
-	advanceUserState(t, ts, userID) // Squat -> Bench
-	advanceUserState(t, ts, userID) // Bench -> Squat (Week 4 deload)
+	// Week 3: Squat Day, Bench Day
+	completeWorkoutDay(t, ts, userID, squatID)
+	completeWorkoutDay(t, ts, userID, benchID)
 
-	// Week 4 (deload)
-	advanceUserState(t, ts, userID) // Squat -> Bench
-	advanceUserState(t, ts, userID) // Bench -> Squat (Week 1, Cycle 2)
+	// Week 4 (deload): Squat Day, Bench Day
+	completeWorkoutDay(t, ts, userID, squatID)
+	completeWorkoutDay(t, ts, userID, benchID)
 
 	// =============================================================================
-	// Trigger cycle progression (simulates end of cycle)
+	// Trigger cycle progression at cycle end (no Force flag - natural trigger)
 	// =============================================================================
 	t.Run("Cycle progression triggers at cycle end", func(t *testing.T) {
-		// Trigger lower body progression for squat
-		triggerBody := ManualTriggerRequest{
-			ProgressionID: lowerProgID,
-			LiftID:        squatID,
-			Force:         true,
-		}
-		triggerResp, err := authPostTrigger(ts.URL("/users/"+userID+"/progressions/trigger"), triggerBody, userID)
-		if err != nil {
-			t.Fatalf("Failed to trigger squat progression: %v", err)
-		}
-		var squatTrigger TriggerResponse
-		json.NewDecoder(triggerResp.Body).Decode(&squatTrigger)
-		triggerResp.Body.Close()
+		// Trigger lower body progression for squat (CYCLE_PROGRESSION triggers at cycle boundary)
+		squatTrigger := triggerProgressionForLift(t, ts, userID, lowerProgID, squatID)
 
 		if squatTrigger.Data.TotalApplied != 1 {
 			t.Errorf("Expected squat progression to apply, got TotalApplied=%d", squatTrigger.Data.TotalApplied)
@@ -370,15 +323,7 @@ func TestWendler531BBBProgram(t *testing.T) {
 		}
 
 		// Trigger upper body progression for bench
-		triggerBody.ProgressionID = upperProgID
-		triggerBody.LiftID = benchID
-		triggerResp, err = authPostTrigger(ts.URL("/users/"+userID+"/progressions/trigger"), triggerBody, userID)
-		if err != nil {
-			t.Fatalf("Failed to trigger bench progression: %v", err)
-		}
-		var benchTrigger TriggerResponse
-		json.NewDecoder(triggerResp.Body).Decode(&benchTrigger)
-		triggerResp.Body.Close()
+		benchTrigger := triggerProgressionForLift(t, ts, userID, upperProgID, benchID)
 
 		if benchTrigger.Data.TotalApplied != 1 {
 			t.Errorf("Expected bench progression to apply")
@@ -464,4 +409,59 @@ func createAMRAPPrescription(t *testing.T, ts *testutil.TestServer, liftID strin
 // withinTolerance checks if value is within tolerance of expected.
 func withinTolerance(value, expected, tolerance float64) bool {
 	return math.Abs(value-expected) <= tolerance
+}
+
+// log531Set logs a single set for 5/3/1 workout.
+func log531Set(t *testing.T, ts *testutil.TestServer, userID, sessionID, prescriptionID, liftID string, setNumber int, weight float64, targetReps, repsPerformed int, isAmrap bool) {
+	t.Helper()
+
+	loggedSetBody := fmt.Sprintf(`{
+		"sets": [{
+			"prescriptionId": "%s",
+			"liftId": "%s",
+			"setNumber": %d,
+			"weight": %.1f,
+			"targetReps": %d,
+			"repsPerformed": %d,
+			"isAmrap": %t
+		}]
+	}`, prescriptionID, liftID, setNumber, weight, targetReps, repsPerformed, isAmrap)
+
+	logResp, err := userPost(ts.URL("/sessions/"+sessionID+"/sets"), loggedSetBody, userID)
+	if err != nil {
+		t.Fatalf("Failed to log set: %v", err)
+	}
+	if logResp.StatusCode != http.StatusCreated {
+		body, _ := io.ReadAll(logResp.Body)
+		logResp.Body.Close()
+		t.Fatalf("Failed to log set, status %d: %s", logResp.StatusCode, body)
+	}
+	logResp.Body.Close()
+}
+
+// completeWorkoutDay starts a workout session, logs all sets, finishes, and advances state.
+// This is used for simple workout completion without specific assertions.
+func completeWorkoutDay(t *testing.T, ts *testutil.TestServer, userID, expectedLiftID string) {
+	t.Helper()
+
+	sessionID := startWorkoutSession(t, ts, userID)
+
+	// Get the workout to find prescription IDs
+	workoutResp, _ := userGet(ts.URL("/users/"+userID+"/workout"), userID)
+	var workout WorkoutResponse
+	json.NewDecoder(workoutResp.Body).Decode(&workout)
+	workoutResp.Body.Close()
+
+	// Log sets for each exercise
+	for _, ex := range workout.Data.Exercises {
+		for _, set := range ex.Sets {
+			// Log successful completion (reps performed = target reps)
+			log531Set(t, ts, userID, sessionID, ex.PrescriptionID, ex.Lift.ID, set.SetNumber, set.Weight, set.TargetReps, set.TargetReps, false)
+		}
+	}
+
+	finishWorkoutSession(t, ts, sessionID, userID)
+
+	// Advance to next day (required until automatic triggering is implemented)
+	advanceUserState(t, ts, userID)
 }

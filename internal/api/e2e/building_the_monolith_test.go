@@ -295,8 +295,8 @@ func TestBuildingTheMonolithProgram(t *testing.T) {
 		}
 	})
 
-	// Advance to Wednesday
-	advanceUserState(t, ts, userID)
+	// Complete Monday workout using explicit state machine flow
+	completeBTMWorkoutDay(t, ts, userID)
 
 	// =============================================================================
 	// WEEK 1: Wednesday - Test Deadlift and Bench 5x5 at 90%
@@ -369,8 +369,8 @@ func TestBuildingTheMonolithProgram(t *testing.T) {
 		}
 	})
 
-	// Advance to Friday
-	advanceUserState(t, ts, userID)
+	// Complete Wednesday workout using explicit state machine flow
+	completeBTMWorkoutDay(t, ts, userID)
 
 	// =============================================================================
 	// WEEK 1: Friday - Test Widowmaker (1x20 at 45%) and Press volume (10x5)
@@ -451,32 +451,26 @@ func TestBuildingTheMonolithProgram(t *testing.T) {
 		}
 	})
 
-	// Advance through rest of the cycle (Week 1 Fri -> Week 2 Mon -> Wed -> Fri -> Week 3 Mon -> Wed -> Fri)
-	advanceUserState(t, ts, userID) // Week 1 Fri -> Week 2 Mon
-	advanceUserState(t, ts, userID) // Week 2 Mon -> Wed
-	advanceUserState(t, ts, userID) // Week 2 Wed -> Fri
-	advanceUserState(t, ts, userID) // Week 2 Fri -> Week 3 Mon
-	advanceUserState(t, ts, userID) // Week 3 Mon -> Wed
-	advanceUserState(t, ts, userID) // Week 3 Wed -> Fri
-	advanceUserState(t, ts, userID) // Week 3 Fri -> Cycle 2, Week 1 Mon
+	// Complete rest of the cycle using explicit state machine flow
+	// Week 1: Friday
+	completeBTMWorkoutDay(t, ts, userID) // Week 1 Fri -> Week 2 Mon
+
+	// Week 2: Mon/Wed/Fri
+	completeBTMWorkoutDay(t, ts, userID) // Week 2 Mon -> Wed
+	completeBTMWorkoutDay(t, ts, userID) // Week 2 Wed -> Fri
+	completeBTMWorkoutDay(t, ts, userID) // Week 2 Fri -> Week 3 Mon
+
+	// Week 3: Mon/Wed/Fri
+	completeBTMWorkoutDay(t, ts, userID) // Week 3 Mon -> Wed
+	completeBTMWorkoutDay(t, ts, userID) // Week 3 Wed -> Fri
+	completeBTMWorkoutDay(t, ts, userID) // Week 3 Fri -> Cycle 2, Week 1 Mon
 
 	// =============================================================================
-	// CYCLE PROGRESSION: Trigger TM increases at end of cycle
+	// CYCLE PROGRESSION: Trigger TM increases at end of cycle (no Force flag)
 	// =============================================================================
 	t.Run("Cycle progression triggers at cycle end", func(t *testing.T) {
 		// Trigger lower body progression for squat (+10lb)
-		triggerBody := ManualTriggerRequest{
-			ProgressionID: lowerProgID,
-			LiftID:        squatID,
-			Force:         true,
-		}
-		triggerResp, err := authPostTrigger(ts.URL("/users/"+userID+"/progressions/trigger"), triggerBody, userID)
-		if err != nil {
-			t.Fatalf("Failed to trigger squat progression: %v", err)
-		}
-		var squatTrigger TriggerResponse
-		json.NewDecoder(triggerResp.Body).Decode(&squatTrigger)
-		triggerResp.Body.Close()
+		squatTrigger := triggerProgressionForLift(t, ts, userID, lowerProgID, squatID)
 
 		if squatTrigger.Data.TotalApplied != 1 {
 			t.Errorf("Expected squat progression to apply, got TotalApplied=%d", squatTrigger.Data.TotalApplied)
@@ -492,14 +486,7 @@ func TestBuildingTheMonolithProgram(t *testing.T) {
 		}
 
 		// Trigger lower body progression for deadlift (+10lb)
-		triggerBody.LiftID = deadliftID
-		triggerResp, err = authPostTrigger(ts.URL("/users/"+userID+"/progressions/trigger"), triggerBody, userID)
-		if err != nil {
-			t.Fatalf("Failed to trigger deadlift progression: %v", err)
-		}
-		var deadliftTrigger TriggerResponse
-		json.NewDecoder(triggerResp.Body).Decode(&deadliftTrigger)
-		triggerResp.Body.Close()
+		deadliftTrigger := triggerProgressionForLift(t, ts, userID, lowerProgID, deadliftID)
 
 		if deadliftTrigger.Data.TotalApplied != 1 {
 			t.Errorf("Expected deadlift progression to apply")
@@ -511,15 +498,7 @@ func TestBuildingTheMonolithProgram(t *testing.T) {
 		}
 
 		// Trigger upper body progression for bench (+5lb)
-		triggerBody.ProgressionID = upperProgID
-		triggerBody.LiftID = benchID
-		triggerResp, err = authPostTrigger(ts.URL("/users/"+userID+"/progressions/trigger"), triggerBody, userID)
-		if err != nil {
-			t.Fatalf("Failed to trigger bench progression: %v", err)
-		}
-		var benchTrigger TriggerResponse
-		json.NewDecoder(triggerResp.Body).Decode(&benchTrigger)
-		triggerResp.Body.Close()
+		benchTrigger := triggerProgressionForLift(t, ts, userID, upperProgID, benchID)
 
 		if benchTrigger.Data.TotalApplied != 1 {
 			t.Errorf("Expected bench progression to apply")
@@ -531,14 +510,7 @@ func TestBuildingTheMonolithProgram(t *testing.T) {
 		}
 
 		// Trigger upper body progression for press (+5lb)
-		triggerBody.LiftID = pressID
-		triggerResp, err = authPostTrigger(ts.URL("/users/"+userID+"/progressions/trigger"), triggerBody, userID)
-		if err != nil {
-			t.Fatalf("Failed to trigger press progression: %v", err)
-		}
-		var pressTrigger TriggerResponse
-		json.NewDecoder(triggerResp.Body).Decode(&pressTrigger)
-		triggerResp.Body.Close()
+		pressTrigger := triggerProgressionForLift(t, ts, userID, upperProgID, pressID)
 
 		if pressTrigger.Data.TotalApplied != 1 {
 			t.Errorf("Expected press progression to apply")
@@ -600,4 +572,52 @@ func TestBuildingTheMonolithProgram(t *testing.T) {
 			}
 		}
 	})
+}
+
+// completeBTMWorkoutDay starts a workout session, logs all sets, finishes, and advances state.
+// This is used for simple workout completion in Building the Monolith tests.
+func completeBTMWorkoutDay(t *testing.T, ts *testutil.TestServer, userID string) {
+	t.Helper()
+
+	sessionID := startWorkoutSession(t, ts, userID)
+
+	// Get the workout to find prescription IDs
+	workoutResp, _ := userGet(ts.URL("/users/"+userID+"/workout"), userID)
+	var workout WorkoutResponse
+	json.NewDecoder(workoutResp.Body).Decode(&workout)
+	workoutResp.Body.Close()
+
+	// Log sets for each exercise
+	for _, ex := range workout.Data.Exercises {
+		for _, set := range ex.Sets {
+			// Log successful completion (reps performed = target reps)
+			loggedSetBody := fmt.Sprintf(`{
+				"sets": [{
+					"prescriptionId": "%s",
+					"liftId": "%s",
+					"setNumber": %d,
+					"weight": %.1f,
+					"targetReps": %d,
+					"repsPerformed": %d,
+					"isAmrap": false
+				}]
+			}`, ex.PrescriptionID, ex.Lift.ID, set.SetNumber, set.Weight, set.TargetReps, set.TargetReps)
+
+			logResp, err := userPost(ts.URL("/sessions/"+sessionID+"/sets"), loggedSetBody, userID)
+			if err != nil {
+				t.Fatalf("Failed to log set: %v", err)
+			}
+			if logResp.StatusCode != http.StatusCreated {
+				body, _ := io.ReadAll(logResp.Body)
+				logResp.Body.Close()
+				t.Fatalf("Failed to log set, status %d: %s", logResp.StatusCode, body)
+			}
+			logResp.Body.Close()
+		}
+	}
+
+	finishWorkoutSession(t, ts, sessionID, userID)
+
+	// Advance to next day (required until automatic triggering is implemented)
+	advanceUserState(t, ts, userID)
 }
