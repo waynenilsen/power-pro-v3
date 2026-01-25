@@ -130,6 +130,9 @@ func setupTestData(t *testing.T, sqlDB *sql.DB) testData {
 		ProgramID:             programID,
 		CurrentWeek:           1,
 		CurrentCycleIteration: 1,
+		EnrollmentStatus:      "ACTIVE",
+		CycleStatus:           "PENDING",
+		WeekStatus:            "PENDING",
 		EnrolledAt:            now,
 		UpdatedAt:             now,
 	})

@@ -845,6 +845,9 @@ func TestManualTriggerWithTestServer(t *testing.T) {
 		ProgramID:             programID,
 		CurrentWeek:           1,
 		CurrentCycleIteration: 1,
+		EnrollmentStatus:      "ACTIVE",
+		CycleStatus:           "PENDING",
+		WeekStatus:            "PENDING",
 		EnrolledAt:            now,
 		UpdatedAt:             now,
 	})

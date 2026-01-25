@@ -21,6 +21,33 @@ const (
 	ScheduleTypeDaysOut ScheduleType = "days_out"
 )
 
+// EnrollmentStatus represents the overall enrollment state of a user in a program.
+type EnrollmentStatus string
+
+const (
+	EnrollmentStatusActive        EnrollmentStatus = "ACTIVE"
+	EnrollmentStatusBetweenCycles EnrollmentStatus = "BETWEEN_CYCLES"
+	EnrollmentStatusQuit          EnrollmentStatus = "QUIT"
+)
+
+// CycleStatus represents the status of the current cycle.
+type CycleStatus string
+
+const (
+	CycleStatusPending    CycleStatus = "PENDING"
+	CycleStatusInProgress CycleStatus = "IN_PROGRESS"
+	CycleStatusCompleted  CycleStatus = "COMPLETED"
+)
+
+// WeekStatus represents the status of the current week.
+type WeekStatus string
+
+const (
+	WeekStatusPending    WeekStatus = "PENDING"
+	WeekStatusInProgress WeekStatus = "IN_PROGRESS"
+	WeekStatusCompleted  WeekStatus = "COMPLETED"
+)
+
 // Validation errors
 var (
 	ErrUserIDRequired               = errors.New("user_id is required")
@@ -30,6 +57,9 @@ var (
 	ErrCurrentDayIndexInvalid       = errors.New("current_day_index must be at least 0 if provided")
 	ErrMeetDateInPast               = errors.New("meet_date must be in the future")
 	ErrInvalidScheduleType          = errors.New("schedule_type must be 'rotation' or 'days_out'")
+	ErrInvalidEnrollmentStatus      = errors.New("enrollment_status must be 'ACTIVE', 'BETWEEN_CYCLES', or 'QUIT'")
+	ErrInvalidCycleStatus           = errors.New("cycle_status must be 'PENDING', 'IN_PROGRESS', or 'COMPLETED'")
+	ErrInvalidWeekStatus            = errors.New("week_status must be 'PENDING', 'IN_PROGRESS', or 'COMPLETED'")
 )
 
 // UserProgramState represents a user's enrollment in a program with their current position.
@@ -40,10 +70,13 @@ type UserProgramState struct {
 	CurrentWeek           int
 	CurrentCycleIteration int
 	CurrentDayIndex       *int
-	RotationPosition      int          // 0-based position in rotation for programs like Conjugate/Westside
-	CyclesSinceStart      int          // Number of complete cycles since enrollment
-	MeetDate              *time.Time   // Optional meet date for peaking programs
-	ScheduleType          ScheduleType // "rotation" (default) or "days_out"
+	RotationPosition      int              // 0-based position in rotation for programs like Conjugate/Westside
+	CyclesSinceStart      int              // Number of complete cycles since enrollment
+	MeetDate              *time.Time       // Optional meet date for peaking programs
+	ScheduleType          ScheduleType     // "rotation" (default) or "days_out"
+	EnrollmentStatus      EnrollmentStatus // Overall enrollment state
+	CycleStatus           CycleStatus      // Current cycle state
+	WeekStatus            WeekStatus       // Current week state
 	EnrolledAt            time.Time
 	UpdatedAt             time.Time
 }
@@ -122,6 +155,36 @@ func ValidateScheduleType(scheduleType ScheduleType) error {
 	return nil
 }
 
+// ValidateEnrollmentStatus validates the enrollment status field.
+func ValidateEnrollmentStatus(status EnrollmentStatus) error {
+	switch status {
+	case EnrollmentStatusActive, EnrollmentStatusBetweenCycles, EnrollmentStatusQuit:
+		return nil
+	default:
+		return ErrInvalidEnrollmentStatus
+	}
+}
+
+// ValidateCycleStatus validates the cycle status field.
+func ValidateCycleStatus(status CycleStatus) error {
+	switch status {
+	case CycleStatusPending, CycleStatusInProgress, CycleStatusCompleted:
+		return nil
+	default:
+		return ErrInvalidCycleStatus
+	}
+}
+
+// ValidateWeekStatus validates the week status field.
+func ValidateWeekStatus(status WeekStatus) error {
+	switch status {
+	case WeekStatusPending, WeekStatusInProgress, WeekStatusCompleted:
+		return nil
+	default:
+		return ErrInvalidWeekStatus
+	}
+}
+
 // EnrollUserInput contains the input data for enrolling a user in a program.
 type EnrollUserInput struct {
 	UserID       string
@@ -177,6 +240,9 @@ func EnrollUser(input EnrollUserInput, id string) (*UserProgramState, *Validatio
 		CyclesSinceStart:      0,            // No cycles completed yet
 		MeetDate:              input.MeetDate,
 		ScheduleType:          scheduleType,
+		EnrollmentStatus:      EnrollmentStatusActive, // User starts as active
+		CycleStatus:           CycleStatusPending,     // Cycle hasn't started yet
+		WeekStatus:            WeekStatusPending,      // Week hasn't started yet
 		EnrolledAt:            now,
 		UpdatedAt:             now,
 	}, result
@@ -260,6 +326,19 @@ func (s *UserProgramState) Validate() *ValidationResult {
 		}
 	}
 
+	// Validate status fields
+	if err := ValidateEnrollmentStatus(s.EnrollmentStatus); err != nil {
+		result.AddError(err)
+	}
+
+	if err := ValidateCycleStatus(s.CycleStatus); err != nil {
+		result.AddError(err)
+	}
+
+	if err := ValidateWeekStatus(s.WeekStatus); err != nil {
+		result.AddError(err)
+	}
+
 	return result
 }
 
@@ -305,6 +384,9 @@ func AdvanceState(state *UserProgramState, ctx AdvancementContext) (*Advancement
 		CyclesSinceStart:      state.CyclesSinceStart,
 		MeetDate:              copyTimePtr(state.MeetDate),
 		ScheduleType:          state.ScheduleType,
+		EnrollmentStatus:      state.EnrollmentStatus,
+		CycleStatus:           state.CycleStatus,
+		WeekStatus:            state.WeekStatus,
 		EnrolledAt:            state.EnrolledAt,
 		UpdatedAt:             time.Now(),
 	}

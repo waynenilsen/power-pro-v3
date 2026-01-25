@@ -74,6 +74,9 @@ func (r *UserProgramStateRepository) GetEnrollmentWithProgram(userID string) (*u
 		CyclesSinceStart:      int(row.CyclesSinceStart),
 		MeetDate:              nullStringToTimePtr(row.MeetDate),
 		ScheduleType:          nullStringToScheduleType(row.ScheduleType),
+		EnrollmentStatus:      userprogramstate.EnrollmentStatus(row.EnrollmentStatus),
+		CycleStatus:           userprogramstate.CycleStatus(row.CycleStatus),
+		WeekStatus:            userprogramstate.WeekStatus(row.WeekStatus),
 		EnrolledAt:            enrolledAt,
 		UpdatedAt:             updatedAt,
 	}
@@ -102,6 +105,9 @@ func (r *UserProgramStateRepository) Create(state *userprogramstate.UserProgramS
 		CyclesSinceStart:      int64(state.CyclesSinceStart),
 		MeetDate:              timePtrToNullString(state.MeetDate),
 		ScheduleType:          scheduleTypeToNullString(state.ScheduleType),
+		EnrollmentStatus:      string(state.EnrollmentStatus),
+		CycleStatus:           string(state.CycleStatus),
+		WeekStatus:            string(state.WeekStatus),
 		EnrolledAt:            state.EnrolledAt.Format(time.RFC3339),
 		UpdatedAt:             state.UpdatedAt.Format(time.RFC3339),
 	})
@@ -125,6 +131,9 @@ func (r *UserProgramStateRepository) Update(state *userprogramstate.UserProgramS
 		CyclesSinceStart:      int64(state.CyclesSinceStart),
 		MeetDate:              timePtrToNullString(state.MeetDate),
 		ScheduleType:          scheduleTypeToNullString(state.ScheduleType),
+		EnrollmentStatus:      string(state.EnrollmentStatus),
+		CycleStatus:           string(state.CycleStatus),
+		WeekStatus:            string(state.WeekStatus),
 		UpdatedAt:             state.UpdatedAt.Format(time.RFC3339),
 	})
 	if err != nil {
@@ -172,6 +181,9 @@ func dbGetUserProgramStateByUserIDRowToDomain(dbState db.GetUserProgramStateByUs
 		CyclesSinceStart:      int(dbState.CyclesSinceStart),
 		MeetDate:              nullStringToTimePtr(dbState.MeetDate),
 		ScheduleType:          nullStringToScheduleType(dbState.ScheduleType),
+		EnrollmentStatus:      userprogramstate.EnrollmentStatus(dbState.EnrollmentStatus),
+		CycleStatus:           userprogramstate.CycleStatus(dbState.CycleStatus),
+		WeekStatus:            userprogramstate.WeekStatus(dbState.WeekStatus),
 		EnrolledAt:            enrolledAt,
 		UpdatedAt:             updatedAt,
 	}
@@ -192,6 +204,9 @@ func dbGetUserProgramStateByIDRowToDomain(dbState db.GetUserProgramStateByIDRow)
 		CyclesSinceStart:      int(dbState.CyclesSinceStart),
 		MeetDate:              nullStringToTimePtr(dbState.MeetDate),
 		ScheduleType:          nullStringToScheduleType(dbState.ScheduleType),
+		EnrollmentStatus:      userprogramstate.EnrollmentStatus(dbState.EnrollmentStatus),
+		CycleStatus:           userprogramstate.CycleStatus(dbState.CycleStatus),
+		WeekStatus:            userprogramstate.WeekStatus(dbState.WeekStatus),
 		EnrolledAt:            enrolledAt,
 		UpdatedAt:             updatedAt,
 	}
@@ -230,6 +245,9 @@ func (r *UserProgramStateRepository) GetStateAdvancementContext(userID string) (
 		CyclesSinceStart:      int(row.CyclesSinceStart),
 		MeetDate:              nullStringToTimePtr(row.MeetDate),
 		ScheduleType:          nullStringToScheduleType(row.ScheduleType),
+		EnrollmentStatus:      userprogramstate.EnrollmentStatus(row.EnrollmentStatus),
+		CycleStatus:           userprogramstate.CycleStatus(row.CycleStatus),
+		WeekStatus:            userprogramstate.WeekStatus(row.WeekStatus),
 		EnrolledAt:            enrolledAt,
 		UpdatedAt:             updatedAt,
 	}

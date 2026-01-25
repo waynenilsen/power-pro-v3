@@ -254,6 +254,16 @@ func TestEnrollUser_ValidInput(t *testing.T) {
 	if state.CurrentDayIndex != nil {
 		t.Errorf("state.CurrentDayIndex = %v, want nil", state.CurrentDayIndex)
 	}
+	// Verify initial status values
+	if state.EnrollmentStatus != EnrollmentStatusActive {
+		t.Errorf("state.EnrollmentStatus = %q, want %q", state.EnrollmentStatus, EnrollmentStatusActive)
+	}
+	if state.CycleStatus != CycleStatusPending {
+		t.Errorf("state.CycleStatus = %q, want %q", state.CycleStatus, CycleStatusPending)
+	}
+	if state.WeekStatus != WeekStatusPending {
+		t.Errorf("state.WeekStatus = %q, want %q", state.WeekStatus, WeekStatusPending)
+	}
 }
 
 func TestEnrollUser_TrimsWhitespace(t *testing.T) {
@@ -541,6 +551,9 @@ func TestUserProgramState_Validate_Valid(t *testing.T) {
 		ProgramID:             "program-1",
 		CurrentWeek:           1,
 		CurrentCycleIteration: 1,
+		EnrollmentStatus:      EnrollmentStatusActive,
+		CycleStatus:           CycleStatusPending,
+		WeekStatus:            WeekStatusPending,
 	}
 
 	result := state.Validate()
@@ -557,6 +570,9 @@ func TestUserProgramState_Validate_InvalidUserID(t *testing.T) {
 		ProgramID:             "program-1",
 		CurrentWeek:           1,
 		CurrentCycleIteration: 1,
+		EnrollmentStatus:      EnrollmentStatusActive,
+		CycleStatus:           CycleStatusPending,
+		WeekStatus:            WeekStatusPending,
 	}
 
 	result := state.Validate()
@@ -573,6 +589,9 @@ func TestUserProgramState_Validate_InvalidProgramID(t *testing.T) {
 		ProgramID:             "",
 		CurrentWeek:           1,
 		CurrentCycleIteration: 1,
+		EnrollmentStatus:      EnrollmentStatusActive,
+		CycleStatus:           CycleStatusPending,
+		WeekStatus:            WeekStatusPending,
 	}
 
 	result := state.Validate()
@@ -589,6 +608,9 @@ func TestUserProgramState_Validate_InvalidCurrentWeek(t *testing.T) {
 		ProgramID:             "program-1",
 		CurrentWeek:           0,
 		CurrentCycleIteration: 1,
+		EnrollmentStatus:      EnrollmentStatusActive,
+		CycleStatus:           CycleStatusPending,
+		WeekStatus:            WeekStatusPending,
 	}
 
 	result := state.Validate()
@@ -605,6 +627,9 @@ func TestUserProgramState_Validate_InvalidCycleIteration(t *testing.T) {
 		ProgramID:             "program-1",
 		CurrentWeek:           1,
 		CurrentCycleIteration: -1,
+		EnrollmentStatus:      EnrollmentStatusActive,
+		CycleStatus:           CycleStatusPending,
+		WeekStatus:            WeekStatusPending,
 	}
 
 	result := state.Validate()
@@ -623,6 +648,9 @@ func TestUserProgramState_Validate_InvalidDayIndex(t *testing.T) {
 		CurrentWeek:           1,
 		CurrentCycleIteration: 1,
 		CurrentDayIndex:       &dayIndex,
+		EnrollmentStatus:      EnrollmentStatusActive,
+		CycleStatus:           CycleStatusPending,
+		WeekStatus:            WeekStatusPending,
 	}
 
 	result := state.Validate()
@@ -641,6 +669,9 @@ func TestUserProgramState_Validate_MultipleErrors(t *testing.T) {
 		CurrentWeek:           0,
 		CurrentCycleIteration: 0,
 		CurrentDayIndex:       &dayIndex,
+		EnrollmentStatus:      EnrollmentStatus("INVALID"),
+		CycleStatus:           CycleStatus("INVALID"),
+		WeekStatus:            WeekStatus("INVALID"),
 	}
 
 	result := state.Validate()
@@ -648,8 +679,8 @@ func TestUserProgramState_Validate_MultipleErrors(t *testing.T) {
 	if result.Valid {
 		t.Error("Validate returned valid result for state with multiple errors")
 	}
-	if len(result.Errors) < 5 {
-		t.Errorf("Expected at least 5 errors, got %d", len(result.Errors))
+	if len(result.Errors) < 8 {
+		t.Errorf("Expected at least 8 errors, got %d", len(result.Errors))
 	}
 }
 
@@ -1040,6 +1071,135 @@ func TestValidateMeetDate_Invalid(t *testing.T) {
 	}
 }
 
+// ==================== EnrollmentStatus Validation Tests ====================
+
+func TestValidateEnrollmentStatus_Valid(t *testing.T) {
+	tests := []struct {
+		name   string
+		status EnrollmentStatus
+	}{
+		{"active", EnrollmentStatusActive},
+		{"between cycles", EnrollmentStatusBetweenCycles},
+		{"quit", EnrollmentStatusQuit},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateEnrollmentStatus(tt.status)
+			if err != nil {
+				t.Errorf("ValidateEnrollmentStatus(%q) = %v, want nil", tt.status, err)
+			}
+		})
+	}
+}
+
+func TestValidateEnrollmentStatus_Invalid(t *testing.T) {
+	tests := []struct {
+		name        string
+		status      EnrollmentStatus
+		expectedErr error
+	}{
+		{"empty string", EnrollmentStatus(""), ErrInvalidEnrollmentStatus},
+		{"invalid value", EnrollmentStatus("INVALID"), ErrInvalidEnrollmentStatus},
+		{"lowercase active", EnrollmentStatus("active"), ErrInvalidEnrollmentStatus},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateEnrollmentStatus(tt.status)
+			if !errors.Is(err, tt.expectedErr) {
+				t.Errorf("ValidateEnrollmentStatus(%q) = %v, want %v", tt.status, err, tt.expectedErr)
+			}
+		})
+	}
+}
+
+// ==================== CycleStatus Validation Tests ====================
+
+func TestValidateCycleStatus_Valid(t *testing.T) {
+	tests := []struct {
+		name   string
+		status CycleStatus
+	}{
+		{"pending", CycleStatusPending},
+		{"in progress", CycleStatusInProgress},
+		{"completed", CycleStatusCompleted},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateCycleStatus(tt.status)
+			if err != nil {
+				t.Errorf("ValidateCycleStatus(%q) = %v, want nil", tt.status, err)
+			}
+		})
+	}
+}
+
+func TestValidateCycleStatus_Invalid(t *testing.T) {
+	tests := []struct {
+		name        string
+		status      CycleStatus
+		expectedErr error
+	}{
+		{"empty string", CycleStatus(""), ErrInvalidCycleStatus},
+		{"invalid value", CycleStatus("INVALID"), ErrInvalidCycleStatus},
+		{"lowercase pending", CycleStatus("pending"), ErrInvalidCycleStatus},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateCycleStatus(tt.status)
+			if !errors.Is(err, tt.expectedErr) {
+				t.Errorf("ValidateCycleStatus(%q) = %v, want %v", tt.status, err, tt.expectedErr)
+			}
+		})
+	}
+}
+
+// ==================== WeekStatus Validation Tests ====================
+
+func TestValidateWeekStatus_Valid(t *testing.T) {
+	tests := []struct {
+		name   string
+		status WeekStatus
+	}{
+		{"pending", WeekStatusPending},
+		{"in progress", WeekStatusInProgress},
+		{"completed", WeekStatusCompleted},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateWeekStatus(tt.status)
+			if err != nil {
+				t.Errorf("ValidateWeekStatus(%q) = %v, want nil", tt.status, err)
+			}
+		})
+	}
+}
+
+func TestValidateWeekStatus_Invalid(t *testing.T) {
+	tests := []struct {
+		name        string
+		status      WeekStatus
+		expectedErr error
+	}{
+		{"empty string", WeekStatus(""), ErrInvalidWeekStatus},
+		{"invalid value", WeekStatus("INVALID"), ErrInvalidWeekStatus},
+		{"lowercase pending", WeekStatus("pending"), ErrInvalidWeekStatus},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateWeekStatus(tt.status)
+			if !errors.Is(err, tt.expectedErr) {
+				t.Errorf("ValidateWeekStatus(%q) = %v, want %v", tt.status, err, tt.expectedErr)
+			}
+		})
+	}
+}
+
 // ==================== ScheduleType Validation Tests ====================
 
 func TestValidateScheduleType_Valid(t *testing.T) {
@@ -1179,6 +1339,9 @@ func TestUserProgramState_Validate_WithValidMeetDate(t *testing.T) {
 		CurrentCycleIteration: 1,
 		MeetDate:              &futureDate,
 		ScheduleType:          ScheduleTypeDaysOut,
+		EnrollmentStatus:      EnrollmentStatusActive,
+		CycleStatus:           CycleStatusPending,
+		WeekStatus:            WeekStatusPending,
 	}
 
 	result := state.Validate()
@@ -1198,6 +1361,9 @@ func TestUserProgramState_Validate_WithPastMeetDate(t *testing.T) {
 		CurrentCycleIteration: 1,
 		MeetDate:              &pastDate,
 		ScheduleType:          ScheduleTypeDaysOut,
+		EnrollmentStatus:      EnrollmentStatusActive,
+		CycleStatus:           CycleStatusPending,
+		WeekStatus:            WeekStatusPending,
 	}
 
 	result := state.Validate()
@@ -1215,12 +1381,72 @@ func TestUserProgramState_Validate_WithInvalidScheduleType(t *testing.T) {
 		CurrentWeek:           1,
 		CurrentCycleIteration: 1,
 		ScheduleType:          ScheduleType("invalid"),
+		EnrollmentStatus:      EnrollmentStatusActive,
+		CycleStatus:           CycleStatusPending,
+		WeekStatus:            WeekStatusPending,
 	}
 
 	result := state.Validate()
 
 	if result.Valid {
 		t.Error("Validate returned valid result for state with invalid schedule type")
+	}
+}
+
+func TestUserProgramState_Validate_WithInvalidEnrollmentStatus(t *testing.T) {
+	state := &UserProgramState{
+		ID:                    "state-id",
+		UserID:                "user-1",
+		ProgramID:             "program-1",
+		CurrentWeek:           1,
+		CurrentCycleIteration: 1,
+		EnrollmentStatus:      EnrollmentStatus("INVALID"),
+		CycleStatus:           CycleStatusPending,
+		WeekStatus:            WeekStatusPending,
+	}
+
+	result := state.Validate()
+
+	if result.Valid {
+		t.Error("Validate returned valid result for state with invalid enrollment status")
+	}
+}
+
+func TestUserProgramState_Validate_WithInvalidCycleStatus(t *testing.T) {
+	state := &UserProgramState{
+		ID:                    "state-id",
+		UserID:                "user-1",
+		ProgramID:             "program-1",
+		CurrentWeek:           1,
+		CurrentCycleIteration: 1,
+		EnrollmentStatus:      EnrollmentStatusActive,
+		CycleStatus:           CycleStatus("INVALID"),
+		WeekStatus:            WeekStatusPending,
+	}
+
+	result := state.Validate()
+
+	if result.Valid {
+		t.Error("Validate returned valid result for state with invalid cycle status")
+	}
+}
+
+func TestUserProgramState_Validate_WithInvalidWeekStatus(t *testing.T) {
+	state := &UserProgramState{
+		ID:                    "state-id",
+		UserID:                "user-1",
+		ProgramID:             "program-1",
+		CurrentWeek:           1,
+		CurrentCycleIteration: 1,
+		EnrollmentStatus:      EnrollmentStatusActive,
+		CycleStatus:           CycleStatusPending,
+		WeekStatus:            WeekStatus("INVALID"),
+	}
+
+	result := state.Validate()
+
+	if result.Valid {
+		t.Error("Validate returned valid result for state with invalid week status")
 	}
 }
 
