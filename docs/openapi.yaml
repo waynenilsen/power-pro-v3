@@ -64,6 +64,10 @@ tags:
     description: Advance a user's program state (move to next day/week)
   - name: Workouts
     description: Generate workouts based on user's program and state
+  - name: Workout Sessions
+    description: Manage workout session lifecycle (start, finish, abandon)
+  - name: Enrollment State
+    description: Manage enrollment state transitions (cycles, weeks)
   - name: Progression History
     description: Query a user's progression history
   - name: Manual Progression
@@ -2302,6 +2306,293 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
+  /users/{userId}/enrollment/next-cycle:
+    post:
+      summary: Start next cycle
+      description: Start a new cycle when the enrollment is in BETWEEN_CYCLES state (owner/admin only)
+      tags:
+        - Enrollment State
+      security:
+        - bearerAuth: []
+        - userIdHeader: []
+      parameters:
+        - $ref: "#/components/parameters/userId"
+      responses:
+        "200":
+          description: Next cycle started
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnrollmentResponse"
+        "400":
+          description: Enrollment not in BETWEEN_CYCLES state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /users/{userId}/enrollment/advance-week:
+    post:
+      summary: Advance to next week
+      description: Advance to the next week in the cycle. If at the final week, transitions to BETWEEN_CYCLES (owner/admin only)
+      tags:
+        - Enrollment State
+      security:
+        - bearerAuth: []
+        - userIdHeader: []
+      parameters:
+        - $ref: "#/components/parameters/userId"
+      responses:
+        "200":
+          description: Advanced to next week
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnrollmentResponse"
+        "400":
+          description: Enrollment not in ACTIVE state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /users/{userId}/workouts:
+    get:
+      summary: List user's workout history
+      description: List a user's workout sessions with pagination (owner/admin only)
+      tags:
+        - Workout Sessions
+      security:
+        - bearerAuth: []
+        - userIdHeader: []
+      parameters:
+        - $ref: "#/components/parameters/userId"
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+            maximum: 100
+          description: Number of items to return
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+          description: Number of items to skip
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [IN_PROGRESS, COMPLETED, ABANDONED]
+          description: Filter by workout session status
+      responses:
+        "200":
+          description: List of workout sessions
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkoutSessionListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /users/{userId}/workouts/current:
+    get:
+      summary: Get current in-progress workout
+      description: Get the user's current in-progress workout session if any (owner/admin only)
+      tags:
+        - Workout Sessions
+      security:
+        - bearerAuth: []
+        - userIdHeader: []
+      parameters:
+        - $ref: "#/components/parameters/userId"
+      responses:
+        "200":
+          description: Current workout session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkoutSessionDataResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: No active workout session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /workouts/start:
+    post:
+      summary: Start a workout session
+      description: Start a new workout session for the authenticated user
+      tags:
+        - Workout Sessions
+      security:
+        - bearerAuth: []
+        - userIdHeader: []
+      responses:
+        "201":
+          description: Workout session started
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkoutSessionDataResponse"
+        "400":
+          description: Enrollment not in ACTIVE state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: User not enrolled in a program
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: User already has an in-progress workout session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /workouts/{id}:
+    get:
+      summary: Get workout session
+      description: Get a workout session by ID (owner/admin only)
+      tags:
+        - Workout Sessions
+      security:
+        - bearerAuth: []
+        - userIdHeader: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Workout session ID
+      responses:
+        "200":
+          description: Workout session details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkoutSessionDataResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /workouts/{id}/finish:
+    post:
+      summary: Finish workout session
+      description: Complete a workout session (owner/admin only)
+      tags:
+        - Workout Sessions
+      security:
+        - bearerAuth: []
+        - userIdHeader: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Workout session ID
+      responses:
+        "200":
+          description: Workout session completed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkoutSessionDataResponse"
+        "400":
+          description: Session not in IN_PROGRESS state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Session already completed or abandoned
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /workouts/{id}/abandon:
+    post:
+      summary: Abandon workout session
+      description: Abandon a workout session (owner/admin only)
+      tags:
+        - Workout Sessions
+      security:
+        - bearerAuth: []
+        - userIdHeader: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Workout session ID
+      responses:
+        "200":
+          description: Workout session abandoned
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkoutSessionDataResponse"
+        "400":
+          description: Session not in IN_PROGRESS state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Session already completed or abandoned
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /users/{userId}/workout:
     get:
       summary: Generate current workout
@@ -3644,6 +3935,131 @@ components:
         updatedAt:
           type: string
           format: date-time
+
+    EnrollmentResponse:
+      type: object
+      description: Enhanced enrollment response with state machine status fields
+      properties:
+        data:
+          type: object
+          properties:
+            id:
+              type: string
+              format: uuid
+            userId:
+              type: string
+              format: uuid
+            program:
+              type: object
+              properties:
+                id:
+                  type: string
+                  format: uuid
+                name:
+                  type: string
+                slug:
+                  type: string
+                description:
+                  type: string
+                cycleLengthWeeks:
+                  type: integer
+            state:
+              type: object
+              properties:
+                currentWeek:
+                  type: integer
+                currentCycleIteration:
+                  type: integer
+                currentDayIndex:
+                  type: integer
+                  nullable: true
+            enrollmentStatus:
+              type: string
+              enum: [ACTIVE, BETWEEN_CYCLES, QUIT]
+              description: Overall enrollment state
+            cycleStatus:
+              type: string
+              enum: [PENDING, IN_PROGRESS, COMPLETED]
+              description: Current cycle state
+            weekStatus:
+              type: string
+              enum: [PENDING, IN_PROGRESS, COMPLETED]
+              description: Current week state
+            currentWorkoutSession:
+              type: object
+              nullable: true
+              description: Current in-progress workout session if any
+              properties:
+                id:
+                  type: string
+                  format: uuid
+                weekNumber:
+                  type: integer
+                dayIndex:
+                  type: integer
+                status:
+                  type: string
+                  enum: [IN_PROGRESS, COMPLETED, ABANDONED]
+                startedAt:
+                  type: string
+                  format: date-time
+                finishedAt:
+                  type: string
+                  format: date-time
+                  nullable: true
+            enrolledAt:
+              type: string
+              format: date-time
+            updatedAt:
+              type: string
+              format: date-time
+
+    WorkoutSession:
+      type: object
+      description: A workout session tracking lifecycle
+      properties:
+        id:
+          type: string
+          format: uuid
+        userProgramStateId:
+          type: string
+          format: uuid
+        weekNumber:
+          type: integer
+        dayIndex:
+          type: integer
+        status:
+          type: string
+          enum: [IN_PROGRESS, COMPLETED, ABANDONED]
+        startedAt:
+          type: string
+          format: date-time
+        finishedAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    WorkoutSessionDataResponse:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/WorkoutSession"
+
+    WorkoutSessionListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/WorkoutSession"
+        meta:
+          $ref: "#/components/schemas/PaginationMeta"
 
     EnrollRequest:
       type: object

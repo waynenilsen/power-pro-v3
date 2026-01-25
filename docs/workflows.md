@@ -8,6 +8,7 @@ This document describes common multi-step workflows for integrating with the Pow
 - [Program Enrollment Workflow](#program-enrollment-workflow)
 - [Workout Generation Workflow](#workout-generation-workflow)
 - [Progression Trigger Workflow](#progression-trigger-workflow)
+- [State Machine Workout Flow](#state-machine-workout-flow)
 
 ---
 
@@ -771,9 +772,298 @@ curl -X POST "http://localhost:8080/users/550e8400-e29b-41d4-a716-446655440000/p
 
 ---
 
+---
+
+## State Machine Workout Flow
+
+Track workout sessions through the state machine for proper lifecycle management and progression triggers.
+
+### Prerequisites
+
+- User is enrolled in a program (`enrollmentStatus: ACTIVE`)
+- User has training maxes set up for lifts used in the program
+
+### State Machine Overview
+
+The state machine manages four interconnected states:
+
+| State | Values | Description |
+|-------|--------|-------------|
+| `enrollmentStatus` | `ACTIVE`, `BETWEEN_CYCLES`, `QUIT` | Overall enrollment state |
+| `cycleStatus` | `PENDING`, `IN_PROGRESS`, `COMPLETED` | Current cycle state |
+| `weekStatus` | `PENDING`, `IN_PROGRESS`, `COMPLETED` | Current week state |
+| Workout Session | `IN_PROGRESS`, `COMPLETED`, `ABANDONED` | Individual workout state |
+
+### Step 1: Check Enrollment Status
+
+Before starting a workout, verify the user's enrollment status.
+
+```bash
+curl -X GET "http://localhost:8080/users/550e8400-e29b-41d4-a716-446655440000/program" \
+  -H "X-User-ID: 550e8400-e29b-41d4-a716-446655440000"
+```
+
+**Expected Response** `200 OK`:
+```json
+{
+  "data": {
+    "id": "enrollment-uuid",
+    "userId": "550e8400-e29b-41d4-a716-446655440000",
+    "program": {
+      "id": "program-uuid",
+      "name": "Wendler 5/3/1 BBB",
+      "slug": "wendler-531-bbb",
+      "cycleLengthWeeks": 4
+    },
+    "state": {
+      "currentWeek": 1,
+      "currentCycleIteration": 1,
+      "currentDayIndex": null
+    },
+    "enrollmentStatus": "ACTIVE",
+    "cycleStatus": "PENDING",
+    "weekStatus": "PENDING",
+    "currentWorkoutSession": null,
+    "enrolledAt": "2024-01-15T00:00:00Z",
+    "updatedAt": "2024-01-15T00:00:00Z"
+  }
+}
+```
+
+**Key Fields**:
+- `enrollmentStatus: ACTIVE` means user can start workouts
+- `enrollmentStatus: BETWEEN_CYCLES` means user must start next cycle first
+- `currentWorkoutSession: null` means no workout in progress
+
+### Step 2: Start a Workout Session
+
+Start a new workout session. This uses the current enrollment state to determine week/day.
+
+```bash
+curl -X POST "http://localhost:8080/workouts/start" \
+  -H "X-User-ID: 550e8400-e29b-41d4-a716-446655440000"
+```
+
+**Expected Response** `201 Created`:
+```json
+{
+  "data": {
+    "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    "userProgramStateId": "enrollment-uuid",
+    "weekNumber": 1,
+    "dayIndex": 0,
+    "status": "IN_PROGRESS",
+    "startedAt": "2024-01-15T08:00:00Z",
+    "createdAt": "2024-01-15T08:00:00Z",
+    "updatedAt": "2024-01-15T08:00:00Z"
+  }
+}
+```
+
+**Important**: Only one workout session can be `IN_PROGRESS` at a time. If you try to start another, you'll get a `409 Conflict` error with the existing session ID.
+
+### Step 3: Generate and Perform Workout
+
+Generate the workout prescription for the current day.
+
+```bash
+curl -X GET "http://localhost:8080/users/550e8400-e29b-41d4-a716-446655440000/workout" \
+  -H "X-User-ID: 550e8400-e29b-41d4-a716-446655440000"
+```
+
+### Step 4: Log Sets During Workout
+
+Log completed sets during the workout session.
+
+```bash
+curl -X POST "http://localhost:8080/sessions/a1b2c3d4-e5f6-7890-abcd-ef1234567890/sets" \
+  -H "X-User-ID: 550e8400-e29b-41d4-a716-446655440000" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "sets": [
+      {
+        "prescriptionId": "prescription-uuid",
+        "setNumber": 1,
+        "weight": 265.0,
+        "reps": 5,
+        "rpe": 8.0
+      }
+    ]
+  }'
+```
+
+### Step 5: Finish or Abandon Workout
+
+When workout is complete, mark it as finished:
+
+```bash
+curl -X POST "http://localhost:8080/workouts/a1b2c3d4-e5f6-7890-abcd-ef1234567890/finish" \
+  -H "X-User-ID: 550e8400-e29b-41d4-a716-446655440000"
+```
+
+**Expected Response** `200 OK`:
+```json
+{
+  "data": {
+    "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    "userProgramStateId": "enrollment-uuid",
+    "weekNumber": 1,
+    "dayIndex": 0,
+    "status": "COMPLETED",
+    "startedAt": "2024-01-15T08:00:00Z",
+    "finishedAt": "2024-01-15T09:30:00Z",
+    "createdAt": "2024-01-15T08:00:00Z",
+    "updatedAt": "2024-01-15T09:30:00Z"
+  }
+}
+```
+
+**If you need to abandon** (e.g., emergency, injury):
+
+```bash
+curl -X POST "http://localhost:8080/workouts/a1b2c3d4-e5f6-7890-abcd-ef1234567890/abandon" \
+  -H "X-User-ID: 550e8400-e29b-41d4-a716-446655440000"
+```
+
+### Step 6: Advance Week (After Final Day)
+
+After completing all workouts in a week, advance to the next week:
+
+```bash
+curl -X POST "http://localhost:8080/users/550e8400-e29b-41d4-a716-446655440000/enrollment/advance-week" \
+  -H "X-User-ID: 550e8400-e29b-41d4-a716-446655440000"
+```
+
+**Expected Response** `200 OK`:
+```json
+{
+  "data": {
+    "id": "enrollment-uuid",
+    "userId": "550e8400-e29b-41d4-a716-446655440000",
+    "program": {...},
+    "state": {
+      "currentWeek": 2,
+      "currentCycleIteration": 1,
+      "currentDayIndex": null
+    },
+    "enrollmentStatus": "ACTIVE",
+    "cycleStatus": "IN_PROGRESS",
+    "weekStatus": "PENDING",
+    "currentWorkoutSession": null,
+    "enrolledAt": "2024-01-15T00:00:00Z",
+    "updatedAt": "2024-01-22T10:00:00Z"
+  }
+}
+```
+
+### Step 7: Handle End of Cycle
+
+When you advance from the final week of a cycle, the enrollment transitions to `BETWEEN_CYCLES`:
+
+```json
+{
+  "data": {
+    "state": {
+      "currentWeek": 4,
+      "currentCycleIteration": 1,
+      "currentDayIndex": null
+    },
+    "enrollmentStatus": "BETWEEN_CYCLES",
+    "cycleStatus": "COMPLETED",
+    "weekStatus": "COMPLETED"
+  }
+}
+```
+
+At this point, progression rules are typically triggered (e.g., +5lb to training maxes for 5/3/1).
+
+### Step 8: Start Next Cycle
+
+When ready to begin the next cycle, explicitly start it:
+
+```bash
+curl -X POST "http://localhost:8080/users/550e8400-e29b-41d4-a716-446655440000/enrollment/next-cycle" \
+  -H "X-User-ID: 550e8400-e29b-41d4-a716-446655440000"
+```
+
+**Expected Response** `200 OK`:
+```json
+{
+  "data": {
+    "state": {
+      "currentWeek": 1,
+      "currentCycleIteration": 2,
+      "currentDayIndex": null
+    },
+    "enrollmentStatus": "ACTIVE",
+    "cycleStatus": "PENDING",
+    "weekStatus": "PENDING"
+  }
+}
+```
+
+The user is now ready to start workouts in cycle 2.
+
+### View Workout History
+
+Query past workout sessions:
+
+```bash
+# All workouts
+curl -X GET "http://localhost:8080/users/550e8400-e29b-41d4-a716-446655440000/workouts" \
+  -H "X-User-ID: 550e8400-e29b-41d4-a716-446655440000"
+
+# Only completed workouts
+curl -X GET "http://localhost:8080/users/550e8400-e29b-41d4-a716-446655440000/workouts?status=COMPLETED" \
+  -H "X-User-ID: 550e8400-e29b-41d4-a716-446655440000"
+```
+
+### Get Current In-Progress Workout
+
+Check if user has an active workout:
+
+```bash
+curl -X GET "http://localhost:8080/users/550e8400-e29b-41d4-a716-446655440000/workouts/current" \
+  -H "X-User-ID: 550e8400-e29b-41d4-a716-446655440000"
+```
+
+Returns `404 Not Found` if no active workout session.
+
+### Complete Workflow Summary
+
+```
+1. Enroll → enrollmentStatus: ACTIVE, cycleStatus: PENDING
+2. Start workout → POST /workouts/start
+3. Generate workout → GET /users/{userId}/workout
+4. Log sets → POST /sessions/{sessionId}/sets
+5. Finish workout → POST /workouts/{id}/finish
+6. Repeat steps 2-5 for all days in week
+7. Advance week → POST /users/{userId}/enrollment/advance-week
+8. Repeat steps 2-7 for all weeks in cycle
+9. At cycle end → enrollmentStatus: BETWEEN_CYCLES
+10. Apply progressions → POST /users/{userId}/progressions/trigger
+11. Ready for next cycle → POST /users/{userId}/enrollment/next-cycle
+12. Back to step 2
+```
+
+### Common Pitfalls
+
+1. **Starting workout when BETWEEN_CYCLES**: You must call `/enrollment/next-cycle` first to return to ACTIVE status.
+
+2. **Forgetting to finish workouts**: Abandoned workouts block starting new ones. Check for and handle any `IN_PROGRESS` sessions.
+
+3. **Multiple sessions per day**: The system allows multiple workout attempts per day. Only `COMPLETED` sessions count for progression triggers.
+
+4. **Not advancing weeks**: The week doesn't auto-advance. You must explicitly call `/enrollment/advance-week` after completing all days.
+
+5. **Progression timing**: Progressions should be triggered when entering `BETWEEN_CYCLES` state, before starting the next cycle.
+
+---
+
 ## See Also
 
 - [API Reference](./api-reference.md) - Complete endpoint documentation
 - [Example Requests](./example-requests.md) - Copy-paste ready examples
 - [Example Responses](./example-responses.md) - Response format examples
 - [Error Documentation](./errors.md) - Error handling guide
+- [State Machine Design Decisions](./design-decisions/state-machine.md) - Architectural decisions

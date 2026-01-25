@@ -25,6 +25,7 @@ Common multi-step API workflows are documented at [`docs/workflows.md`](./workfl
 - Program enrollment workflow
 - Workout generation workflow
 - Progression trigger workflow
+- State machine workout flow
 
 ## Base URL
 
@@ -1830,6 +1831,317 @@ Manually apply a progression.
 
 ---
 
+### Workout Sessions
+
+Manage workout sessions for tracking workout lifecycle.
+
+#### POST /workouts/start
+
+Start a new workout session for the authenticated user.
+
+**Auth**: Authenticated (uses current user's enrollment)
+
+**Request Body**: None required (uses current enrollment state)
+
+**Response** `201 Created`:
+```json
+{
+  "data": {
+    "id": "session-uuid",
+    "userProgramStateId": "enrollment-uuid",
+    "weekNumber": 1,
+    "dayIndex": 0,
+    "status": "IN_PROGRESS",
+    "startedAt": "2024-01-15T08:00:00Z",
+    "createdAt": "2024-01-15T08:00:00Z",
+    "updatedAt": "2024-01-15T08:00:00Z"
+  }
+}
+```
+
+**Errors**:
+- `404 Not Found`: User not enrolled in a program
+- `400 Bad Request`: Enrollment not in ACTIVE state
+- `409 Conflict`: User already has an in-progress workout session
+
+#### GET /workouts/{id}
+
+Get a workout session by ID.
+
+**Auth**: Owner/Admin
+
+**Response** `200 OK`:
+```json
+{
+  "data": {
+    "id": "session-uuid",
+    "userProgramStateId": "enrollment-uuid",
+    "weekNumber": 1,
+    "dayIndex": 0,
+    "status": "IN_PROGRESS",
+    "startedAt": "2024-01-15T08:00:00Z",
+    "finishedAt": null,
+    "createdAt": "2024-01-15T08:00:00Z",
+    "updatedAt": "2024-01-15T08:00:00Z"
+  }
+}
+```
+
+#### POST /workouts/{id}/finish
+
+Complete a workout session.
+
+**Auth**: Owner/Admin
+
+**Request Body**: None required
+
+**Response** `200 OK`:
+```json
+{
+  "data": {
+    "id": "session-uuid",
+    "userProgramStateId": "enrollment-uuid",
+    "weekNumber": 1,
+    "dayIndex": 0,
+    "status": "COMPLETED",
+    "startedAt": "2024-01-15T08:00:00Z",
+    "finishedAt": "2024-01-15T09:30:00Z",
+    "createdAt": "2024-01-15T08:00:00Z",
+    "updatedAt": "2024-01-15T09:30:00Z"
+  }
+}
+```
+
+**Errors**:
+- `404 Not Found`: Session not found
+- `409 Conflict`: Session already completed or abandoned
+- `400 Bad Request`: Session not in IN_PROGRESS state
+
+#### POST /workouts/{id}/abandon
+
+Abandon a workout session.
+
+**Auth**: Owner/Admin
+
+**Request Body**: None required
+
+**Response** `200 OK`:
+```json
+{
+  "data": {
+    "id": "session-uuid",
+    "userProgramStateId": "enrollment-uuid",
+    "weekNumber": 1,
+    "dayIndex": 0,
+    "status": "ABANDONED",
+    "startedAt": "2024-01-15T08:00:00Z",
+    "finishedAt": "2024-01-15T08:30:00Z",
+    "createdAt": "2024-01-15T08:00:00Z",
+    "updatedAt": "2024-01-15T08:30:00Z"
+  }
+}
+```
+
+**Errors**:
+- `404 Not Found`: Session not found
+- `409 Conflict`: Session already completed or abandoned
+- `400 Bad Request`: Session not in IN_PROGRESS state
+
+#### GET /users/{userId}/workouts
+
+List a user's workout history with pagination.
+
+**Auth**: Owner/Admin
+
+**Query Parameters**:
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `limit` | int | Number of items to return (default: 20, max: 100) |
+| `offset` | int | Number of items to skip (default: 0) |
+| `status` | string | Filter by status: "IN_PROGRESS", "COMPLETED", or "ABANDONED" |
+
+**Response** `200 OK`:
+```json
+{
+  "data": [
+    {
+      "id": "session-uuid",
+      "userProgramStateId": "enrollment-uuid",
+      "weekNumber": 1,
+      "dayIndex": 0,
+      "status": "COMPLETED",
+      "startedAt": "2024-01-15T08:00:00Z",
+      "finishedAt": "2024-01-15T09:30:00Z",
+      "createdAt": "2024-01-15T08:00:00Z",
+      "updatedAt": "2024-01-15T09:30:00Z"
+    }
+  ],
+  "meta": {
+    "total": 10,
+    "limit": 20,
+    "offset": 0,
+    "hasMore": false
+  }
+}
+```
+
+#### GET /users/{userId}/workouts/current
+
+Get the user's current in-progress workout session if any.
+
+**Auth**: Owner/Admin
+
+**Response** `200 OK`: WorkoutSession object (same format as GET /workouts/{id})
+
+**Errors**:
+- `404 Not Found`: No active workout session
+
+---
+
+### Enrollment State Management
+
+Manage enrollment state transitions for cycles and weeks.
+
+#### POST /users/{userId}/enrollment/next-cycle
+
+Start a new cycle when the enrollment is in BETWEEN_CYCLES state.
+
+**Auth**: Owner/Admin
+
+**Request Body**: None required
+
+**Response** `200 OK`:
+```json
+{
+  "data": {
+    "id": "enrollment-uuid",
+    "userId": "user-uuid",
+    "program": {
+      "id": "program-uuid",
+      "name": "Wendler 5/3/1 BBB",
+      "slug": "wendler-531-bbb",
+      "description": "Boring But Big variant",
+      "cycleLengthWeeks": 4
+    },
+    "state": {
+      "currentWeek": 1,
+      "currentCycleIteration": 2,
+      "currentDayIndex": null
+    },
+    "enrollmentStatus": "ACTIVE",
+    "cycleStatus": "PENDING",
+    "weekStatus": "PENDING",
+    "currentWorkoutSession": null,
+    "enrolledAt": "2024-01-01T00:00:00Z",
+    "updatedAt": "2024-01-29T10:00:00Z"
+  }
+}
+```
+
+**Errors**:
+- `404 Not Found`: User not enrolled
+- `400 Bad Request`: Enrollment not in BETWEEN_CYCLES state
+
+#### POST /users/{userId}/enrollment/advance-week
+
+Advance to the next week in the cycle. If at the final week, transitions enrollment to BETWEEN_CYCLES.
+
+**Auth**: Owner/Admin
+
+**Request Body**: None required
+
+**Response** `200 OK`:
+```json
+{
+  "data": {
+    "id": "enrollment-uuid",
+    "userId": "user-uuid",
+    "program": {
+      "id": "program-uuid",
+      "name": "Wendler 5/3/1 BBB",
+      "slug": "wendler-531-bbb",
+      "description": "Boring But Big variant",
+      "cycleLengthWeeks": 4
+    },
+    "state": {
+      "currentWeek": 2,
+      "currentCycleIteration": 1,
+      "currentDayIndex": null
+    },
+    "enrollmentStatus": "ACTIVE",
+    "cycleStatus": "IN_PROGRESS",
+    "weekStatus": "PENDING",
+    "currentWorkoutSession": null,
+    "enrolledAt": "2024-01-01T00:00:00Z",
+    "updatedAt": "2024-01-22T10:00:00Z"
+  }
+}
+```
+
+**Note**: When advancing from the final week of a cycle:
+- `enrollmentStatus` transitions to `BETWEEN_CYCLES`
+- `cycleStatus` transitions to `COMPLETED`
+- `weekStatus` transitions to `COMPLETED`
+- User must call `POST /users/{userId}/enrollment/next-cycle` to start the next cycle
+
+**Errors**:
+- `404 Not Found`: User not enrolled
+- `400 Bad Request`: Enrollment not in ACTIVE state
+
+---
+
+### Updated Enrollment Response
+
+The enrollment response (`GET /users/{userId}/program`) now includes state machine status fields:
+
+```json
+{
+  "data": {
+    "id": "enrollment-uuid",
+    "userId": "user-uuid",
+    "program": {
+      "id": "program-uuid",
+      "name": "Wendler 5/3/1 BBB",
+      "slug": "wendler-531-bbb",
+      "description": "Boring But Big variant",
+      "cycleLengthWeeks": 4
+    },
+    "state": {
+      "currentWeek": 1,
+      "currentCycleIteration": 1,
+      "currentDayIndex": 0
+    },
+    "enrollmentStatus": "ACTIVE",
+    "cycleStatus": "IN_PROGRESS",
+    "weekStatus": "IN_PROGRESS",
+    "currentWorkoutSession": {
+      "id": "session-uuid",
+      "weekNumber": 1,
+      "dayIndex": 0,
+      "status": "IN_PROGRESS",
+      "startedAt": "2024-01-15T08:00:00Z"
+    },
+    "enrolledAt": "2024-01-01T00:00:00Z",
+    "updatedAt": "2024-01-15T08:00:00Z"
+  }
+}
+```
+
+**Status Fields**:
+
+| Field | Values | Description |
+|-------|--------|-------------|
+| `enrollmentStatus` | `ACTIVE`, `BETWEEN_CYCLES`, `QUIT` | Overall enrollment state |
+| `cycleStatus` | `PENDING`, `IN_PROGRESS`, `COMPLETED` | Current cycle state |
+| `weekStatus` | `PENDING`, `IN_PROGRESS`, `COMPLETED` | Current week state |
+
+**Workflow Notes**:
+- `enrollmentStatus: ACTIVE` - User can start workouts
+- `enrollmentStatus: BETWEEN_CYCLES` - User must call next-cycle to continue
+- `currentWorkoutSession` - Present only if user has an in-progress workout
+
+---
+
 ## Error Reference
 
 | Error Message | Status | Cause |
@@ -1842,3 +2154,8 @@ Manually apply a progression.
 | `slug already exists` | 409 | Duplicate slug |
 | `cannot delete: it is referenced` | 409 | Foreign key constraint violation |
 | `missing lift max` | 422 | Required lift max not set up for user |
+| `user not enrolled in a program` | 404 | User must enroll before starting workouts |
+| `cannot perform action in current enrollment state` | 400 | Invalid state transition (e.g., starting workout when BETWEEN_CYCLES) |
+| `workout already in progress` | 409 | User already has an active workout session |
+| `session already completed` | 409 | Cannot finish/abandon an already completed session |
+| `session not in progress` | 400 | Session must be IN_PROGRESS to finish/abandon |

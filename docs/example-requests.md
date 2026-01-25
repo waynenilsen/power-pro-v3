@@ -1490,6 +1490,86 @@ curl -X POST "http://localhost:8080/users/550e8400-e29b-41d4-a716-446655440000/p
 
 ---
 
+## Workout Sessions
+
+Manage workout session lifecycle.
+
+### POST /workouts/start - Start a workout session
+
+```bash
+# Start a new workout session for the current user
+curl -X POST "http://localhost:8080/workouts/start" \
+  -H "X-User-ID: 550e8400-e29b-41d4-a716-446655440000"
+```
+
+### GET /workouts/{id} - Get workout session by ID
+
+```bash
+curl -X GET "http://localhost:8080/workouts/a1b2c3d4-e5f6-7890-abcd-ef1234567890" \
+  -H "X-User-ID: 550e8400-e29b-41d4-a716-446655440000"
+```
+
+### POST /workouts/{id}/finish - Complete a workout session
+
+```bash
+curl -X POST "http://localhost:8080/workouts/a1b2c3d4-e5f6-7890-abcd-ef1234567890/finish" \
+  -H "X-User-ID: 550e8400-e29b-41d4-a716-446655440000"
+```
+
+### POST /workouts/{id}/abandon - Abandon a workout session
+
+```bash
+curl -X POST "http://localhost:8080/workouts/a1b2c3d4-e5f6-7890-abcd-ef1234567890/abandon" \
+  -H "X-User-ID: 550e8400-e29b-41d4-a716-446655440000"
+```
+
+### GET /users/{userId}/workouts - List user's workout history
+
+```bash
+# List all workout sessions
+curl -X GET "http://localhost:8080/users/550e8400-e29b-41d4-a716-446655440000/workouts" \
+  -H "X-User-ID: 550e8400-e29b-41d4-a716-446655440000"
+
+# Filter by status
+curl -X GET "http://localhost:8080/users/550e8400-e29b-41d4-a716-446655440000/workouts?status=COMPLETED" \
+  -H "X-User-ID: 550e8400-e29b-41d4-a716-446655440000"
+
+# With pagination
+curl -X GET "http://localhost:8080/users/550e8400-e29b-41d4-a716-446655440000/workouts?limit=10&offset=0" \
+  -H "X-User-ID: 550e8400-e29b-41d4-a716-446655440000"
+```
+
+### GET /users/{userId}/workouts/current - Get current in-progress workout
+
+```bash
+curl -X GET "http://localhost:8080/users/550e8400-e29b-41d4-a716-446655440000/workouts/current" \
+  -H "X-User-ID: 550e8400-e29b-41d4-a716-446655440000"
+```
+
+---
+
+## Enrollment State Management
+
+Manage enrollment state transitions.
+
+### POST /users/{userId}/enrollment/next-cycle - Start next cycle
+
+```bash
+# Start the next cycle (only valid when enrollmentStatus is BETWEEN_CYCLES)
+curl -X POST "http://localhost:8080/users/550e8400-e29b-41d4-a716-446655440000/enrollment/next-cycle" \
+  -H "X-User-ID: 550e8400-e29b-41d4-a716-446655440000"
+```
+
+### POST /users/{userId}/enrollment/advance-week - Advance to next week
+
+```bash
+# Advance to the next week in the cycle
+curl -X POST "http://localhost:8080/users/550e8400-e29b-41d4-a716-446655440000/enrollment/advance-week" \
+  -H "X-User-ID: 550e8400-e29b-41d4-a716-446655440000"
+```
+
+---
+
 ## Complete Workflow Examples
 
 ### New User Setup Workflow
@@ -1582,6 +1662,71 @@ curl -X POST "http://localhost:8080/users/550e8400-e29b-41d4-a716-446655440000/p
 
 # 3. Check progression history to verify
 curl -X GET "http://localhost:8080/users/550e8400-e29b-41d4-a716-446655440000/progression-history?page=1&pageSize=5" \
+  -H "X-User-ID: 550e8400-e29b-41d4-a716-446655440000"
+```
+
+### State Machine Workout Workflow
+
+Complete workout session workflow using the state machine.
+
+```bash
+# 1. Check enrollment status
+curl -X GET "http://localhost:8080/users/550e8400-e29b-41d4-a716-446655440000/program" \
+  -H "X-User-ID: 550e8400-e29b-41d4-a716-446655440000"
+
+# 2. Start a workout session
+curl -X POST "http://localhost:8080/workouts/start" \
+  -H "X-User-ID: 550e8400-e29b-41d4-a716-446655440000"
+# Returns session ID, e.g., a1b2c3d4-e5f6-7890-abcd-ef1234567890
+
+# 3. Generate the workout
+curl -X GET "http://localhost:8080/users/550e8400-e29b-41d4-a716-446655440000/workout" \
+  -H "X-User-ID: 550e8400-e29b-41d4-a716-446655440000"
+
+# 4. Log sets during workout
+curl -X POST "http://localhost:8080/sessions/a1b2c3d4-e5f6-7890-abcd-ef1234567890/sets" \
+  -H "X-User-ID: 550e8400-e29b-41d4-a716-446655440000" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "sets": [
+      {"prescriptionId": "prescription-uuid", "setNumber": 1, "weight": 265.0, "reps": 5},
+      {"prescriptionId": "prescription-uuid", "setNumber": 2, "weight": 265.0, "reps": 5},
+      {"prescriptionId": "prescription-uuid", "setNumber": 3, "weight": 265.0, "reps": 5}
+    ]
+  }'
+
+# 5. Finish the workout
+curl -X POST "http://localhost:8080/workouts/a1b2c3d4-e5f6-7890-abcd-ef1234567890/finish" \
+  -H "X-User-ID: 550e8400-e29b-41d4-a716-446655440000"
+
+# 6. After completing all days in the week, advance to next week
+curl -X POST "http://localhost:8080/users/550e8400-e29b-41d4-a716-446655440000/enrollment/advance-week" \
+  -H "X-User-ID: 550e8400-e29b-41d4-a716-446655440000"
+
+# 7. At end of cycle (when enrollmentStatus becomes BETWEEN_CYCLES), trigger progressions
+curl -X POST "http://localhost:8080/users/550e8400-e29b-41d4-a716-446655440000/progressions/trigger" \
+  -H "X-User-ID: 550e8400-e29b-41d4-a716-446655440000" \
+  -H "Content-Type: application/json" \
+  -d '{"progressionId": "cycle-progression-uuid"}'
+
+# 8. Start the next cycle
+curl -X POST "http://localhost:8080/users/550e8400-e29b-41d4-a716-446655440000/enrollment/next-cycle" \
+  -H "X-User-ID: 550e8400-e29b-41d4-a716-446655440000"
+```
+
+### Handling Abandoned Workouts
+
+```bash
+# Check for current in-progress workout
+curl -X GET "http://localhost:8080/users/550e8400-e29b-41d4-a716-446655440000/workouts/current" \
+  -H "X-User-ID: 550e8400-e29b-41d4-a716-446655440000"
+
+# If there's an abandoned session blocking new workouts, abandon it
+curl -X POST "http://localhost:8080/workouts/a1b2c3d4-e5f6-7890-abcd-ef1234567890/abandon" \
+  -H "X-User-ID: 550e8400-e29b-41d4-a716-446655440000"
+
+# Now you can start a new workout
+curl -X POST "http://localhost:8080/workouts/start" \
   -H "X-User-ID: 550e8400-e29b-41d4-a716-446655440000"
 ```
 
