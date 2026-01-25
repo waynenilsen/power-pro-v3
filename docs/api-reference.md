@@ -2142,6 +2142,142 @@ The enrollment response (`GET /users/{userId}/program`) now includes state machi
 
 ---
 
+## Canonical Programs
+
+PowerPro ships with pre-configured canonical programs that users can enroll in immediately. These programs represent proven, real-world powerlifting methodologies.
+
+### Available Canonical Programs
+
+| Slug | Name | Days/Week | Cycle Length | Level | Progression Model |
+|------|------|-----------|--------------|-------|-------------------|
+| `starting-strength` | Starting Strength | 3 | 1 week | Novice | Linear (+5lb/+10lb per session) |
+| `texas-method` | Texas Method | 3 | 1 week | Intermediate | Weekly periodization |
+| `531` | Wendler 5/3/1 | 4 | 4 weeks | Intermediate | Monthly cycles with AMRAP |
+| `gzclp` | GZCLP | 4 | 1 week | Beginner/Intermediate | Tiered progression (T1/T2) |
+
+### Program Details
+
+#### Starting Strength (`starting-strength`)
+
+The classic novice linear progression program by Mark Rippetoe. Features an A/B day rotation with compound barbell movements.
+
+- **Structure**: A/B alternating workouts (Mon/Wed/Fri pattern)
+- **Workout A**: Squat 3x5, Bench Press 3x5, Deadlift 1x5
+- **Workout B**: Squat 3x5, Overhead Press 3x5, Power Clean 5x3
+- **Progression**: Lower body +10lb/session, Upper body +5lb/session
+- **Best for**: Complete beginners, rapid strength gains
+
+#### Texas Method (`texas-method`)
+
+An intermediate weekly periodization program with volume, recovery, and intensity phases.
+
+- **Structure**: 3 distinct training days per week
+- **Volume Day** (Monday): 5x5 at 90% - accumulate volume
+- **Recovery Day** (Wednesday): Light weights at 72% - active recovery
+- **Intensity Day** (Friday): Heavy singles/triples at 100%+ - set new PRs
+- **Progression**: Weekly weight increases (+5lb upper, +5lb lower per week)
+- **Best for**: Lifters who have exhausted linear progression
+
+#### Wendler 5/3/1 (`531`)
+
+Jim Wendler's submaximal training program with monthly progression cycles.
+
+- **Structure**: 4-week mesocycle with 4 training days per week
+- **Week 1** (5s): 65% x5, 75% x5, 85% x5+ (AMRAP)
+- **Week 2** (3s): 70% x3, 80% x3, 90% x3+ (AMRAP)
+- **Week 3** (5/3/1): 75% x5, 85% x3, 95% x1+ (AMRAP)
+- **Week 4** (Deload): 40% x5, 50% x5, 60% x5
+- **Progression**: +10lb lower body, +5lb upper body per cycle (after week 4)
+- **Training Max**: Uses 90% of actual 1RM for calculations
+- **Best for**: Sustainable long-term strength building
+
+#### GZCLP (`gzclp`)
+
+Cody Lefever's linear progression using the GZCL tiered methodology.
+
+- **Structure**: 4 training days per week with T1/T2 tier system
+- **T1 (Main Lift)**: 5x3+ at 85% - heavy work with AMRAP final set
+- **T2 (Secondary Lift)**: 3x10 at 65% - volume work
+- **Day Pairings**:
+  - Day 1: T1 Squat, T2 Bench
+  - Day 2: T1 OHP, T2 Deadlift
+  - Day 3: T1 Bench, T2 Squat
+  - Day 4: T1 Deadlift, T2 OHP
+- **Progression**: T1 lower +5lb, T1 upper +2.5lb, T2 all +2.5lb per session
+- **Failure Protocol**: Progress through stages (5x3 → 6x2 → 10x1) before resetting
+- **Best for**: Beginners wanting structured tier-based training
+
+### Identifying Canonical Programs
+
+Canonical programs are identified by their slugs. Use `GET /programs/by-slug/{slug}` with one of the canonical slugs to retrieve the program:
+
+```bash
+# Get Starting Strength program
+GET /programs/by-slug/starting-strength
+
+# Get 5/3/1 program
+GET /programs/by-slug/531
+```
+
+All canonical programs appear in the regular `GET /programs` endpoint alongside any user-created programs.
+
+### Canonical Program Restrictions
+
+1. **Read-only**: Canonical programs cannot be modified via PUT/DELETE endpoints
+2. **Enrollable**: Users can enroll in any canonical program via `POST /users/{userId}/program`
+3. **System-owned**: Canonical programs are not associated with any user account
+
+### Enrolling in a Canonical Program
+
+To enroll a user in a canonical program:
+
+1. Get the program ID by slug:
+```bash
+GET /programs/by-slug/starting-strength
+```
+
+2. Enroll the user:
+```bash
+POST /users/{userId}/program
+Content-Type: application/json
+
+{
+  "programId": "{program-id-from-step-1}"
+}
+```
+
+3. Set up required training maxes for the lifts used in the program:
+```bash
+POST /users/{userId}/lift-maxes
+Content-Type: application/json
+
+{
+  "liftId": "{squat-lift-id}",
+  "type": "TRAINING_MAX",
+  "value": 315.0
+}
+```
+
+4. Start generating workouts:
+```bash
+GET /users/{userId}/workout
+```
+
+### Required Lift Maxes by Program
+
+Each program requires training maxes to be set for specific lifts:
+
+| Program | Required Lift Maxes |
+|---------|---------------------|
+| `starting-strength` | Squat, Bench Press, Deadlift, Overhead Press, Power Clean |
+| `texas-method` | Squat, Bench Press, Deadlift, Overhead Press, Power Clean |
+| `531` | Squat, Bench Press, Deadlift, Overhead Press |
+| `gzclp` | Squat, Bench Press, Deadlift, Overhead Press |
+
+If a required lift max is missing, workout generation will return a `422 Unprocessable Entity` error.
+
+---
+
 ## Error Reference
 
 | Error Message | Status | Cause |
