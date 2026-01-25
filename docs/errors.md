@@ -147,7 +147,7 @@ The API uses seven internal error categories that map to HTTP status codes:
 
 #### Missing Authentication Headers
 
-**When**: No `Authorization` or `X-User-ID` header is provided.
+**When**: No `Authorization` or `X-User-ID` header is provided for a protected endpoint.
 
 **HTTP Status**: `401 Unauthorized`
 
@@ -160,27 +160,108 @@ Content-Type: application/json
 
 ```json
 {
-  "error": "Authentication required"
+  "error": {
+    "code": "UNAUTHORIZED",
+    "message": "Authentication required"
+  }
 }
 ```
 
 **Resolution**: Include either:
-- `Authorization: Bearer {userId}` header, or
-- `X-User-ID: {userId}` header
+- `Authorization: Bearer {session-token}` header (obtained from login), or
+- `X-User-ID: {userId}` header (for development/testing only)
 
-#### Invalid Authentication Token
+#### Invalid Session Token
 
-**When**: The provided token/user ID is malformed or invalid.
+**When**: The provided session token is expired, revoked, or malformed.
 
 **HTTP Status**: `401 Unauthorized`
 
 ```json
 {
-  "error": "Authentication required"
+  "error": {
+    "code": "UNAUTHORIZED",
+    "message": "invalid or expired session"
+  }
 }
 ```
 
-**Resolution**: Verify the user ID is a valid UUID and the header format is correct.
+**Resolution**: Obtain a new session token by logging in again via `POST /auth/login`.
+
+#### Invalid Login Credentials
+
+**When**: Email or password is incorrect during login.
+
+**HTTP Status**: `401 Unauthorized`
+
+```http
+POST /auth/login HTTP/1.1
+Content-Type: application/json
+
+{"email": "user@example.com", "password": "wrongpassword"}
+```
+
+```json
+{
+  "error": {
+    "code": "UNAUTHORIZED",
+    "message": "invalid email or password"
+  }
+}
+```
+
+**Resolution**: Verify the email and password are correct.
+
+#### Email Already Registered
+
+**When**: Attempting to register with an email that already exists.
+
+**HTTP Status**: `409 Conflict`
+
+```http
+POST /auth/register HTTP/1.1
+Content-Type: application/json
+
+{"email": "existing@example.com", "password": "password123"}
+```
+
+```json
+{
+  "error": {
+    "code": "CONFLICT",
+    "message": "email already registered"
+  }
+}
+```
+
+**Resolution**: Use a different email address or login with the existing account.
+
+#### Missing Required Registration Fields
+
+**When**: Email or password is missing during registration.
+
+**HTTP Status**: `400 Bad Request`
+
+```http
+POST /auth/register HTTP/1.1
+Content-Type: application/json
+
+{"email": "user@example.com"}
+```
+
+```json
+{
+  "error": {
+    "code": "VALIDATION_ERROR",
+    "message": "validation failed",
+    "details": {
+      "validationErrors": ["password is required"]
+    }
+  }
+}
+```
+
+**Resolution**: Provide both email and password fields.
 
 ---
 
@@ -194,7 +275,7 @@ Content-Type: application/json
 
 ```http
 POST /lifts HTTP/1.1
-Authorization: Bearer 123e4567-e89b-12d3-a456-426614174000
+Authorization: Bearer session-token
 Content-Type: application/json
 
 {"name": "Squat", "slug": "squat"}
@@ -202,14 +283,17 @@ Content-Type: application/json
 
 ```json
 {
-  "error": "Admin privileges required"
+  "error": {
+    "code": "FORBIDDEN",
+    "message": "Admin privileges required"
+  }
 }
 ```
 
 **Resolution**: Include the `X-Admin: true` header for admin operations:
 ```http
 POST /lifts HTTP/1.1
-Authorization: Bearer 123e4567-e89b-12d3-a456-426614174000
+Authorization: Bearer session-token
 X-Admin: true
 Content-Type: application/json
 ```
@@ -222,11 +306,85 @@ Content-Type: application/json
 
 ```json
 {
-  "error": "you can only view your own enrollment"
+  "error": {
+    "code": "FORBIDDEN",
+    "message": "you can only view your own enrollment"
+  }
 }
 ```
 
 **Resolution**: Ensure you're accessing resources that belong to the authenticated user, or use admin privileges.
+
+#### Accessing Another User's Profile (Non-Admin)
+
+**When**: A user attempts to view another user's profile without admin privileges.
+
+**HTTP Status**: `403 Forbidden`
+
+```http
+GET /users/another-user-uuid/profile HTTP/1.1
+Authorization: Bearer your-session-token
+```
+
+```json
+{
+  "error": {
+    "code": "FORBIDDEN",
+    "message": "access denied: you do not have permission to view this profile"
+  }
+}
+```
+
+**Resolution**: Only access your own profile, or use admin privileges to view others.
+
+#### Updating Another User's Profile
+
+**When**: Any user (including admins) attempts to update another user's profile.
+
+**HTTP Status**: `403 Forbidden`
+
+```http
+PUT /users/another-user-uuid/profile HTTP/1.1
+Authorization: Bearer admin-session-token
+X-Admin: true
+Content-Type: application/json
+
+{"name": "New Name"}
+```
+
+```json
+{
+  "error": {
+    "code": "FORBIDDEN",
+    "message": "access denied: only the profile owner can update their profile"
+  }
+}
+```
+
+**Resolution**: Profile updates are strictly owner-only; even admins cannot modify another user's profile.
+
+#### Accessing Another User's Dashboard
+
+**When**: Any user (including admins) attempts to access another user's dashboard.
+
+**HTTP Status**: `403 Forbidden`
+
+```http
+GET /users/another-user-uuid/dashboard HTTP/1.1
+Authorization: Bearer admin-session-token
+X-Admin: true
+```
+
+```json
+{
+  "error": {
+    "code": "FORBIDDEN",
+    "message": "access denied: you can only view your own dashboard"
+  }
+}
+```
+
+**Resolution**: Dashboard access is strictly owner-only; only the authenticated user can view their own dashboard.
 
 ---
 

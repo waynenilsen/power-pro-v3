@@ -8,14 +8,18 @@ This document provides copy-paste ready example requests for all PowerPro API en
 # Base URL (adjust port as needed)
 BASE_URL="http://localhost:8080"
 
-# User ID for authentication (use your actual user ID)
-USER_ID="550e8400-e29b-41d4-a716-446655440000"
+# For session-based auth (recommended), use the token from login response:
+AUTH_TOKEN="your-session-token-from-login"
 
-# Standard headers for authenticated requests
-AUTH_HEADERS="-H 'X-User-ID: $USER_ID'"
+# Standard headers for authenticated requests (using session token)
+AUTH_HEADERS="-H 'Authorization: Bearer $AUTH_TOKEN'"
+
+# Alternative: User ID for development/testing (bypasses session auth)
+USER_ID="550e8400-e29b-41d4-a716-446655440000"
+DEV_AUTH_HEADERS="-H 'X-User-ID: $USER_ID'"
 
 # Admin headers (for admin-only endpoints)
-ADMIN_HEADERS="-H 'X-User-ID: $USER_ID' -H 'X-Admin: true'"
+ADMIN_HEADERS="-H 'Authorization: Bearer $AUTH_TOKEN' -H 'X-Admin: true'"
 ```
 
 ---
@@ -28,6 +32,116 @@ Check API health status.
 
 ```bash
 curl http://localhost:8080/health
+```
+
+---
+
+## Authentication
+
+User registration, login, and session management.
+
+### POST /auth/register - Register a new user
+
+```bash
+# Register a new user
+curl -X POST "http://localhost:8080/auth/register" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "newuser@example.com",
+    "password": "securepassword123",
+    "name": "John Doe"
+  }'
+
+# Register without optional name
+curl -X POST "http://localhost:8080/auth/register" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "minimal@example.com",
+    "password": "securepassword123"
+  }'
+```
+
+### POST /auth/login - Authenticate and get session token
+
+```bash
+# Login and get session token
+curl -X POST "http://localhost:8080/auth/login" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "user@example.com",
+    "password": "securepassword123"
+  }'
+# Response contains token to use in Authorization header for subsequent requests
+```
+
+### POST /auth/logout - End current session
+
+```bash
+# Logout (invalidates the session token)
+curl -X POST "http://localhost:8080/auth/logout" \
+  -H "Authorization: Bearer your-session-token"
+```
+
+---
+
+## User Profile
+
+Manage user profile information.
+
+### GET /users/{userId}/profile - Get user profile
+
+```bash
+# Get your own profile
+curl -X GET "http://localhost:8080/users/550e8400-e29b-41d4-a716-446655440000/profile" \
+  -H "Authorization: Bearer your-session-token"
+
+# Admin viewing another user's profile
+curl -X GET "http://localhost:8080/users/another-user-uuid/profile" \
+  -H "Authorization: Bearer admin-session-token" \
+  -H "X-Admin: true"
+```
+
+### PUT /users/{userId}/profile - Update user profile
+
+```bash
+# Update name only
+curl -X PUT "http://localhost:8080/users/550e8400-e29b-41d4-a716-446655440000/profile" \
+  -H "Authorization: Bearer your-session-token" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Jane Doe"
+  }'
+
+# Update weight unit preference
+curl -X PUT "http://localhost:8080/users/550e8400-e29b-41d4-a716-446655440000/profile" \
+  -H "Authorization: Bearer your-session-token" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "weightUnit": "kg"
+  }'
+
+# Update multiple fields
+curl -X PUT "http://localhost:8080/users/550e8400-e29b-41d4-a716-446655440000/profile" \
+  -H "Authorization: Bearer your-session-token" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Jane Doe",
+    "weightUnit": "kg"
+  }'
+```
+
+---
+
+## Dashboard
+
+User dashboard with aggregated data.
+
+### GET /users/{id}/dashboard - Get user dashboard
+
+```bash
+# Get your dashboard (owner-only endpoint)
+curl -X GET "http://localhost:8080/users/550e8400-e29b-41d4-a716-446655440000/dashboard" \
+  -H "Authorization: Bearer your-session-token"
 ```
 
 ---

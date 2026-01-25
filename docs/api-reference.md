@@ -35,22 +35,27 @@ http://localhost:{port}
 
 ## Authentication
 
-All endpoints (except `/health`) require authentication via HTTP headers.
+PowerPro uses session-based authentication with Bearer tokens. Users register and login to obtain a session token, which is then used to authenticate subsequent requests.
+
+### Auth Endpoints
+
+See the [Authentication Endpoints](#authentication-1) section below for register, login, and logout operations.
 
 ### Headers
 
 | Header | Description |
 |--------|-------------|
-| `Authorization` | Bearer token format: `Bearer {userId}` |
-| `X-User-ID` | Alternative: User ID directly (for development/testing) |
+| `Authorization` | Bearer token format: `Bearer {session-token}` (obtained from login response) |
+| `X-User-ID` | Alternative: User ID directly (for development/testing only) |
 | `X-Admin` | Set to `"true"` for admin privileges |
 
 ### Authentication Levels
 
-- **Public**: No authentication required
-- **Authenticated**: Any authenticated user
+- **Public**: No authentication required (health check, register, login)
+- **Authenticated**: Any authenticated user with valid session token
 - **Admin**: Requires `X-Admin: true`
 - **Owner/Admin**: User must own the resource or be admin
+- **Owner-only**: Only the resource owner can access (not even admins)
 
 ---
 
@@ -271,6 +276,278 @@ Check API health status.
 ```json
 {"status": "ok"}
 ```
+
+---
+
+### Authentication
+
+User registration, login, and session management.
+
+#### POST /auth/register
+
+Register a new user account.
+
+**Auth**: Public
+
+**Request Body**:
+```json
+{
+  "email": "user@example.com",
+  "password": "securepassword123",
+  "name": "John Doe"
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `email` | string | Yes | User's email address (must be unique) |
+| `password` | string | Yes | Password (min 8 characters recommended) |
+| `name` | string | No | User's display name |
+
+**Response** `201 Created`:
+```json
+{
+  "data": {
+    "id": "550e8400-e29b-41d4-a716-446655440000",
+    "email": "user@example.com",
+    "name": "John Doe",
+    "createdAt": "2024-01-15T10:30:00Z",
+    "updatedAt": "2024-01-15T10:30:00Z"
+  }
+}
+```
+
+**Errors**:
+- `400 Bad Request`: Invalid JSON, missing email or password
+- `409 Conflict`: Email already exists
+
+#### POST /auth/login
+
+Authenticate and obtain a session token.
+
+**Auth**: Public
+
+**Request Body**:
+```json
+{
+  "email": "user@example.com",
+  "password": "securepassword123"
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `email` | string | Yes | User's email address |
+| `password` | string | Yes | User's password |
+
+**Response** `200 OK`:
+```json
+{
+  "data": {
+    "token": "session-token-string",
+    "expiresAt": "2024-01-22T10:30:00Z",
+    "user": {
+      "id": "550e8400-e29b-41d4-a716-446655440000",
+      "email": "user@example.com",
+      "name": "John Doe",
+      "createdAt": "2024-01-15T10:30:00Z",
+      "updatedAt": "2024-01-15T10:30:00Z"
+    }
+  }
+}
+```
+
+**Notes**:
+- Session tokens are valid for 7 days from creation
+- Use the returned `token` in the `Authorization: Bearer {token}` header for authenticated requests
+
+**Errors**:
+- `400 Bad Request`: Invalid JSON, missing email or password
+- `401 Unauthorized`: Invalid email or password
+
+#### POST /auth/logout
+
+End the current session and invalidate the token.
+
+**Auth**: Authenticated
+
+**Request Body**: None
+
+**Response** `204 No Content`
+
+**Errors**:
+- `401 Unauthorized`: Missing or invalid authentication token
+
+---
+
+### User Profile
+
+Manage user profile information.
+
+#### GET /users/{userId}/profile
+
+Get a user's profile information.
+
+**Auth**: Owner/Admin
+
+**Path Parameters**:
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `userId` | string | User ID (UUID) |
+
+**Response** `200 OK`:
+```json
+{
+  "data": {
+    "id": "550e8400-e29b-41d4-a716-446655440000",
+    "email": "user@example.com",
+    "name": "John Doe",
+    "weightUnit": "lb",
+    "createdAt": "2024-01-15T10:30:00Z",
+    "updatedAt": "2024-01-15T10:30:00Z"
+  }
+}
+```
+
+**Errors**:
+- `400 Bad Request`: Missing user ID in path
+- `403 Forbidden`: Accessing another user's profile (without admin privileges)
+- `404 Not Found`: User not found
+
+#### PUT /users/{userId}/profile
+
+Update a user's profile information.
+
+**Auth**: Owner-only (admin cannot override)
+
+**Path Parameters**:
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `userId` | string | User ID (UUID) |
+
+**Request Body**:
+```json
+{
+  "name": "Jane Doe",
+  "weightUnit": "kg"
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `name` | string | No | User's display name |
+| `weightUnit` | string | No | Preferred weight unit ("lb" or "kg") |
+
+**Response** `200 OK`:
+```json
+{
+  "data": {
+    "id": "550e8400-e29b-41d4-a716-446655440000",
+    "email": "user@example.com",
+    "name": "Jane Doe",
+    "weightUnit": "kg",
+    "createdAt": "2024-01-15T10:30:00Z",
+    "updatedAt": "2024-01-15T12:00:00Z"
+  }
+}
+```
+
+**Notes**:
+- Profile updates are strictly owner-only; even admins cannot modify another user's profile
+
+**Errors**:
+- `400 Bad Request`: Invalid JSON, missing user ID
+- `403 Forbidden`: Not the profile owner (even admins are blocked)
+- `404 Not Found`: User not found
+
+---
+
+### Dashboard
+
+User dashboard with aggregated data.
+
+#### GET /users/{id}/dashboard
+
+Get aggregated dashboard data for a user including enrollment status, current/next workout info, and recent activity.
+
+**Auth**: Owner-only (admin cannot access)
+
+**Path Parameters**:
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `id` | string | User ID (UUID) |
+
+**Response** `200 OK`:
+```json
+{
+  "data": {
+    "enrollment": {
+      "status": "ACTIVE",
+      "programName": "Wendler 5/3/1 BBB",
+      "cycleIteration": 1,
+      "cycleStatus": "IN_PROGRESS",
+      "weekNumber": 1,
+      "weekStatus": "IN_PROGRESS"
+    },
+    "nextWorkout": {
+      "dayName": "Squat Day",
+      "daySlug": "squat-day",
+      "exerciseCount": 4,
+      "estimatedSets": 12
+    },
+    "currentSession": {
+      "sessionId": "session-uuid",
+      "dayName": "Squat Day",
+      "startedAt": "2024-01-15T08:00:00Z",
+      "setsCompleted": 3,
+      "totalSets": 5
+    },
+    "recentWorkouts": [
+      {
+        "date": "2024-01-15",
+        "dayName": "Squat Day",
+        "setsCompleted": 5
+      }
+    ],
+    "currentMaxes": [
+      {
+        "lift": "Squat",
+        "value": 315.0,
+        "type": "TRAINING_MAX"
+      }
+    ]
+  }
+}
+```
+
+**Response Fields**:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `enrollment` | object | Current program enrollment status (null if not enrolled) |
+| `enrollment.status` | string | Enrollment status: "ACTIVE", "BETWEEN_CYCLES", "QUIT" |
+| `enrollment.programName` | string | Name of enrolled program |
+| `enrollment.cycleIteration` | int | Current cycle number (1, 2, 3...) |
+| `enrollment.cycleStatus` | string | Cycle status: "PENDING", "IN_PROGRESS", "COMPLETED" |
+| `enrollment.weekNumber` | int | Current week number within cycle |
+| `enrollment.weekStatus` | string | Week status: "PENDING", "IN_PROGRESS", "COMPLETED" |
+| `nextWorkout` | object | Info about the next workout (null if none scheduled) |
+| `nextWorkout.dayName` | string | Name of the training day |
+| `nextWorkout.daySlug` | string | Slug identifier for the day |
+| `nextWorkout.exerciseCount` | int | Number of exercises in the workout |
+| `nextWorkout.estimatedSets` | int | Total estimated sets |
+| `currentSession` | object | Current in-progress workout session (null if none) |
+| `recentWorkouts` | array | Recent completed workouts (up to 5) |
+| `currentMaxes` | array | User's current training maxes for competition lifts |
+
+**Notes**:
+- This endpoint is owner-only; even admins cannot access another user's dashboard
+- Fields may be null if the user hasn't enrolled in a program or has no workout history
+
+**Errors**:
+- `400 Bad Request`: Missing user ID
+- `403 Forbidden`: Not the dashboard owner (no admin override)
+- `404 Not Found`: User or enrollment not found
 
 ---
 
