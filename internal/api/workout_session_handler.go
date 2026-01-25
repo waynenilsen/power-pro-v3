@@ -81,7 +81,7 @@ func (h *WorkoutSessionHandler) Start(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if enrollment == nil {
-		writeDomainError(w, apperrors.NewBadRequest("user is not enrolled in a program"))
+		writeDomainError(w, apperrors.NewNotEnrolled())
 		return
 	}
 
@@ -92,7 +92,7 @@ func (h *WorkoutSessionHandler) Start(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if activeSession != nil {
-		writeDomainError(w, apperrors.NewConflict("workout session already in progress"))
+		writeDomainError(w, apperrors.NewWorkoutAlreadyInProgress(activeSession.ID))
 		return
 	}
 
@@ -225,7 +225,7 @@ func (h *WorkoutSessionHandler) Finish(w http.ResponseWriter, r *http.Request) {
 		case workoutsession.ErrAlreadyCompleted:
 			writeDomainError(w, apperrors.NewConflict("session already completed"))
 		case workoutsession.ErrNotInProgress:
-			writeDomainError(w, apperrors.NewBadRequest("session is not in progress"))
+			writeDomainError(w, apperrors.NewSessionNotActive(string(session.Status)))
 		default:
 			writeDomainError(w, apperrors.NewInternal("failed to complete session", err))
 		}
@@ -294,7 +294,7 @@ func (h *WorkoutSessionHandler) Abandon(w http.ResponseWriter, r *http.Request) 
 		case workoutsession.ErrAlreadyAbandoned:
 			writeDomainError(w, apperrors.NewConflict("session already abandoned"))
 		case workoutsession.ErrNotInProgress:
-			writeDomainError(w, apperrors.NewBadRequest("session is not in progress"))
+			writeDomainError(w, apperrors.NewSessionNotActive(string(session.Status)))
 		default:
 			writeDomainError(w, apperrors.NewInternal("failed to abandon session", err))
 		}

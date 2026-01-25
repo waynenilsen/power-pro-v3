@@ -342,7 +342,7 @@ func (h *EnrollmentHandler) NextCycle(w http.ResponseWriter, r *http.Request) {
 
 	// Validate enrollment is BETWEEN_CYCLES
 	if enrollment.State.EnrollmentStatus != userprogramstate.EnrollmentStatusBetweenCycles {
-		writeDomainError(w, apperrors.NewBadRequest("enrollment must be in BETWEEN_CYCLES state to start a new cycle"))
+		writeDomainError(w, apperrors.NewInvalidEnrollmentState("start new cycle", string(enrollment.State.EnrollmentStatus)))
 		return
 	}
 
@@ -409,7 +409,7 @@ func (h *EnrollmentHandler) AdvanceWeek(w http.ResponseWriter, r *http.Request) 
 
 	// Validate enrollment is ACTIVE
 	if enrollment.State.EnrollmentStatus != userprogramstate.EnrollmentStatusActive {
-		writeDomainError(w, apperrors.NewBadRequest("enrollment must be ACTIVE to advance week"))
+		writeDomainError(w, apperrors.NewInvalidEnrollmentState("advance week", string(enrollment.State.EnrollmentStatus)))
 		return
 	}
 

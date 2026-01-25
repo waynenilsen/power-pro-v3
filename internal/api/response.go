@@ -319,6 +319,13 @@ func readJSON(r *http.Request, v interface{}) error {
 // It automatically maps the error category to the appropriate HTTP status code
 // and logs internal errors for debugging.
 func writeDomainError(w http.ResponseWriter, err error, details ...string) {
+	// Check for StateError first - these have their own code and details
+	if stateErr, ok := err.(*apperrors.StateError); ok {
+		status := mapErrorToStatus(err)
+		writeError(w, status, stateErr.Code, stateErr.Message, stateErr.Details)
+		return
+	}
+
 	status := mapErrorToStatus(err)
 	code := domainErrorToCode(err)
 	message := apperrors.GetMessage(err)

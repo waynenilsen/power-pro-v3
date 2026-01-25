@@ -119,7 +119,7 @@ func (h *LoggedSetHandler) CreateBatch(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if session.Status != workoutsession.StatusInProgress {
-			writeDomainError(w, apperrors.NewBadRequest("cannot log sets to a session that is not in progress"))
+			writeDomainError(w, apperrors.NewSessionNotActive(string(session.Status)))
 			return
 		}
 
