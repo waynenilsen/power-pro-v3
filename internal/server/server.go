@@ -15,6 +15,7 @@ import (
 	"github.com/waynenilsen/power-pro-v3/internal/domain/loadstrategy"
 	"github.com/waynenilsen/power-pro-v3/internal/domain/setscheme"
 	"github.com/waynenilsen/power-pro-v3/internal/middleware"
+	"github.com/waynenilsen/power-pro-v3/internal/profile"
 	"github.com/waynenilsen/power-pro-v3/internal/repository"
 	"github.com/waynenilsen/power-pro-v3/internal/service"
 )
@@ -53,6 +54,7 @@ type Server struct {
 	eventBus                   *event.Bus
 	authService                *auth.Service
 	authValidator              *auth.SessionValidatorAdapter
+	profileService             *profile.Service
 }
 
 // New creates a new Server instance.
@@ -100,6 +102,10 @@ func New(cfg Config) *Server {
 	authService := auth.NewService(userRepo, authSessionRepo)
 	authValidator := auth.NewSessionValidatorAdapter(authService)
 
+	// Profile service
+	profileRepo := profile.NewSQLiteProfileRepository(cfg.DB)
+	profileService := profile.NewService(profileRepo)
+
 	s := &Server{
 		config:               cfg,
 		liftRepo:             liftRepo,
@@ -126,6 +132,7 @@ func New(cfg Config) *Server {
 		eventBus:                   eventBus,
 		authService:                authService,
 		authValidator:              authValidator,
+		profileService:             profileService,
 	}
 
 	mux := http.NewServeMux()
@@ -205,6 +212,13 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /auth/login", authHandler.Login)
 	mux.Handle("POST /auth/logout", withAuth(authHandler.Logout))
 	mux.Handle("GET /auth/me", withAuth(authHandler.Me))
+
+	// Profile routes:
+	// - Users can view and update their own profile
+	// - Admins can view and update any user's profile
+	profileHandler := api.NewProfileHandler(s.profileService)
+	mux.Handle("GET /users/{userId}/profile", withAuth(profileHandler.Get))
+	mux.Handle("PUT /users/{userId}/profile", withAuth(profileHandler.Update))
 
 	// Lift routes (NFR-007):
 	// - All authenticated users can read lift data
