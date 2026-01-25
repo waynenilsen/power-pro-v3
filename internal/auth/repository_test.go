@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -292,6 +293,252 @@ func TestSQLiteSessionRepository_DeleteByToken_NonExistent(t *testing.T) {
 	// Deleting non-existent token should not error
 	err := sessionRepo.DeleteByToken(ctx, "nonexistent-token")
 	require.NoError(t, err)
+}
+
+func TestSQLiteSessionRepository_DeleteByUserID(t *testing.T) {
+	userRepo, sessionRepo, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	now := time.Now().UTC().Truncate(time.Second)
+
+	// Create a user first
+	user := &User{
+		ID:           "test-user-delete-sessions",
+		Email:        "deletesessions@example.com",
+		Name:         "Delete Sessions User",
+		PasswordHash: "hashed-password",
+		CreatedAt:    now,
+		UpdatedAt:    now,
+	}
+	err := userRepo.Create(ctx, user)
+	require.NoError(t, err)
+
+	// Create multiple sessions for the user
+	session1 := &Session{
+		ID:        "session-del-1",
+		UserID:    user.ID,
+		Token:     "token-del-1",
+		ExpiresAt: now.Add(7 * 24 * time.Hour),
+		CreatedAt: now,
+	}
+	session2 := &Session{
+		ID:        "session-del-2",
+		UserID:    user.ID,
+		Token:     "token-del-2",
+		ExpiresAt: now.Add(7 * 24 * time.Hour),
+		CreatedAt: now.Add(-1 * time.Hour),
+	}
+	session3 := &Session{
+		ID:        "session-del-3",
+		UserID:    user.ID,
+		Token:     "token-del-3",
+		ExpiresAt: now.Add(7 * 24 * time.Hour),
+		CreatedAt: now.Add(-2 * time.Hour),
+	}
+
+	err = sessionRepo.Create(ctx, session1)
+	require.NoError(t, err)
+	err = sessionRepo.Create(ctx, session2)
+	require.NoError(t, err)
+	err = sessionRepo.Create(ctx, session3)
+	require.NoError(t, err)
+
+	// Delete all sessions for the user
+	deleted, err := sessionRepo.DeleteByUserID(ctx, user.ID)
+	require.NoError(t, err)
+	assert.Equal(t, int64(3), deleted)
+
+	// Verify sessions are deleted
+	_, err = sessionRepo.GetByToken(ctx, "token-del-1")
+	require.Error(t, err)
+	assert.True(t, apperrors.IsNotFound(err))
+
+	_, err = sessionRepo.GetByToken(ctx, "token-del-2")
+	require.Error(t, err)
+	assert.True(t, apperrors.IsNotFound(err))
+
+	_, err = sessionRepo.GetByToken(ctx, "token-del-3")
+	require.Error(t, err)
+	assert.True(t, apperrors.IsNotFound(err))
+}
+
+func TestSQLiteSessionRepository_DeleteByUserID_NoSessions(t *testing.T) {
+	_, sessionRepo, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Delete sessions for user that has no sessions
+	deleted, err := sessionRepo.DeleteByUserID(ctx, "user-with-no-sessions")
+	require.NoError(t, err)
+	assert.Equal(t, int64(0), deleted)
+}
+
+func TestSQLiteSessionRepository_CleanupExpired(t *testing.T) {
+	userRepo, sessionRepo, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	now := time.Now().UTC().Truncate(time.Second)
+
+	// Create a user first
+	user := &User{
+		ID:           "test-user-cleanup",
+		Email:        "cleanup@example.com",
+		Name:         "Cleanup User",
+		PasswordHash: "hashed-password",
+		CreatedAt:    now,
+		UpdatedAt:    now,
+	}
+	err := userRepo.Create(ctx, user)
+	require.NoError(t, err)
+
+	// Create mix of expired and valid sessions
+	expiredSession1 := &Session{
+		ID:        "session-exp-1",
+		UserID:    user.ID,
+		Token:     "token-exp-1",
+		ExpiresAt: now.Add(-1 * time.Hour), // Expired 1 hour ago
+		CreatedAt: now.Add(-8 * 24 * time.Hour),
+	}
+	expiredSession2 := &Session{
+		ID:        "session-exp-2",
+		UserID:    user.ID,
+		Token:     "token-exp-2",
+		ExpiresAt: now.Add(-24 * time.Hour), // Expired 1 day ago
+		CreatedAt: now.Add(-8 * 24 * time.Hour),
+	}
+	validSession := &Session{
+		ID:        "session-valid",
+		UserID:    user.ID,
+		Token:     "token-valid",
+		ExpiresAt: now.Add(7 * 24 * time.Hour), // Valid
+		CreatedAt: now,
+	}
+
+	err = sessionRepo.Create(ctx, expiredSession1)
+	require.NoError(t, err)
+	err = sessionRepo.Create(ctx, expiredSession2)
+	require.NoError(t, err)
+	err = sessionRepo.Create(ctx, validSession)
+	require.NoError(t, err)
+
+	// Cleanup expired sessions
+	deleted, err := sessionRepo.CleanupExpired(ctx, now)
+	require.NoError(t, err)
+	assert.Equal(t, int64(2), deleted)
+
+	// Verify expired sessions are gone
+	_, err = sessionRepo.GetByToken(ctx, "token-exp-1")
+	require.Error(t, err)
+	assert.True(t, apperrors.IsNotFound(err))
+
+	_, err = sessionRepo.GetByToken(ctx, "token-exp-2")
+	require.Error(t, err)
+	assert.True(t, apperrors.IsNotFound(err))
+
+	// Verify valid session remains
+	retrieved, err := sessionRepo.GetByToken(ctx, "token-valid")
+	require.NoError(t, err)
+	assert.Equal(t, "session-valid", retrieved.ID)
+}
+
+func TestSQLiteSessionRepository_CleanupExpired_NoExpiredSessions(t *testing.T) {
+	userRepo, sessionRepo, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	now := time.Now().UTC().Truncate(time.Second)
+
+	// Create a user first
+	user := &User{
+		ID:           "test-user-cleanup-none",
+		Email:        "cleanupnone@example.com",
+		Name:         "No Cleanup User",
+		PasswordHash: "hashed-password",
+		CreatedAt:    now,
+		UpdatedAt:    now,
+	}
+	err := userRepo.Create(ctx, user)
+	require.NoError(t, err)
+
+	// Only create valid sessions
+	validSession := &Session{
+		ID:        "session-valid-only",
+		UserID:    user.ID,
+		Token:     "token-valid-only",
+		ExpiresAt: now.Add(7 * 24 * time.Hour),
+		CreatedAt: now,
+	}
+
+	err = sessionRepo.Create(ctx, validSession)
+	require.NoError(t, err)
+
+	// Cleanup should return 0
+	deleted, err := sessionRepo.CleanupExpired(ctx, now)
+	require.NoError(t, err)
+	assert.Equal(t, int64(0), deleted)
+
+	// Valid session should still exist
+	_, err = sessionRepo.GetByToken(ctx, "token-valid-only")
+	require.NoError(t, err)
+}
+
+// TestCascadeDeleteUserSessions verifies that when a user is deleted,
+// all their sessions are automatically deleted via CASCADE constraint.
+func TestCascadeDeleteUserSessions(t *testing.T) {
+	db, cleanup, err := database.OpenTemp("../../migrations")
+	require.NoError(t, err)
+	defer cleanup()
+
+	userRepo := NewSQLiteUserRepository(db)
+	sessionRepo := NewSQLiteSessionRepository(db)
+
+	ctx := context.Background()
+	now := time.Now().UTC().Truncate(time.Second)
+
+	// Create a user
+	user := &User{
+		ID:           "test-cascade-user",
+		Email:        "cascade@example.com",
+		Name:         "Cascade User",
+		PasswordHash: "hashed-password",
+		CreatedAt:    now,
+		UpdatedAt:    now,
+	}
+	err = userRepo.Create(ctx, user)
+	require.NoError(t, err)
+
+	// Create multiple sessions for the user
+	for i := 1; i <= 3; i++ {
+		session := &Session{
+			ID:        fmt.Sprintf("cascade-session-%d", i),
+			UserID:    user.ID,
+			Token:     fmt.Sprintf("cascade-token-%d", i),
+			ExpiresAt: now.Add(7 * 24 * time.Hour),
+			CreatedAt: now,
+		}
+		err = sessionRepo.Create(ctx, session)
+		require.NoError(t, err)
+	}
+
+	// Verify sessions exist
+	for i := 1; i <= 3; i++ {
+		_, err = sessionRepo.GetByToken(ctx, fmt.Sprintf("cascade-token-%d", i))
+		require.NoError(t, err, "session %d should exist before user deletion", i)
+	}
+
+	// Delete the user directly in the database
+	_, err = db.ExecContext(ctx, "DELETE FROM users WHERE id = ?", user.ID)
+	require.NoError(t, err)
+
+	// Verify all sessions are gone (CASCADE delete)
+	for i := 1; i <= 3; i++ {
+		_, err = sessionRepo.GetByToken(ctx, fmt.Sprintf("cascade-token-%d", i))
+		require.Error(t, err, "session %d should be deleted after user deletion", i)
+		assert.True(t, apperrors.IsNotFound(err))
+	}
 }
 
 func TestIntegration_RegisterAndLogin(t *testing.T) {

@@ -70,10 +70,12 @@ func (m *mockUserRepo) EmailExists(ctx context.Context, email string) (bool, err
 
 // mockSessionRepo is a mock implementation of SessionRepository for testing.
 type mockSessionRepo struct {
-	sessions    map[string]*Session // token -> session
-	createErr   error
-	getByTokenErr error
-	deleteErr   error
+	sessions         map[string]*Session // token -> session
+	createErr        error
+	getByTokenErr    error
+	deleteErr        error
+	deleteByUserErr  error
+	cleanupExpiredErr error
 }
 
 func newMockSessionRepo() *mockSessionRepo {
@@ -107,6 +109,34 @@ func (m *mockSessionRepo) DeleteByToken(ctx context.Context, token string) error
 	}
 	delete(m.sessions, token)
 	return nil
+}
+
+func (m *mockSessionRepo) DeleteByUserID(ctx context.Context, userID string) (int64, error) {
+	if m.deleteByUserErr != nil {
+		return 0, m.deleteByUserErr
+	}
+	var count int64
+	for token, session := range m.sessions {
+		if session.UserID == userID {
+			delete(m.sessions, token)
+			count++
+		}
+	}
+	return count, nil
+}
+
+func (m *mockSessionRepo) CleanupExpired(ctx context.Context, before time.Time) (int64, error) {
+	if m.cleanupExpiredErr != nil {
+		return 0, m.cleanupExpiredErr
+	}
+	var count int64
+	for token, session := range m.sessions {
+		if session.ExpiresAt.Before(before) {
+			delete(m.sessions, token)
+			count++
+		}
+	}
+	return count, nil
 }
 
 func TestService_Register(t *testing.T) {
@@ -1232,5 +1262,416 @@ func TestExpirationTimeRespectedFromStorage(t *testing.T) {
 		require.Error(t, err)
 		assert.Nil(t, result)
 		assert.Contains(t, err.Error(), "session expired")
+	})
+}
+
+// =============================================================================
+// SESSION CLEANUP VERIFICATION TESTS (REQ-TD2-005)
+// =============================================================================
+
+// TestCleanupExpiredSessions verifies that expired sessions can be purged.
+func TestCleanupExpiredSessions(t *testing.T) {
+	baseTime := time.Date(2024, 1, 15, 10, 0, 0, 0, time.UTC)
+
+	t.Run("removes expired sessions", func(t *testing.T) {
+		userRepo := newMockUserRepo()
+		sessionRepo := newMockSessionRepo()
+
+		// Create mix of expired and valid sessions
+		sessionRepo.sessions["expired-1"] = &Session{
+			ID:        "session-expired-1",
+			UserID:    "user-1",
+			Token:     "expired-1",
+			ExpiresAt: baseTime.Add(-1 * time.Hour), // Expired 1 hour ago
+			CreatedAt: baseTime.Add(-8 * 24 * time.Hour),
+		}
+		sessionRepo.sessions["expired-2"] = &Session{
+			ID:        "session-expired-2",
+			UserID:    "user-2",
+			Token:     "expired-2",
+			ExpiresAt: baseTime.Add(-24 * time.Hour), // Expired 1 day ago
+			CreatedAt: baseTime.Add(-8 * 24 * time.Hour),
+		}
+		sessionRepo.sessions["valid-1"] = &Session{
+			ID:        "session-valid-1",
+			UserID:    "user-1",
+			Token:     "valid-1",
+			ExpiresAt: baseTime.Add(7 * 24 * time.Hour), // Valid for 7 more days
+			CreatedAt: baseTime,
+		}
+
+		svc := NewService(userRepo, sessionRepo)
+		svc.now = func() time.Time { return baseTime }
+
+		deleted, err := svc.CleanupExpiredSessions(context.Background())
+		require.NoError(t, err)
+		assert.Equal(t, int64(2), deleted, "should delete 2 expired sessions")
+
+		// Verify expired sessions are gone
+		_, exists := sessionRepo.sessions["expired-1"]
+		assert.False(t, exists, "expired-1 should be deleted")
+		_, exists = sessionRepo.sessions["expired-2"]
+		assert.False(t, exists, "expired-2 should be deleted")
+
+		// Verify valid session remains
+		_, exists = sessionRepo.sessions["valid-1"]
+		assert.True(t, exists, "valid-1 should still exist")
+	})
+
+	t.Run("returns zero when no expired sessions", func(t *testing.T) {
+		userRepo := newMockUserRepo()
+		sessionRepo := newMockSessionRepo()
+
+		// Only valid sessions
+		sessionRepo.sessions["valid-1"] = &Session{
+			ID:        "session-valid-1",
+			UserID:    "user-1",
+			Token:     "valid-1",
+			ExpiresAt: baseTime.Add(7 * 24 * time.Hour),
+			CreatedAt: baseTime,
+		}
+
+		svc := NewService(userRepo, sessionRepo)
+		svc.now = func() time.Time { return baseTime }
+
+		deleted, err := svc.CleanupExpiredSessions(context.Background())
+		require.NoError(t, err)
+		assert.Equal(t, int64(0), deleted)
+	})
+
+	t.Run("returns zero when no sessions exist", func(t *testing.T) {
+		userRepo := newMockUserRepo()
+		sessionRepo := newMockSessionRepo()
+
+		svc := NewService(userRepo, sessionRepo)
+		svc.now = func() time.Time { return baseTime }
+
+		deleted, err := svc.CleanupExpiredSessions(context.Background())
+		require.NoError(t, err)
+		assert.Equal(t, int64(0), deleted)
+	})
+
+	t.Run("uses current time for expiration check", func(t *testing.T) {
+		userRepo := newMockUserRepo()
+		sessionRepo := newMockSessionRepo()
+
+		expiresAt := baseTime.Add(1 * time.Hour)
+		sessionRepo.sessions["boundary-session"] = &Session{
+			ID:        "session-boundary",
+			UserID:    "user-1",
+			Token:     "boundary-session",
+			ExpiresAt: expiresAt,
+			CreatedAt: baseTime,
+		}
+
+		svc := NewService(userRepo, sessionRepo)
+
+		// 30 minutes before expiration - should not be cleaned up
+		svc.now = func() time.Time { return expiresAt.Add(-30 * time.Minute) }
+		deleted, err := svc.CleanupExpiredSessions(context.Background())
+		require.NoError(t, err)
+		assert.Equal(t, int64(0), deleted)
+		assert.Contains(t, sessionRepo.sessions, "boundary-session")
+
+		// 1 minute after expiration - should be cleaned up
+		svc.now = func() time.Time { return expiresAt.Add(1 * time.Minute) }
+		deleted, err = svc.CleanupExpiredSessions(context.Background())
+		require.NoError(t, err)
+		assert.Equal(t, int64(1), deleted)
+		assert.NotContains(t, sessionRepo.sessions, "boundary-session")
+	})
+}
+
+// TestDeleteUserSessions verifies that all sessions for a user can be deleted.
+func TestDeleteUserSessions(t *testing.T) {
+	baseTime := time.Date(2024, 1, 15, 10, 0, 0, 0, time.UTC)
+
+	t.Run("deletes all sessions for a user", func(t *testing.T) {
+		userRepo := newMockUserRepo()
+		sessionRepo := newMockSessionRepo()
+
+		// Create multiple sessions for the same user
+		sessionRepo.sessions["user1-session1"] = &Session{
+			ID:        "s1",
+			UserID:    "user-1",
+			Token:     "user1-session1",
+			ExpiresAt: baseTime.Add(7 * 24 * time.Hour),
+			CreatedAt: baseTime,
+		}
+		sessionRepo.sessions["user1-session2"] = &Session{
+			ID:        "s2",
+			UserID:    "user-1",
+			Token:     "user1-session2",
+			ExpiresAt: baseTime.Add(7 * 24 * time.Hour),
+			CreatedAt: baseTime.Add(-1 * time.Hour),
+		}
+		sessionRepo.sessions["user1-session3"] = &Session{
+			ID:        "s3",
+			UserID:    "user-1",
+			Token:     "user1-session3",
+			ExpiresAt: baseTime.Add(7 * 24 * time.Hour),
+			CreatedAt: baseTime.Add(-2 * time.Hour),
+		}
+		// Session for another user
+		sessionRepo.sessions["user2-session1"] = &Session{
+			ID:        "s4",
+			UserID:    "user-2",
+			Token:     "user2-session1",
+			ExpiresAt: baseTime.Add(7 * 24 * time.Hour),
+			CreatedAt: baseTime,
+		}
+
+		svc := NewService(userRepo, sessionRepo)
+
+		deleted, err := svc.DeleteUserSessions(context.Background(), "user-1")
+		require.NoError(t, err)
+		assert.Equal(t, int64(3), deleted, "should delete 3 sessions for user-1")
+
+		// Verify user-1 sessions are gone
+		assert.NotContains(t, sessionRepo.sessions, "user1-session1")
+		assert.NotContains(t, sessionRepo.sessions, "user1-session2")
+		assert.NotContains(t, sessionRepo.sessions, "user1-session3")
+
+		// Verify user-2 session remains
+		assert.Contains(t, sessionRepo.sessions, "user2-session1")
+	})
+
+	t.Run("returns zero when user has no sessions", func(t *testing.T) {
+		userRepo := newMockUserRepo()
+		sessionRepo := newMockSessionRepo()
+
+		svc := NewService(userRepo, sessionRepo)
+
+		deleted, err := svc.DeleteUserSessions(context.Background(), "nonexistent-user")
+		require.NoError(t, err)
+		assert.Equal(t, int64(0), deleted)
+	})
+}
+
+// TestConcurrentSessions verifies that users can have multiple concurrent sessions.
+func TestConcurrentSessions(t *testing.T) {
+	baseTime := time.Date(2024, 1, 15, 10, 0, 0, 0, time.UTC)
+	hashedPassword, _ := bcrypt.GenerateFromPassword([]byte("password123"), bcryptCost)
+
+	t.Run("user can have multiple active sessions", func(t *testing.T) {
+		userRepo := newMockUserRepo()
+		sessionRepo := newMockSessionRepo()
+
+		user := &User{
+			ID:           "user-123",
+			Email:        "test@example.com",
+			Name:         "Test User",
+			PasswordHash: string(hashedPassword),
+			CreatedAt:    baseTime.Add(-24 * time.Hour),
+			UpdatedAt:    baseTime.Add(-24 * time.Hour),
+		}
+		userRepo.users[user.ID] = user
+		userRepo.emailIndex[user.Email] = user.ID
+
+		svc := NewService(userRepo, sessionRepo)
+		svc.now = func() time.Time { return baseTime }
+
+		// Login multiple times (simulate different devices)
+		login1, err := svc.Login(context.Background(), LoginRequest{
+			Email:    "test@example.com",
+			Password: "password123",
+		})
+		require.NoError(t, err)
+
+		login2, err := svc.Login(context.Background(), LoginRequest{
+			Email:    "test@example.com",
+			Password: "password123",
+		})
+		require.NoError(t, err)
+
+		login3, err := svc.Login(context.Background(), LoginRequest{
+			Email:    "test@example.com",
+			Password: "password123",
+		})
+		require.NoError(t, err)
+
+		// All tokens should be different
+		assert.NotEqual(t, login1.Token, login2.Token)
+		assert.NotEqual(t, login2.Token, login3.Token)
+		assert.NotEqual(t, login1.Token, login3.Token)
+
+		// All sessions should be valid
+		user1, err := svc.ValidateSession(context.Background(), login1.Token)
+		require.NoError(t, err)
+		assert.Equal(t, "user-123", user1.ID)
+
+		user2, err := svc.ValidateSession(context.Background(), login2.Token)
+		require.NoError(t, err)
+		assert.Equal(t, "user-123", user2.ID)
+
+		user3, err := svc.ValidateSession(context.Background(), login3.Token)
+		require.NoError(t, err)
+		assert.Equal(t, "user-123", user3.ID)
+	})
+
+	t.Run("sessions are independent across users", func(t *testing.T) {
+		userRepo := newMockUserRepo()
+		sessionRepo := newMockSessionRepo()
+
+		user1 := &User{
+			ID:           "user-1",
+			Email:        "user1@example.com",
+			Name:         "User One",
+			PasswordHash: string(hashedPassword),
+			CreatedAt:    baseTime,
+			UpdatedAt:    baseTime,
+		}
+		user2 := &User{
+			ID:           "user-2",
+			Email:        "user2@example.com",
+			Name:         "User Two",
+			PasswordHash: string(hashedPassword),
+			CreatedAt:    baseTime,
+			UpdatedAt:    baseTime,
+		}
+		userRepo.users[user1.ID] = user1
+		userRepo.emailIndex[user1.Email] = user1.ID
+		userRepo.users[user2.ID] = user2
+		userRepo.emailIndex[user2.Email] = user2.ID
+
+		svc := NewService(userRepo, sessionRepo)
+		svc.now = func() time.Time { return baseTime }
+
+		// Login both users
+		login1, err := svc.Login(context.Background(), LoginRequest{
+			Email:    "user1@example.com",
+			Password: "password123",
+		})
+		require.NoError(t, err)
+
+		login2, err := svc.Login(context.Background(), LoginRequest{
+			Email:    "user2@example.com",
+			Password: "password123",
+		})
+		require.NoError(t, err)
+
+		// Validate sessions return correct users
+		validUser1, err := svc.ValidateSession(context.Background(), login1.Token)
+		require.NoError(t, err)
+		assert.Equal(t, "user-1", validUser1.ID)
+		assert.Equal(t, "user1@example.com", validUser1.Email)
+
+		validUser2, err := svc.ValidateSession(context.Background(), login2.Token)
+		require.NoError(t, err)
+		assert.Equal(t, "user-2", validUser2.ID)
+		assert.Equal(t, "user2@example.com", validUser2.Email)
+	})
+}
+
+// TestSessionLogoutIsolation verifies that logging out one session doesn't affect others.
+func TestSessionLogoutIsolation(t *testing.T) {
+	baseTime := time.Date(2024, 1, 15, 10, 0, 0, 0, time.UTC)
+	hashedPassword, _ := bcrypt.GenerateFromPassword([]byte("password123"), bcryptCost)
+
+	t.Run("logging out one session does not affect other sessions for same user", func(t *testing.T) {
+		userRepo := newMockUserRepo()
+		sessionRepo := newMockSessionRepo()
+
+		user := &User{
+			ID:           "user-123",
+			Email:        "test@example.com",
+			Name:         "Test User",
+			PasswordHash: string(hashedPassword),
+			CreatedAt:    baseTime.Add(-24 * time.Hour),
+			UpdatedAt:    baseTime.Add(-24 * time.Hour),
+		}
+		userRepo.users[user.ID] = user
+		userRepo.emailIndex[user.Email] = user.ID
+
+		svc := NewService(userRepo, sessionRepo)
+		svc.now = func() time.Time { return baseTime }
+
+		// Create multiple sessions
+		login1, _ := svc.Login(context.Background(), LoginRequest{
+			Email:    "test@example.com",
+			Password: "password123",
+		})
+		login2, _ := svc.Login(context.Background(), LoginRequest{
+			Email:    "test@example.com",
+			Password: "password123",
+		})
+		login3, _ := svc.Login(context.Background(), LoginRequest{
+			Email:    "test@example.com",
+			Password: "password123",
+		})
+
+		// Logout session 2
+		err := svc.Logout(context.Background(), login2.Token)
+		require.NoError(t, err)
+
+		// Session 1 should still be valid
+		user1, err := svc.ValidateSession(context.Background(), login1.Token)
+		require.NoError(t, err)
+		assert.Equal(t, "user-123", user1.ID)
+
+		// Session 2 should be invalid
+		_, err = svc.ValidateSession(context.Background(), login2.Token)
+		require.Error(t, err)
+		assert.True(t, apperrors.IsUnauthorized(err))
+
+		// Session 3 should still be valid
+		user3, err := svc.ValidateSession(context.Background(), login3.Token)
+		require.NoError(t, err)
+		assert.Equal(t, "user-123", user3.ID)
+	})
+
+	t.Run("logging out user A does not affect user B sessions", func(t *testing.T) {
+		userRepo := newMockUserRepo()
+		sessionRepo := newMockSessionRepo()
+
+		userA := &User{
+			ID:           "user-A",
+			Email:        "usera@example.com", // lowercase for mock lookup
+			Name:         "User A",
+			PasswordHash: string(hashedPassword),
+			CreatedAt:    baseTime,
+			UpdatedAt:    baseTime,
+		}
+		userB := &User{
+			ID:           "user-B",
+			Email:        "userb@example.com", // lowercase for mock lookup
+			Name:         "User B",
+			PasswordHash: string(hashedPassword),
+			CreatedAt:    baseTime,
+			UpdatedAt:    baseTime,
+		}
+		userRepo.users[userA.ID] = userA
+		userRepo.emailIndex[userA.Email] = userA.ID
+		userRepo.users[userB.ID] = userB
+		userRepo.emailIndex[userB.Email] = userB.ID
+
+		svc := NewService(userRepo, sessionRepo)
+		svc.now = func() time.Time { return baseTime }
+
+		// Login both users
+		loginA, err := svc.Login(context.Background(), LoginRequest{
+			Email:    "usera@example.com",
+			Password: "password123",
+		})
+		require.NoError(t, err)
+		loginB, err := svc.Login(context.Background(), LoginRequest{
+			Email:    "userb@example.com",
+			Password: "password123",
+		})
+		require.NoError(t, err)
+
+		// Logout user A
+		err = svc.Logout(context.Background(), loginA.Token)
+		require.NoError(t, err)
+
+		// User A session should be invalid
+		_, err = svc.ValidateSession(context.Background(), loginA.Token)
+		require.Error(t, err)
+		assert.True(t, apperrors.IsUnauthorized(err))
+
+		// User B session should still be valid
+		validB, err := svc.ValidateSession(context.Background(), loginB.Token)
+		require.NoError(t, err)
+		assert.Equal(t, "user-B", validB.ID)
 	})
 }

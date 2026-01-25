@@ -59,6 +59,8 @@ type SessionRepository interface {
 	Create(ctx context.Context, session *Session) error
 	GetByToken(ctx context.Context, token string) (*Session, error)
 	DeleteByToken(ctx context.Context, token string) error
+	DeleteByUserID(ctx context.Context, userID string) (int64, error)
+	CleanupExpired(ctx context.Context, before time.Time) (int64, error)
 }
 
 // Service provides authentication operations.
@@ -280,6 +282,18 @@ func (s *Service) GetUserBySession(ctx context.Context, token string) (*User, er
 	return s.ValidateSession(ctx, token)
 }
 
+// CleanupExpiredSessions removes all expired sessions from the database.
+// Returns the number of sessions deleted.
+func (s *Service) CleanupExpiredSessions(ctx context.Context) (int64, error) {
+	return s.sessionRepo.CleanupExpired(ctx, s.now())
+}
+
+// DeleteUserSessions removes all sessions for a specific user.
+// Returns the number of sessions deleted.
+func (s *Service) DeleteUserSessions(ctx context.Context, userID string) (int64, error) {
+	return s.sessionRepo.DeleteByUserID(ctx, userID)
+}
+
 // validateEmail validates an email address.
 func validateEmail(email string) error {
 	if email == "" {
@@ -452,6 +466,26 @@ func (r *SQLiteSessionRepository) GetByToken(ctx context.Context, token string) 
 func (r *SQLiteSessionRepository) DeleteByToken(ctx context.Context, token string) error {
 	_, err := r.db.ExecContext(ctx, `DELETE FROM sessions WHERE token = ?`, token)
 	return err
+}
+
+// DeleteByUserID deletes all sessions for a user.
+// Returns the number of sessions deleted.
+func (r *SQLiteSessionRepository) DeleteByUserID(ctx context.Context, userID string) (int64, error) {
+	result, err := r.db.ExecContext(ctx, `DELETE FROM sessions WHERE user_id = ?`, userID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+// CleanupExpired deletes all sessions that expired before the given time.
+// Returns the number of sessions deleted.
+func (r *SQLiteSessionRepository) CleanupExpired(ctx context.Context, before time.Time) (int64, error) {
+	result, err := r.db.ExecContext(ctx, `DELETE FROM sessions WHERE expires_at < ?`, before.Format(time.RFC3339))
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
 // Helper functions

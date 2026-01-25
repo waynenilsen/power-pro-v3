@@ -46,6 +46,41 @@ JWTs are **not used** for the following reasons:
 - Revocation is immediate (no token expiration wait)
 - Revoked sessions are rejected on subsequent requests
 
+### Session Cleanup Strategy
+
+The system provides multiple mechanisms for session cleanup:
+
+#### 1. Logout Invalidation
+- When a user logs out, only that specific session is deleted
+- Other active sessions for the same user remain valid
+- Logout is token-specific, not user-wide
+
+#### 2. Session Expiration
+- Sessions have a fixed lifetime (7 days from creation)
+- Expired sessions are rejected during validation
+- The `ValidateSession` method checks `now().After(session.ExpiresAt)`
+
+#### 3. Expired Session Purge
+- The `CleanupExpiredSessions()` method removes all sessions where `expires_at < current_time`
+- Returns the count of sessions deleted
+- This should be called periodically (e.g., via a cron job or scheduled task)
+- Uses the `idx_sessions_expires_at` index for efficient querying
+
+#### 4. Cascade Deletion on User Delete
+- The sessions table has a foreign key constraint: `FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE`
+- When a user is deleted, all their sessions are automatically deleted
+- No manual cleanup required for user deletion scenarios
+
+#### 5. User Session Management
+- `DeleteUserSessions(userID)` removes all sessions for a specific user
+- Useful for "logout from all devices" functionality
+- Returns the count of sessions deleted
+
+#### Best Practices
+- Run `CleanupExpiredSessions()` periodically (daily recommended)
+- Monitor session table growth
+- Consider implementing session limits per user if needed
+
 ## User Registration
 
 ### Required Fields
