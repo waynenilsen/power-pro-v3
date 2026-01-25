@@ -263,6 +263,65 @@ Events within a single operation are emitted in dependency order:
 
 ---
 
+## Performance Characteristics
+
+This section documents the performance characteristics of the state machine implementation.
+
+### O(1) Lookups
+
+The following operations are single indexed lookups with no joins:
+
+| Operation | Query | Index |
+|-----------|-------|-------|
+| Get user program state | `SELECT * FROM user_program_states WHERE user_id = ?` | UNIQUE constraint on `user_id` |
+| Get workout session by ID | `SELECT * FROM workout_sessions WHERE id = ?` | Primary key |
+| Check if user is enrolled | `SELECT EXISTS(SELECT 1 FROM user_program_states WHERE user_id = ?)` | UNIQUE constraint on `user_id` |
+
+### Operations Requiring Joins
+
+| Operation | Tables Joined | Purpose |
+|-----------|---------------|---------|
+| Get enrollment with program | `user_program_states` → `programs` → `cycles` | Include program name and cycle length in response |
+| Get state advancement context | `user_program_states` → `programs` → `cycles` + subquery on `week_days` | Calculate days in current week for advancement logic |
+
+These joins are necessary to avoid N+1 queries and provide complete data in a single round trip.
+
+### Index Coverage
+
+The following indexes support common query patterns:
+
+| Query Pattern | Index | Migration |
+|---------------|-------|-----------|
+| Sessions by user state and status | `idx_workout_sessions_status (user_program_state_id, status)` | 00024 |
+| Sessions by user state, week, day | `idx_workout_sessions_state_week_day (user_program_state_id, week_number, day_index)` | 00024 |
+| User program state by user_id | UNIQUE constraint on `user_id` | 00010 |
+| Logged sets by session | `idx_logged_sets_session (session_id)` | 00015 |
+| Logged sets by user | `idx_logged_sets_user (user_id)` | 00015 |
+| Logged sets by lift | `idx_logged_sets_lift (lift_id)` | 00015 |
+
+### Event Bus Performance
+
+The event bus uses `PublishAsync` for all state change events:
+
+- **Non-blocking**: `PublishAsync` returns immediately without waiting for handlers
+- **Goroutine-per-handler**: Each handler runs in its own goroutine
+- **No API latency impact**: Handler errors don't affect API responses
+- **Thread-safe**: Uses `sync.RWMutex` for handler map access
+
+This design ensures that event publishing adds negligible latency to API responses.
+
+### No Computed State on Read
+
+All status fields (`enrollment_status`, `cycle_status`, `week_status`) are stored directly in the database:
+
+- **Reads are simple column access**: No computation required at read time
+- **Writes update status explicitly**: State transitions update the status columns
+- **No derived state**: Status is never computed from other fields
+
+This avoids expensive computations on every read operation.
+
+---
+
 ## See Also
 
 - [API Reference](../api-reference.md) - Complete endpoint documentation
