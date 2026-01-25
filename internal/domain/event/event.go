@@ -168,4 +168,10 @@ const (
 	PayloadIsAMRAP = "isAMRAP"
 	// PayloadIsFailure is the key for whether a set was a failure.
 	PayloadIsFailure = "isFailure"
+	// PayloadEnrolledAt is the key for when the user enrolled.
+	PayloadEnrolledAt = "enrolledAt"
+	// PayloadCyclesCompleted is the key for total cycles completed.
+	PayloadCyclesCompleted = "cyclesCompleted"
+	// PayloadWeeksCompleted is the key for total weeks completed.
+	PayloadWeeksCompleted = "weeksCompleted"
 )

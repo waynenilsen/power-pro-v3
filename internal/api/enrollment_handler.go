@@ -191,6 +191,13 @@ func (h *EnrollmentHandler) Enroll(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Emit ENROLLED event
+	if h.eventBus != nil {
+		evt := event.NewStateEvent(event.EventEnrolled, userID, req.ProgramID).
+			WithPayload(event.PayloadEnrolledAt, newState.EnrolledAt)
+		h.eventBus.PublishAsync(context.Background(), evt)
+	}
+
 	// New enrollment has no active workout session
 	writeData(w, http.StatusCreated, enrollmentToResponse(enrollment, nil))
 }
@@ -260,15 +267,40 @@ func (h *EnrollmentHandler) Unenroll(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check if enrolled
-	isEnrolled, err := h.stateRepo.UserIsEnrolled(userID)
+	// Get current enrollment to capture cycles/weeks completed before deletion
+	enrollment, err := h.stateRepo.GetEnrollmentWithProgram(userID)
 	if err != nil {
-		writeDomainError(w, apperrors.NewInternal("failed to check enrollment status", err))
+		writeDomainError(w, apperrors.NewInternal("failed to get enrollment", err))
 		return
 	}
-	if !isEnrolled {
+	if enrollment == nil {
 		writeDomainError(w, apperrors.NewNotFound("enrollment", userID))
 		return
+	}
+
+	// Calculate cycles and weeks completed
+	// Completed cycles = currentCycleIteration - 1 (if currently in a cycle, it's not complete)
+	// But if enrollment status is BETWEEN_CYCLES or cycle status is COMPLETED, count current cycle
+	cyclesCompleted := enrollment.State.CurrentCycleIteration - 1
+	if enrollment.State.EnrollmentStatus == userprogramstate.EnrollmentStatusBetweenCycles ||
+		enrollment.State.CycleStatus == userprogramstate.CycleStatusCompleted {
+		cyclesCompleted = enrollment.State.CurrentCycleIteration
+	}
+
+	// Weeks completed = (completed cycles * weeks per cycle) + weeks in current cycle
+	// If week status is COMPLETED, count the current week, otherwise current - 1
+	weeksInCurrentCycle := enrollment.State.CurrentWeek - 1
+	if enrollment.State.WeekStatus == userprogramstate.WeekStatusCompleted {
+		weeksInCurrentCycle = enrollment.State.CurrentWeek
+	}
+	weeksCompleted := (cyclesCompleted * enrollment.CycleLengthWeeks) + weeksInCurrentCycle
+
+	// Emit QUIT event before deletion
+	if h.eventBus != nil {
+		evt := event.NewStateEvent(event.EventQuit, userID, enrollment.State.ProgramID).
+			WithPayload(event.PayloadCyclesCompleted, cyclesCompleted).
+			WithPayload(event.PayloadWeeksCompleted, weeksCompleted)
+		h.eventBus.PublishAsync(context.Background(), evt)
 	}
 
 	// Delete enrollment
