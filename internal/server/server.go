@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/waynenilsen/power-pro-v3/internal/api"
+	"github.com/waynenilsen/power-pro-v3/internal/domain/event"
 	"github.com/waynenilsen/power-pro-v3/internal/domain/loadstrategy"
 	"github.com/waynenilsen/power-pro-v3/internal/domain/setscheme"
 	"github.com/waynenilsen/power-pro-v3/internal/middleware"
@@ -42,11 +43,13 @@ type Server struct {
 	programProgressionRepo     *repository.ProgramProgressionRepository
 	progressionHistoryRepo     *repository.ProgressionHistoryRepository
 	loggedSetRepo              *repository.LoggedSetRepository
+	workoutSessionRepo         *repository.WorkoutSessionRepository
 	progressionService         *service.ProgressionService
 	failureService             *service.FailureService
 	sessionService             *service.SessionService
 	strategyFactory            *loadstrategy.StrategyFactory
 	schemeFactory              *setscheme.SchemeFactory
+	eventBus                   *event.Bus
 }
 
 // New creates a new Server instance.
@@ -81,10 +84,12 @@ func New(cfg Config) *Server {
 	programProgressionRepo := repository.NewProgramProgressionRepository(cfg.DB)
 	progressionHistoryRepo := repository.NewProgressionHistoryRepository(cfg.DB)
 	loggedSetRepo := repository.NewLoggedSetRepository(cfg.DB)
+	workoutSessionRepo := repository.NewWorkoutSessionRepository(cfg.DB)
 	progressionFactory := service.GetDefaultFactory()
 	progressionService := service.NewProgressionService(cfg.DB, progressionFactory)
 	failureService := service.NewFailureService(cfg.DB, progressionFactory)
 	sessionService := service.NewSessionService(prescriptionRepo, loggedSetRepo)
+	eventBus := event.NewBus()
 
 	s := &Server{
 		config:               cfg,
@@ -103,11 +108,13 @@ func New(cfg Config) *Server {
 		programProgressionRepo:     programProgressionRepo,
 		progressionHistoryRepo:     progressionHistoryRepo,
 		loggedSetRepo:              loggedSetRepo,
+		workoutSessionRepo:         workoutSessionRepo,
 		progressionService:         progressionService,
 		failureService:             failureService,
 		sessionService:             sessionService,
 		strategyFactory:            strategyFactory,
 		schemeFactory:              schemeFactory,
+		eventBus:                   eventBus,
 	}
 
 	mux := http.NewServeMux()
@@ -354,6 +361,18 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	// - Session ID is user-provided (client generates UUID)
 	sessionHandler := api.NewSessionHandler(s.sessionService)
 	mux.Handle("GET /sessions/{sessionId}/prescriptions/{prescriptionId}/next-set", withAuth(sessionHandler.GetNextSet))
+
+	// Workout Session routes:
+	// - Users can start/finish/abandon their own workout sessions
+	// - Users can view their own workout history
+	// - Handler performs its own authorization check
+	workoutSessionHandler := api.NewWorkoutSessionHandler(s.workoutSessionRepo, s.userProgramStateRepo, s.eventBus)
+	mux.Handle("POST /workouts/start", withAuth(workoutSessionHandler.Start))
+	mux.Handle("GET /workouts/{id}", withAuth(workoutSessionHandler.Get))
+	mux.Handle("POST /workouts/{id}/finish", withAuth(workoutSessionHandler.Finish))
+	mux.Handle("POST /workouts/{id}/abandon", withAuth(workoutSessionHandler.Abandon))
+	mux.Handle("GET /users/{id}/workouts", withAuth(workoutSessionHandler.ListByUser))
+	mux.Handle("GET /users/{id}/workouts/current", withAuth(workoutSessionHandler.GetCurrentByUser))
 }
 
 // Start starts the HTTP server.

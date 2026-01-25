@@ -140,6 +140,79 @@ func (r *WorkoutSessionRepository) Delete(id string) error {
 	return nil
 }
 
+// GetByUserID retrieves paginated workout sessions for a user, optionally filtered by status.
+func (r *WorkoutSessionRepository) GetByUserID(userID string, status *string, limit, offset int) ([]*workoutsession.WorkoutSession, error) {
+	ctx := context.Background()
+
+	if status != nil {
+		dbSessions, err := r.queries.GetWorkoutSessionsByUserIDWithStatus(ctx, db.GetWorkoutSessionsByUserIDWithStatusParams{
+			UserID: userID,
+			Status: *status,
+			Limit:  int64(limit),
+			Offset: int64(offset),
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to get workout sessions by user ID with status: %w", err)
+		}
+
+		sessions := make([]*workoutsession.WorkoutSession, len(dbSessions))
+		for i, dbSession := range dbSessions {
+			sessions[i] = dbWorkoutSessionToDomain(dbSession)
+		}
+		return sessions, nil
+	}
+
+	dbSessions, err := r.queries.GetWorkoutSessionsByUserID(ctx, db.GetWorkoutSessionsByUserIDParams{
+		UserID: userID,
+		Limit:  int64(limit),
+		Offset: int64(offset),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get workout sessions by user ID: %w", err)
+	}
+
+	sessions := make([]*workoutsession.WorkoutSession, len(dbSessions))
+	for i, dbSession := range dbSessions {
+		sessions[i] = dbWorkoutSessionToDomain(dbSession)
+	}
+	return sessions, nil
+}
+
+// CountByUserID returns the total count of workout sessions for a user, optionally filtered by status.
+func (r *WorkoutSessionRepository) CountByUserID(userID string, status *string) (int64, error) {
+	ctx := context.Background()
+
+	if status != nil {
+		count, err := r.queries.CountWorkoutSessionsByUserIDWithStatus(ctx, db.CountWorkoutSessionsByUserIDWithStatusParams{
+			UserID: userID,
+			Status: *status,
+		})
+		if err != nil {
+			return 0, fmt.Errorf("failed to count workout sessions by user ID with status: %w", err)
+		}
+		return count, nil
+	}
+
+	count, err := r.queries.CountWorkoutSessionsByUserID(ctx, userID)
+	if err != nil {
+		return 0, fmt.Errorf("failed to count workout sessions by user ID: %w", err)
+	}
+	return count, nil
+}
+
+// GetActiveByUserID retrieves the active (IN_PROGRESS) session for a user.
+func (r *WorkoutSessionRepository) GetActiveByUserID(userID string) (*workoutsession.WorkoutSession, error) {
+	ctx := context.Background()
+	dbSession, err := r.queries.GetActiveWorkoutSessionByUserID(ctx, userID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to get active workout session by user ID: %w", err)
+	}
+	return dbWorkoutSessionToDomain(dbSession), nil
+}
+
 // Helper functions
 
 func dbWorkoutSessionToDomain(dbSession db.WorkoutSession) *workoutsession.WorkoutSession {

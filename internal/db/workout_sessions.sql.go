@@ -44,6 +44,39 @@ func (q *Queries) CompleteWorkoutSession(ctx context.Context, arg CompleteWorkou
 	return err
 }
 
+const countWorkoutSessionsByUserID = `-- name: CountWorkoutSessionsByUserID :one
+SELECT COUNT(*) as count
+FROM workout_sessions ws
+JOIN user_program_states ups ON ws.user_program_state_id = ups.id
+WHERE ups.user_id = ?
+`
+
+func (q *Queries) CountWorkoutSessionsByUserID(ctx context.Context, userID string) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countWorkoutSessionsByUserID, userID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countWorkoutSessionsByUserIDWithStatus = `-- name: CountWorkoutSessionsByUserIDWithStatus :one
+SELECT COUNT(*) as count
+FROM workout_sessions ws
+JOIN user_program_states ups ON ws.user_program_state_id = ups.id
+WHERE ups.user_id = ? AND ws.status = ?
+`
+
+type CountWorkoutSessionsByUserIDWithStatusParams struct {
+	UserID string `json:"user_id"`
+	Status string `json:"status"`
+}
+
+func (q *Queries) CountWorkoutSessionsByUserIDWithStatus(ctx context.Context, arg CountWorkoutSessionsByUserIDWithStatusParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countWorkoutSessionsByUserIDWithStatus, arg.UserID, arg.Status)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createWorkoutSession = `-- name: CreateWorkoutSession :exec
 INSERT INTO workout_sessions (id, user_program_state_id, week_number, day_index, status, started_at, created_at, updated_at)
 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -107,6 +140,31 @@ func (q *Queries) GetActiveWorkoutSession(ctx context.Context, userProgramStateI
 	return i, err
 }
 
+const getActiveWorkoutSessionByUserID = `-- name: GetActiveWorkoutSessionByUserID :one
+SELECT ws.id, ws.user_program_state_id, ws.week_number, ws.day_index, ws.status, ws.started_at, ws.finished_at, ws.created_at, ws.updated_at
+FROM workout_sessions ws
+JOIN user_program_states ups ON ws.user_program_state_id = ups.id
+WHERE ups.user_id = ? AND ws.status = 'IN_PROGRESS'
+LIMIT 1
+`
+
+func (q *Queries) GetActiveWorkoutSessionByUserID(ctx context.Context, userID string) (WorkoutSession, error) {
+	row := q.db.QueryRowContext(ctx, getActiveWorkoutSessionByUserID, userID)
+	var i WorkoutSession
+	err := row.Scan(
+		&i.ID,
+		&i.UserProgramStateID,
+		&i.WeekNumber,
+		&i.DayIndex,
+		&i.Status,
+		&i.StartedAt,
+		&i.FinishedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getWorkoutSessionByID = `-- name: GetWorkoutSessionByID :one
 SELECT id, user_program_state_id, week_number, day_index, status, started_at, finished_at, created_at, updated_at
 FROM workout_sessions
@@ -139,6 +197,108 @@ ORDER BY created_at DESC
 
 func (q *Queries) GetWorkoutSessionsByState(ctx context.Context, userProgramStateID string) ([]WorkoutSession, error) {
 	rows, err := q.db.QueryContext(ctx, getWorkoutSessionsByState, userProgramStateID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []WorkoutSession{}
+	for rows.Next() {
+		var i WorkoutSession
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserProgramStateID,
+			&i.WeekNumber,
+			&i.DayIndex,
+			&i.Status,
+			&i.StartedAt,
+			&i.FinishedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getWorkoutSessionsByUserID = `-- name: GetWorkoutSessionsByUserID :many
+SELECT ws.id, ws.user_program_state_id, ws.week_number, ws.day_index, ws.status, ws.started_at, ws.finished_at, ws.created_at, ws.updated_at
+FROM workout_sessions ws
+JOIN user_program_states ups ON ws.user_program_state_id = ups.id
+WHERE ups.user_id = ?
+ORDER BY ws.created_at DESC
+LIMIT ? OFFSET ?
+`
+
+type GetWorkoutSessionsByUserIDParams struct {
+	UserID string `json:"user_id"`
+	Limit  int64  `json:"limit"`
+	Offset int64  `json:"offset"`
+}
+
+func (q *Queries) GetWorkoutSessionsByUserID(ctx context.Context, arg GetWorkoutSessionsByUserIDParams) ([]WorkoutSession, error) {
+	rows, err := q.db.QueryContext(ctx, getWorkoutSessionsByUserID, arg.UserID, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []WorkoutSession{}
+	for rows.Next() {
+		var i WorkoutSession
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserProgramStateID,
+			&i.WeekNumber,
+			&i.DayIndex,
+			&i.Status,
+			&i.StartedAt,
+			&i.FinishedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getWorkoutSessionsByUserIDWithStatus = `-- name: GetWorkoutSessionsByUserIDWithStatus :many
+SELECT ws.id, ws.user_program_state_id, ws.week_number, ws.day_index, ws.status, ws.started_at, ws.finished_at, ws.created_at, ws.updated_at
+FROM workout_sessions ws
+JOIN user_program_states ups ON ws.user_program_state_id = ups.id
+WHERE ups.user_id = ? AND ws.status = ?
+ORDER BY ws.created_at DESC
+LIMIT ? OFFSET ?
+`
+
+type GetWorkoutSessionsByUserIDWithStatusParams struct {
+	UserID string `json:"user_id"`
+	Status string `json:"status"`
+	Limit  int64  `json:"limit"`
+	Offset int64  `json:"offset"`
+}
+
+func (q *Queries) GetWorkoutSessionsByUserIDWithStatus(ctx context.Context, arg GetWorkoutSessionsByUserIDWithStatusParams) ([]WorkoutSession, error) {
+	rows, err := q.db.QueryContext(ctx, getWorkoutSessionsByUserIDWithStatus,
+		arg.UserID,
+		arg.Status,
+		arg.Limit,
+		arg.Offset,
+	)
 	if err != nil {
 		return nil, err
 	}

@@ -69,7 +69,14 @@ INSERT INTO users (id, created_at, updated_at) VALUES
     ('meet-date-validation-user', datetime('now'), datetime('now')),
     ('meet-date-auth-user', datetime('now'), datetime('now')),
     ('phase-calc-user', datetime('now'), datetime('now')),
-    ('response-format-user', datetime('now'), datetime('now'));
+    ('response-format-user', datetime('now'), datetime('now')),
+    -- Workout session test users
+    ('ws-test-user', datetime('now'), datetime('now')),
+    ('abandon-test-user', datetime('now'), datetime('now')),
+    ('validation-test-user', datetime('now'), datetime('now')),
+    ('auth-ws-test-user', datetime('now'), datetime('now')),
+    ('other-ws-user', datetime('now'), datetime('now')),
+    ('filter-test-user', datetime('now'), datetime('now'));
 -- +goose StatementEnd
 
 -- +goose Down
