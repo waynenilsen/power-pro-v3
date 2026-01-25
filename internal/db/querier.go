@@ -118,6 +118,7 @@ type Querier interface {
 	GetDayBySlug(ctx context.Context, arg GetDayBySlugParams) (Day, error)
 	GetDayBySlugAndWeek(ctx context.Context, arg GetDayBySlugAndWeekParams) (Day, error)
 	// Count distinct exercises and estimate total sets for a day
+	// Note: set_scheme stores the scheme type in the prescriptions table
 	GetDayExerciseAndSetCounts(ctx context.Context, dayID string) (GetDayExerciseAndSetCountsRow, error)
 	// Get the day at a specific position in a week for a program
 	// Uses day_index as an offset into the ordered days by day_of_week

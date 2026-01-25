@@ -89,12 +89,12 @@ SELECT
     COUNT(DISTINCT pr.lift_id) AS exercise_count,
     COALESCE(SUM(
         CASE
-            WHEN pr.scheme_type IN ('fixed', 'greyskull') THEN 3
-            WHEN pr.scheme_type = 'ramp' THEN 5
-            WHEN pr.scheme_type = 'fatigue_drop' THEN 3
-            WHEN pr.scheme_type = 'mrs' THEN 4
-            WHEN pr.scheme_type = 'total_reps' THEN 5
-            WHEN pr.scheme_type = 'amrap' THEN 1
+            WHEN pr.set_scheme IN ('fixed', 'greyskull') THEN 3
+            WHEN pr.set_scheme = 'ramp' THEN 5
+            WHEN pr.set_scheme = 'fatigue_drop' THEN 3
+            WHEN pr.set_scheme = 'mrs' THEN 4
+            WHEN pr.set_scheme = 'total_reps' THEN 5
+            WHEN pr.set_scheme = 'amrap' THEN 1
             ELSE 3
         END
     ), 0) AS total_sets
@@ -109,6 +109,7 @@ type GetDayExerciseAndSetCountsRow struct {
 }
 
 // Count distinct exercises and estimate total sets for a day
+// Note: set_scheme stores the scheme type in the prescriptions table
 func (q *Queries) GetDayExerciseAndSetCounts(ctx context.Context, dayID string) (GetDayExerciseAndSetCountsRow, error) {
 	row := q.db.QueryRowContext(ctx, getDayExerciseAndSetCounts, dayID)
 	var i GetDayExerciseAndSetCountsRow
