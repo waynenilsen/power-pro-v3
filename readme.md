@@ -1,4 +1,20 @@
-# Power Pro Roadmap
+# PowerPro
+
+## Product Vision
+
+PowerPro is a headless API for powerlifting programming that enables lifters to follow structured training programs with intelligent load calculation, set schemes, and progression rules. The platform abstracts the complexity of diverse powerlifting methodologies into a unified, DRY domain model that can represent any program through composable primitives.
+
+## Roadmap
+
+### In Progress
+- [Phase 001: Core Foundation](./phases/in-progress/001-core-foundation/001-core-foundation.md) - Establishing core domain model, prescription system, progression rules, and API foundations
+- [Phase 002: Frontend Readiness](./phases/in-progress/002-frontend-readiness/002-frontend-readiness.md) - Real authentication, user profiles, aggregated endpoints, and seeded programs
+
+## Roadmap Structure
+
+Phase documents break down into sprints (PRD + ERD), which in turn break down into tickets. See [roadmap guidelines](./prompts/roadmap.md) for details.
+
+---
 
 ## Core Domain Objects
 
