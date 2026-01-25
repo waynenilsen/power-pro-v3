@@ -10,7 +10,9 @@ import (
 )
 
 type Querier interface {
+	AbandonWorkoutSession(ctx context.Context, arg AbandonWorkoutSessionParams) error
 	CheckIdempotency(ctx context.Context, arg CheckIdempotencyParams) (int64, error)
+	CompleteWorkoutSession(ctx context.Context, arg CompleteWorkoutSessionParams) error
 	CountCycles(ctx context.Context) (int64, error)
 	CountDailyLookups(ctx context.Context) (int64, error)
 	CountDayPrescriptions(ctx context.Context, dayID string) (int64, error)
@@ -63,6 +65,7 @@ type Querier interface {
 	CreateWeek(ctx context.Context, arg CreateWeekParams) error
 	CreateWeekDay(ctx context.Context, arg CreateWeekDayParams) error
 	CreateWeeklyLookup(ctx context.Context, arg CreateWeeklyLookupParams) error
+	CreateWorkoutSession(ctx context.Context, arg CreateWorkoutSessionParams) error
 	CycleIsUsedByPrograms(ctx context.Context, cycleID string) (int64, error)
 	DailyLookupIsUsedByPrograms(ctx context.Context, dailyLookupID sql.NullString) (int64, error)
 	DayIsUsedInWeeks(ctx context.Context, dayID string) (int64, error)
@@ -93,6 +96,8 @@ type Querier interface {
 	DeleteWeekDay(ctx context.Context, id string) error
 	DeleteWeekDayByWeekAndDay(ctx context.Context, arg DeleteWeekDayByWeekAndDayParams) error
 	DeleteWeeklyLookup(ctx context.Context, id string) error
+	DeleteWorkoutSession(ctx context.Context, id string) error
+	GetActiveWorkoutSession(ctx context.Context, userProgramStateID string) (WorkoutSession, error)
 	GetCurrentMax(ctx context.Context, arg GetCurrentMaxParams) (LiftMax, error)
 	GetCurrentOneRM(ctx context.Context, arg GetCurrentOneRMParams) (LiftMax, error)
 	GetCycle(ctx context.Context, id string) (Cycle, error)
@@ -141,6 +146,8 @@ type Querier interface {
 	GetWeekDayByWeekAndDayAndDayOfWeek(ctx context.Context, arg GetWeekDayByWeekAndDayAndDayOfWeekParams) (WeekDay, error)
 	GetWeeklyLookup(ctx context.Context, id string) (WeeklyLookup, error)
 	GetWeeklyLookupForProgram(ctx context.Context, id string) (WeeklyLookup, error)
+	GetWorkoutSessionByID(ctx context.Context, id string) (WorkoutSession, error)
+	GetWorkoutSessionsByState(ctx context.Context, userProgramStateID string) ([]WorkoutSession, error)
 	IncrementFailureCounter(ctx context.Context, arg IncrementFailureCounterParams) error
 	LiftHasChildReferences(ctx context.Context, parentLiftID sql.NullString) (int64, error)
 	LiftHasMaxReferences(ctx context.Context, liftID string) (int64, error)
@@ -248,6 +255,7 @@ type Querier interface {
 	UpdateUserProgressionStateStage(ctx context.Context, arg UpdateUserProgressionStateStageParams) error
 	UpdateWeek(ctx context.Context, arg UpdateWeekParams) error
 	UpdateWeeklyLookup(ctx context.Context, arg UpdateWeeklyLookupParams) error
+	UpdateWorkoutSessionStatus(ctx context.Context, arg UpdateWorkoutSessionStatusParams) error
 	UpsertFailureCounterOnFailure(ctx context.Context, arg UpsertFailureCounterOnFailureParams) error
 	UpsertFailureCounterOnSuccess(ctx context.Context, arg UpsertFailureCounterOnSuccessParams) error
 	UpsertUserProgressionState(ctx context.Context, arg UpsertUserProgressionStateParams) error

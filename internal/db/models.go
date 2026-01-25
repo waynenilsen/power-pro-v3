@@ -178,6 +178,9 @@ type UserProgramState struct {
 	CyclesSinceStart      int64          `json:"cycles_since_start"`
 	MeetDate              sql.NullString `json:"meet_date"`
 	ScheduleType          sql.NullString `json:"schedule_type"`
+	EnrollmentStatus      string         `json:"enrollment_status"`
+	CycleStatus           string         `json:"cycle_status"`
+	WeekStatus            string         `json:"week_status"`
 }
 
 type UserProgressionState struct {
@@ -215,4 +218,16 @@ type WeeklyLookup struct {
 	ProgramID sql.NullString `json:"program_id"`
 	CreatedAt string         `json:"created_at"`
 	UpdatedAt string         `json:"updated_at"`
+}
+
+type WorkoutSession struct {
+	ID                 string         `json:"id"`
+	UserProgramStateID string         `json:"user_program_state_id"`
+	WeekNumber         int64          `json:"week_number"`
+	DayIndex           int64          `json:"day_index"`
+	Status             string         `json:"status"`
+	StartedAt          string         `json:"started_at"`
+	FinishedAt         sql.NullString `json:"finished_at"`
+	CreatedAt          string         `json:"created_at"`
+	UpdatedAt          string         `json:"updated_at"`
 }
