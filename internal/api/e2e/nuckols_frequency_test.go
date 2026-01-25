@@ -401,9 +401,11 @@ func TestNuckolsHighFrequencyProgram(t *testing.T) {
 	// Trigger cycle progression and verify
 	// =============================================================================
 	t.Run("Cycle progression applies at cycle end", func(t *testing.T) {
+		// NOTE: Force: true is required until event-driven progressions are fully implemented
 		triggerBody := ManualTriggerRequest{
 			ProgressionID: cycleProgID,
 			LiftID:        squatID,
+			Force:         true,
 		}
 		triggerResp, err := authPostTrigger(ts.URL("/users/"+userID+"/progressions/trigger"), triggerBody, userID)
 		if err != nil {

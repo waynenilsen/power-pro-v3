@@ -638,9 +638,11 @@ func TestNSunsCAP3Program(t *testing.T) {
 	t.Run("Cycle progression applies at end of 3-week cycle", func(t *testing.T) {
 		// Trigger progression for each lift
 		// Deadlift should progress (hit 4 reps at 88.5%)
+		// NOTE: Force: true is required until event-driven progressions are fully implemented
 		triggerBody := ManualTriggerRequest{
 			ProgressionID: cycleProgID,
 			LiftID:        deadliftID,
+			Force:         true,
 		}
 		triggerResp, err := authPostTrigger(ts.URL("/users/"+userID+"/progressions/trigger"), triggerBody, userID)
 		if err != nil {

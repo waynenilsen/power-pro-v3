@@ -453,12 +453,12 @@ func TestInvertedJuggernaut531Program(t *testing.T) {
 	// =============================================================================
 
 	// Advance to Week 4, Day 1 (OHP Deload)
-	// From Week 1 Day 4, we need:
-	// - Week 2: 4 days
-	// - Week 3: 4 days
-	// - To Week 4 Day 1: 1 more advance
-	// Total: 9 workout completions to reach Week 4 Day 1
-	for i := 0; i < 9; i++ {
+	// Currently at Week 2 Day 1 after completing Week 1 Day 4
+	// From Week 2 Day 1:
+	// - Week 2: 4 days (D1-D4) → Week 3 Day 1
+	// - Week 3: 4 days (D1-D4) → Week 4 Day 1
+	// Total: 8 workout completions to reach Week 4 Day 1
+	for i := 0; i < 8; i++ {
 		completeIJ531WorkoutDay(t, ts, userID)
 	}
 
