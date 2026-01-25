@@ -85,7 +85,8 @@ func (r *ProgramRepository) List(params ProgramListParams) ([]program.Program, i
 	hasFilters := params.Filters != nil && (params.Filters.Difficulty != nil ||
 		params.Filters.DaysPerWeek != nil ||
 		params.Filters.Focus != nil ||
-		params.Filters.HasAmrap != nil)
+		params.Filters.HasAmrap != nil ||
+		params.Filters.Search != nil)
 
 	var total int64
 	var err error
@@ -98,6 +99,7 @@ func (r *ProgramRepository) List(params ProgramListParams) ([]program.Program, i
 			DaysPerWeek: filterParams.daysPerWeek,
 			Focus:       filterParams.focus,
 			HasAmrap:    filterParams.hasAmrap,
+			Search:      filterParams.search,
 		})
 	} else {
 		total, err = r.queries.CountPrograms(ctx)
@@ -127,6 +129,7 @@ type filterParamsHelper struct {
 	daysPerWeek interface{}
 	focus       interface{}
 	hasAmrap    interface{}
+	search      interface{}
 }
 
 // buildFilterParams converts FilterOptions to the interface{} types sqlc expects.
@@ -151,6 +154,9 @@ func buildFilterParams(filters *program.FilterOptions) filterParamsHelper {
 			params.hasAmrap = int64(0)
 		}
 	}
+	if filters.Search != nil {
+		params.search = *filters.Search
+	}
 	return params
 }
 
@@ -168,6 +174,7 @@ func (r *ProgramRepository) listProgramsFiltered(ctx context.Context, params Pro
 			DaysPerWeek: filterParams.daysPerWeek,
 			Focus:       filterParams.focus,
 			HasAmrap:    filterParams.hasAmrap,
+			Search:      filterParams.search,
 			Limit:       params.Limit,
 			Offset:      params.Offset,
 		})
@@ -177,6 +184,7 @@ func (r *ProgramRepository) listProgramsFiltered(ctx context.Context, params Pro
 			DaysPerWeek: filterParams.daysPerWeek,
 			Focus:       filterParams.focus,
 			HasAmrap:    filterParams.hasAmrap,
+			Search:      filterParams.search,
 			Limit:       params.Limit,
 			Offset:      params.Offset,
 		})
@@ -194,6 +202,7 @@ func (r *ProgramRepository) listProgramsFiltered(ctx context.Context, params Pro
 			DaysPerWeek: filterParams.daysPerWeek,
 			Focus:       filterParams.focus,
 			HasAmrap:    filterParams.hasAmrap,
+			Search:      filterParams.search,
 			Limit:       params.Limit,
 			Offset:      params.Offset,
 		})
@@ -210,6 +219,7 @@ func (r *ProgramRepository) listProgramsFiltered(ctx context.Context, params Pro
 			DaysPerWeek: filterParams.daysPerWeek,
 			Focus:       filterParams.focus,
 			HasAmrap:    filterParams.hasAmrap,
+			Search:      filterParams.search,
 			Limit:       params.Limit,
 			Offset:      params.Offset,
 		})
@@ -226,6 +236,7 @@ func (r *ProgramRepository) listProgramsFiltered(ctx context.Context, params Pro
 			DaysPerWeek: filterParams.daysPerWeek,
 			Focus:       filterParams.focus,
 			HasAmrap:    filterParams.hasAmrap,
+			Search:      filterParams.search,
 			Limit:       params.Limit,
 			Offset:      params.Offset,
 		})

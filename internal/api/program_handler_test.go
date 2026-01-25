@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -1167,6 +1168,188 @@ func TestProgramFiltering(t *testing.T) {
 			if !bytes.Contains(body, []byte(field)) {
 				t.Errorf("Expected field %s in response, body: %s", field, bodyStr)
 			}
+		}
+	})
+}
+
+func TestProgramSearch(t *testing.T) {
+	ts, err := testutil.NewTestServer()
+	if err != nil {
+		t.Fatalf("Failed to create test server: %v", err)
+	}
+	defer ts.Close()
+
+	cycleID := createProgramTestCycle(t, ts, "Search Test Cycle")
+
+	// Create test programs with specific names
+	testPrograms := []struct {
+		name string
+		slug string
+	}{
+		{"Starting Strength", "starting-strength-search"},
+		{"Wendler 5/3/1", "wendler-531-search"},
+		{"GZCLP", "gzclp-search"},
+		{"Strong Lifts 5x5", "strong-lifts-5x5-search"},
+	}
+
+	for _, p := range testPrograms {
+		body := `{"name": "` + p.name + `", "slug": "` + p.slug + `", "cycleId": "` + cycleID + `"}`
+		resp, _ := adminPostProgram(ts.URL("/programs"), body)
+		resp.Body.Close()
+	}
+
+	t.Run("searches programs by name substring (case-insensitive)", func(t *testing.T) {
+		resp, err := authGetProgram(ts.URL("/programs?search=strength"))
+		if err != nil {
+			t.Fatalf("Failed to make request: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			bodyBytes, _ := io.ReadAll(resp.Body)
+			t.Fatalf("Expected status 200, got %d: %s", resp.StatusCode, bodyBytes)
+		}
+
+		var result PaginatedProgramsResponse
+		json.NewDecoder(resp.Body).Decode(&result)
+
+		// Should find "Starting Strength" and "Strong Lifts 5x5"
+		if len(result.Data) < 2 {
+			t.Errorf("Expected at least 2 results for 'strength', got %d", len(result.Data))
+		}
+
+		for _, p := range result.Data {
+			if !strings.Contains(strings.ToLower(p.Name), "strength") {
+				t.Errorf("Expected program name to contain 'strength', got %s", p.Name)
+			}
+		}
+	})
+
+	t.Run("searches programs with partial name", func(t *testing.T) {
+		resp, err := authGetProgram(ts.URL("/programs?search=5/3/1"))
+		if err != nil {
+			t.Fatalf("Failed to make request: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			bodyBytes, _ := io.ReadAll(resp.Body)
+			t.Fatalf("Expected status 200, got %d: %s", resp.StatusCode, bodyBytes)
+		}
+
+		var result PaginatedProgramsResponse
+		json.NewDecoder(resp.Body).Decode(&result)
+
+		// Should find "Wendler 5/3/1"
+		found := false
+		for _, p := range result.Data {
+			if strings.Contains(p.Name, "5/3/1") {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Error("Expected to find 'Wendler 5/3/1' when searching for '5/3/1'")
+		}
+	})
+
+	t.Run("searches programs case-insensitively", func(t *testing.T) {
+		resp, err := authGetProgram(ts.URL("/programs?search=GZCLP"))
+		if err != nil {
+			t.Fatalf("Failed to make request: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			bodyBytes, _ := io.ReadAll(resp.Body)
+			t.Fatalf("Expected status 200, got %d: %s", resp.StatusCode, bodyBytes)
+		}
+
+		var result PaginatedProgramsResponse
+		json.NewDecoder(resp.Body).Decode(&result)
+
+		found := false
+		for _, p := range result.Data {
+			if p.Name == "GZCLP" {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Error("Expected to find 'GZCLP' when searching for 'GZCLP'")
+		}
+	})
+
+	t.Run("empty search returns all programs", func(t *testing.T) {
+		resp, err := authGetProgram(ts.URL("/programs?search="))
+		if err != nil {
+			t.Fatalf("Failed to make request: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			bodyBytes, _ := io.ReadAll(resp.Body)
+			t.Fatalf("Expected status 200, got %d: %s", resp.StatusCode, bodyBytes)
+		}
+
+		var result PaginatedProgramsResponse
+		json.NewDecoder(resp.Body).Decode(&result)
+
+		// Should return all programs (at least our test programs)
+		if len(result.Data) < 4 {
+			t.Errorf("Expected at least 4 programs for empty search, got %d", len(result.Data))
+		}
+	})
+
+	t.Run("search combines with filters using AND logic", func(t *testing.T) {
+		// Search for 'strength' with difficulty=beginner (default for created programs)
+		resp, err := authGetProgram(ts.URL("/programs?search=strength&difficulty=beginner"))
+		if err != nil {
+			t.Fatalf("Failed to make request: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			bodyBytes, _ := io.ReadAll(resp.Body)
+			t.Fatalf("Expected status 200, got %d: %s", resp.StatusCode, bodyBytes)
+		}
+
+		var result PaginatedProgramsResponse
+		json.NewDecoder(resp.Body).Decode(&result)
+
+		// All returned programs should match both search AND filter
+		for _, p := range result.Data {
+			if !strings.Contains(strings.ToLower(p.Name), "strength") {
+				t.Errorf("Expected program name to contain 'strength', got %s", p.Name)
+			}
+			if p.Difficulty != "beginner" {
+				t.Errorf("Expected difficulty 'beginner', got %s", p.Difficulty)
+			}
+		}
+	})
+
+	t.Run("search returns empty array for no matches", func(t *testing.T) {
+		resp, err := authGetProgram(ts.URL("/programs?search=nonexistentprogram12345"))
+		if err != nil {
+			t.Fatalf("Failed to make request: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			bodyBytes, _ := io.ReadAll(resp.Body)
+			t.Fatalf("Expected status 200, got %d: %s", resp.StatusCode, bodyBytes)
+		}
+
+		var result PaginatedProgramsResponse
+		json.NewDecoder(resp.Body).Decode(&result)
+
+		if len(result.Data) != 0 {
+			t.Errorf("Expected 0 results for non-matching search, got %d", len(result.Data))
+		}
+		if result.Meta == nil {
+			t.Error("Expected meta to be present")
+		} else if result.Meta.Total != 0 {
+			t.Errorf("Expected total 0 for non-matching search, got %d", result.Meta.Total)
 		}
 	})
 }

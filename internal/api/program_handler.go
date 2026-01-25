@@ -291,6 +291,15 @@ func parseFilterOptions(query map[string][]string) (*program.FilterOptions, erro
 		}
 	}
 
+	// Parse search
+	if search := query["search"]; len(search) > 0 && search[0] != "" {
+		s := strings.TrimSpace(search[0])
+		if s != "" {
+			filters.Search = &s
+			hasFilters = true
+		}
+	}
+
 	if !hasFilters {
 		return nil, nil
 	}

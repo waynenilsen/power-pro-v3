@@ -87,6 +87,7 @@ type FilterOptions struct {
 	DaysPerWeek *int
 	Focus       *string
 	HasAmrap    *bool
+	Search      *string
 }
 
 // ValidateDifficulty validates the difficulty value.

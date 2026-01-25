@@ -15,6 +15,7 @@ WHERE (sqlc.narg('difficulty') IS NULL OR difficulty = sqlc.narg('difficulty'))
   AND (sqlc.narg('days_per_week') IS NULL OR days_per_week = sqlc.narg('days_per_week'))
   AND (sqlc.narg('focus') IS NULL OR focus = sqlc.narg('focus'))
   AND (sqlc.narg('has_amrap') IS NULL OR has_amrap = sqlc.narg('has_amrap'))
+  AND (sqlc.narg('search') IS NULL OR name LIKE '%' || sqlc.narg('search') || '%' COLLATE NOCASE)
 ORDER BY name ASC
 LIMIT sqlc.arg('limit') OFFSET sqlc.arg('offset');
 
@@ -25,6 +26,7 @@ WHERE (sqlc.narg('difficulty') IS NULL OR difficulty = sqlc.narg('difficulty'))
   AND (sqlc.narg('days_per_week') IS NULL OR days_per_week = sqlc.narg('days_per_week'))
   AND (sqlc.narg('focus') IS NULL OR focus = sqlc.narg('focus'))
   AND (sqlc.narg('has_amrap') IS NULL OR has_amrap = sqlc.narg('has_amrap'))
+  AND (sqlc.narg('search') IS NULL OR name LIKE '%' || sqlc.narg('search') || '%' COLLATE NOCASE)
 ORDER BY name DESC
 LIMIT sqlc.arg('limit') OFFSET sqlc.arg('offset');
 
@@ -35,6 +37,7 @@ WHERE (sqlc.narg('difficulty') IS NULL OR difficulty = sqlc.narg('difficulty'))
   AND (sqlc.narg('days_per_week') IS NULL OR days_per_week = sqlc.narg('days_per_week'))
   AND (sqlc.narg('focus') IS NULL OR focus = sqlc.narg('focus'))
   AND (sqlc.narg('has_amrap') IS NULL OR has_amrap = sqlc.narg('has_amrap'))
+  AND (sqlc.narg('search') IS NULL OR name LIKE '%' || sqlc.narg('search') || '%' COLLATE NOCASE)
 ORDER BY created_at ASC
 LIMIT sqlc.arg('limit') OFFSET sqlc.arg('offset');
 
@@ -45,6 +48,7 @@ WHERE (sqlc.narg('difficulty') IS NULL OR difficulty = sqlc.narg('difficulty'))
   AND (sqlc.narg('days_per_week') IS NULL OR days_per_week = sqlc.narg('days_per_week'))
   AND (sqlc.narg('focus') IS NULL OR focus = sqlc.narg('focus'))
   AND (sqlc.narg('has_amrap') IS NULL OR has_amrap = sqlc.narg('has_amrap'))
+  AND (sqlc.narg('search') IS NULL OR name LIKE '%' || sqlc.narg('search') || '%' COLLATE NOCASE)
 ORDER BY created_at DESC
 LIMIT sqlc.arg('limit') OFFSET sqlc.arg('offset');
 
@@ -53,7 +57,8 @@ SELECT COUNT(*) FROM programs
 WHERE (sqlc.narg('difficulty') IS NULL OR difficulty = sqlc.narg('difficulty'))
   AND (sqlc.narg('days_per_week') IS NULL OR days_per_week = sqlc.narg('days_per_week'))
   AND (sqlc.narg('focus') IS NULL OR focus = sqlc.narg('focus'))
-  AND (sqlc.narg('has_amrap') IS NULL OR has_amrap = sqlc.narg('has_amrap'));
+  AND (sqlc.narg('has_amrap') IS NULL OR has_amrap = sqlc.narg('has_amrap'))
+  AND (sqlc.narg('search') IS NULL OR name LIKE '%' || sqlc.narg('search') || '%' COLLATE NOCASE);
 
 -- name: ListProgramsByNameAsc :many
 SELECT id, name, slug, description, cycle_id, weekly_lookup_id, daily_lookup_id, default_rounding, difficulty, days_per_week, focus, has_amrap, created_at, updated_at

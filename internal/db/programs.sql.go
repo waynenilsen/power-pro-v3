@@ -38,6 +38,7 @@ WHERE (?1 IS NULL OR difficulty = ?1)
   AND (?2 IS NULL OR days_per_week = ?2)
   AND (?3 IS NULL OR focus = ?3)
   AND (?4 IS NULL OR has_amrap = ?4)
+  AND (?5 IS NULL OR name LIKE '%' || ?5 || '%' COLLATE NOCASE)
 `
 
 type CountProgramsFilteredParams struct {
@@ -45,6 +46,7 @@ type CountProgramsFilteredParams struct {
 	DaysPerWeek interface{} `json:"days_per_week"`
 	Focus       interface{} `json:"focus"`
 	HasAmrap    interface{} `json:"has_amrap"`
+	Search      interface{} `json:"search"`
 }
 
 func (q *Queries) CountProgramsFiltered(ctx context.Context, arg CountProgramsFilteredParams) (int64, error) {
@@ -53,6 +55,7 @@ func (q *Queries) CountProgramsFiltered(ctx context.Context, arg CountProgramsFi
 		arg.DaysPerWeek,
 		arg.Focus,
 		arg.HasAmrap,
+		arg.Search,
 	)
 	var count int64
 	err := row.Scan(&count)
@@ -534,8 +537,9 @@ WHERE (?1 IS NULL OR difficulty = ?1)
   AND (?2 IS NULL OR days_per_week = ?2)
   AND (?3 IS NULL OR focus = ?3)
   AND (?4 IS NULL OR has_amrap = ?4)
+  AND (?5 IS NULL OR name LIKE '%' || ?5 || '%' COLLATE NOCASE)
 ORDER BY created_at ASC
-LIMIT ?6 OFFSET ?5
+LIMIT ?7 OFFSET ?6
 `
 
 type ListProgramsFilteredByCreatedAtAscParams struct {
@@ -543,6 +547,7 @@ type ListProgramsFilteredByCreatedAtAscParams struct {
 	DaysPerWeek interface{} `json:"days_per_week"`
 	Focus       interface{} `json:"focus"`
 	HasAmrap    interface{} `json:"has_amrap"`
+	Search      interface{} `json:"search"`
 	Offset      int64       `json:"offset"`
 	Limit       int64       `json:"limit"`
 }
@@ -570,6 +575,7 @@ func (q *Queries) ListProgramsFilteredByCreatedAtAsc(ctx context.Context, arg Li
 		arg.DaysPerWeek,
 		arg.Focus,
 		arg.HasAmrap,
+		arg.Search,
 		arg.Offset,
 		arg.Limit,
 	)
@@ -616,8 +622,9 @@ WHERE (?1 IS NULL OR difficulty = ?1)
   AND (?2 IS NULL OR days_per_week = ?2)
   AND (?3 IS NULL OR focus = ?3)
   AND (?4 IS NULL OR has_amrap = ?4)
+  AND (?5 IS NULL OR name LIKE '%' || ?5 || '%' COLLATE NOCASE)
 ORDER BY created_at DESC
-LIMIT ?6 OFFSET ?5
+LIMIT ?7 OFFSET ?6
 `
 
 type ListProgramsFilteredByCreatedAtDescParams struct {
@@ -625,6 +632,7 @@ type ListProgramsFilteredByCreatedAtDescParams struct {
 	DaysPerWeek interface{} `json:"days_per_week"`
 	Focus       interface{} `json:"focus"`
 	HasAmrap    interface{} `json:"has_amrap"`
+	Search      interface{} `json:"search"`
 	Offset      int64       `json:"offset"`
 	Limit       int64       `json:"limit"`
 }
@@ -652,6 +660,7 @@ func (q *Queries) ListProgramsFilteredByCreatedAtDesc(ctx context.Context, arg L
 		arg.DaysPerWeek,
 		arg.Focus,
 		arg.HasAmrap,
+		arg.Search,
 		arg.Offset,
 		arg.Limit,
 	)
@@ -698,8 +707,9 @@ WHERE (?1 IS NULL OR difficulty = ?1)
   AND (?2 IS NULL OR days_per_week = ?2)
   AND (?3 IS NULL OR focus = ?3)
   AND (?4 IS NULL OR has_amrap = ?4)
+  AND (?5 IS NULL OR name LIKE '%' || ?5 || '%' COLLATE NOCASE)
 ORDER BY name ASC
-LIMIT ?6 OFFSET ?5
+LIMIT ?7 OFFSET ?6
 `
 
 type ListProgramsFilteredByNameAscParams struct {
@@ -707,6 +717,7 @@ type ListProgramsFilteredByNameAscParams struct {
 	DaysPerWeek interface{} `json:"days_per_week"`
 	Focus       interface{} `json:"focus"`
 	HasAmrap    interface{} `json:"has_amrap"`
+	Search      interface{} `json:"search"`
 	Offset      int64       `json:"offset"`
 	Limit       int64       `json:"limit"`
 }
@@ -734,6 +745,7 @@ func (q *Queries) ListProgramsFilteredByNameAsc(ctx context.Context, arg ListPro
 		arg.DaysPerWeek,
 		arg.Focus,
 		arg.HasAmrap,
+		arg.Search,
 		arg.Offset,
 		arg.Limit,
 	)
@@ -780,8 +792,9 @@ WHERE (?1 IS NULL OR difficulty = ?1)
   AND (?2 IS NULL OR days_per_week = ?2)
   AND (?3 IS NULL OR focus = ?3)
   AND (?4 IS NULL OR has_amrap = ?4)
+  AND (?5 IS NULL OR name LIKE '%' || ?5 || '%' COLLATE NOCASE)
 ORDER BY name DESC
-LIMIT ?6 OFFSET ?5
+LIMIT ?7 OFFSET ?6
 `
 
 type ListProgramsFilteredByNameDescParams struct {
@@ -789,6 +802,7 @@ type ListProgramsFilteredByNameDescParams struct {
 	DaysPerWeek interface{} `json:"days_per_week"`
 	Focus       interface{} `json:"focus"`
 	HasAmrap    interface{} `json:"has_amrap"`
+	Search      interface{} `json:"search"`
 	Offset      int64       `json:"offset"`
 	Limit       int64       `json:"limit"`
 }
@@ -816,6 +830,7 @@ func (q *Queries) ListProgramsFilteredByNameDesc(ctx context.Context, arg ListPr
 		arg.DaysPerWeek,
 		arg.Focus,
 		arg.HasAmrap,
+		arg.Search,
 		arg.Offset,
 		arg.Limit,
 	)
