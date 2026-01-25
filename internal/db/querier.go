@@ -142,8 +142,15 @@ type Querier interface {
 	GetPrescriptionsForDay(ctx context.Context, dayID string) ([]Prescription, error)
 	GetProgram(ctx context.Context, id string) (GetProgramRow, error)
 	GetProgramBySlug(ctx context.Context, slug string) (GetProgramBySlugRow, error)
+	// Returns unique lift names used in a program, sorted alphabetically
+	GetProgramLiftRequirements(ctx context.Context, programID sql.NullString) ([]string, error)
 	GetProgramProgression(ctx context.Context, id string) (ProgramProgression, error)
 	GetProgramProgressionByProgramProgressionLift(ctx context.Context, arg GetProgramProgressionByProgramProgressionLiftParams) (ProgramProgression, error)
+	// Returns days for the first week of a program with prescription counts
+	// For programs with week_days, uses week 1; otherwise falls back to days.program_id
+	GetProgramSampleWeek(ctx context.Context, arg GetProgramSampleWeekParams) ([]GetProgramSampleWeekRow, error)
+	// Returns total sets and exercises per average day for session duration estimation
+	GetProgramSessionStats(ctx context.Context, programID sql.NullString) (GetProgramSessionStatsRow, error)
 	GetProgramWithCycle(ctx context.Context, id string) (GetProgramWithCycleRow, error)
 	GetProgression(ctx context.Context, id string) (Progression, error)
 	GetProgressionLog(ctx context.Context, id string) (ProgressionLog, error)

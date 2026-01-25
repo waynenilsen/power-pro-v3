@@ -509,6 +509,96 @@ func (r *ProgramRepository) GetDailyLookupReference(id string) (*program.LookupR
 	}, nil
 }
 
+// SampleWeekDay represents a day in the program's sample week.
+type SampleWeekDay struct {
+	ID            string
+	Name          string
+	DayOfWeek     string
+	ExerciseCount int
+}
+
+// GetSampleWeek retrieves the first week's structure for a program.
+func (r *ProgramRepository) GetSampleWeek(programID string) ([]SampleWeekDay, error) {
+	ctx := context.Background()
+
+	rows, err := r.queries.GetProgramSampleWeek(ctx, db.GetProgramSampleWeekParams{
+		ID:        programID,
+		ProgramID: sql.NullString{String: programID, Valid: true},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get sample week: %w", err)
+	}
+
+	days := make([]SampleWeekDay, len(rows))
+	for i, row := range rows {
+		days[i] = SampleWeekDay{
+			ID:            row.ID,
+			Name:          row.Name,
+			DayOfWeek:     row.DayOfWeek,
+			ExerciseCount: int(row.ExerciseCount),
+		}
+	}
+
+	return days, nil
+}
+
+// GetLiftRequirements retrieves the unique lifts used in a program.
+func (r *ProgramRepository) GetLiftRequirements(programID string) ([]string, error) {
+	ctx := context.Background()
+
+	lifts, err := r.queries.GetProgramLiftRequirements(ctx, sql.NullString{String: programID, Valid: true})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get lift requirements: %w", err)
+	}
+
+	return lifts, nil
+}
+
+// SessionStats holds aggregate stats for estimating session duration.
+type SessionStats struct {
+	TotalSets      int
+	TotalDays      int
+	TotalExercises int
+}
+
+// GetSessionStats retrieves aggregate stats for session duration estimation.
+func (r *ProgramRepository) GetSessionStats(programID string) (*SessionStats, error) {
+	ctx := context.Background()
+
+	row, err := r.queries.GetProgramSessionStats(ctx, sql.NullString{String: programID, Valid: true})
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return &SessionStats{}, nil
+		}
+		return nil, fmt.Errorf("failed to get session stats: %w", err)
+	}
+
+	// The interface{} types from sqlc need type assertion
+	totalSets := toInt(row.TotalSets)
+	totalDays := toInt(row.TotalDays)
+	totalExercises := toInt(row.TotalExercises)
+
+	return &SessionStats{
+		TotalSets:      totalSets,
+		TotalDays:      totalDays,
+		TotalExercises: totalExercises,
+	}, nil
+}
+
+// toInt converts an interface{} to int, handling various numeric types.
+func toInt(v interface{}) int {
+	switch val := v.(type) {
+	case int64:
+		return int(val)
+	case int:
+		return val
+	case float64:
+		return int(val)
+	default:
+		return 0
+	}
+}
+
 // Helper functions
 
 func dbProgramToDomain(dbProg db.Program) *program.Program {

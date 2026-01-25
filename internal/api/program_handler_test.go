@@ -50,22 +50,32 @@ type LookupReferenceTestResponse struct {
 	Name string `json:"name"`
 }
 
+// SampleWeekDayTestResponse represents a day in the sample week.
+type SampleWeekDayTestResponse struct {
+	Day           int    `json:"day"`
+	Name          string `json:"name"`
+	ExerciseCount int    `json:"exerciseCount"`
+}
+
 // ProgramDetailTestResponse represents the API response format for a program (detail view with embedded cycle).
 type ProgramDetailTestResponse struct {
-	ID              string                       `json:"id"`
-	Name            string                       `json:"name"`
-	Slug            string                       `json:"slug"`
-	Description     *string                      `json:"description,omitempty"`
-	Cycle           *ProgramCycleTestResponse    `json:"cycle"`
-	WeeklyLookup    *LookupReferenceTestResponse `json:"weeklyLookup,omitempty"`
-	DailyLookup     *LookupReferenceTestResponse `json:"dailyLookup,omitempty"`
-	DefaultRounding *float64                     `json:"defaultRounding,omitempty"`
-	Difficulty      string                       `json:"difficulty"`
-	DaysPerWeek     int                          `json:"daysPerWeek"`
-	Focus           string                       `json:"focus"`
-	HasAmrap        bool                         `json:"hasAmrap"`
-	CreatedAt       time.Time                    `json:"createdAt"`
-	UpdatedAt       time.Time                    `json:"updatedAt"`
+	ID                      string                       `json:"id"`
+	Name                    string                       `json:"name"`
+	Slug                    string                       `json:"slug"`
+	Description             *string                      `json:"description,omitempty"`
+	Cycle                   *ProgramCycleTestResponse    `json:"cycle"`
+	WeeklyLookup            *LookupReferenceTestResponse `json:"weeklyLookup,omitempty"`
+	DailyLookup             *LookupReferenceTestResponse `json:"dailyLookup,omitempty"`
+	DefaultRounding         *float64                     `json:"defaultRounding,omitempty"`
+	Difficulty              string                       `json:"difficulty"`
+	DaysPerWeek             int                          `json:"daysPerWeek"`
+	Focus                   string                       `json:"focus"`
+	HasAmrap                bool                         `json:"hasAmrap"`
+	SampleWeek              []SampleWeekDayTestResponse  `json:"sampleWeek"`
+	LiftRequirements        []string                     `json:"liftRequirements"`
+	EstimatedSessionMinutes int                          `json:"estimatedSessionMinutes"`
+	CreatedAt               time.Time                    `json:"createdAt"`
+	UpdatedAt               time.Time                    `json:"updatedAt"`
 }
 
 // ProgramPaginationMeta contains pagination metadata.
@@ -730,6 +740,9 @@ func TestProgramResponseFormat(t *testing.T) {
 			`"name"`,
 			`"slug"`,
 			`"cycle"`,
+			`"sampleWeek"`,
+			`"liftRequirements"`,
+			`"estimatedSessionMinutes"`,
 			`"createdAt"`,
 			`"updatedAt"`,
 		}

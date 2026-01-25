@@ -64,22 +64,32 @@ type LookupReferenceResponse struct {
 	Name string `json:"name"`
 }
 
+// SampleWeekDayResponse represents a day in the sample week.
+type SampleWeekDayResponse struct {
+	Day           int    `json:"day"`
+	Name          string `json:"name"`
+	ExerciseCount int    `json:"exerciseCount"`
+}
+
 // ProgramDetailResponse represents the API response format for a program (detail view with embedded cycle).
 type ProgramDetailResponse struct {
-	ID              string                   `json:"id"`
-	Name            string                   `json:"name"`
-	Slug            string                   `json:"slug"`
-	Description     *string                  `json:"description,omitempty"`
-	Cycle           *ProgramCycleResponse    `json:"cycle"`
-	WeeklyLookup    *LookupReferenceResponse `json:"weeklyLookup,omitempty"`
-	DailyLookup     *LookupReferenceResponse `json:"dailyLookup,omitempty"`
-	DefaultRounding *float64                 `json:"defaultRounding,omitempty"`
-	Difficulty      string                   `json:"difficulty"`
-	DaysPerWeek     int                      `json:"daysPerWeek"`
-	Focus           string                   `json:"focus"`
-	HasAmrap        bool                     `json:"hasAmrap"`
-	CreatedAt       time.Time                `json:"createdAt"`
-	UpdatedAt       time.Time                `json:"updatedAt"`
+	ID                      string                   `json:"id"`
+	Name                    string                   `json:"name"`
+	Slug                    string                   `json:"slug"`
+	Description             *string                  `json:"description,omitempty"`
+	Cycle                   *ProgramCycleResponse    `json:"cycle"`
+	WeeklyLookup            *LookupReferenceResponse `json:"weeklyLookup,omitempty"`
+	DailyLookup             *LookupReferenceResponse `json:"dailyLookup,omitempty"`
+	DefaultRounding         *float64                 `json:"defaultRounding,omitempty"`
+	Difficulty              string                   `json:"difficulty"`
+	DaysPerWeek             int                      `json:"daysPerWeek"`
+	Focus                   string                   `json:"focus"`
+	HasAmrap                bool                     `json:"hasAmrap"`
+	SampleWeek              []SampleWeekDayResponse  `json:"sampleWeek"`
+	LiftRequirements        []string                 `json:"liftRequirements"`
+	EstimatedSessionMinutes int                      `json:"estimatedSessionMinutes"`
+	CreatedAt               time.Time                `json:"createdAt"`
+	UpdatedAt               time.Time                `json:"updatedAt"`
 }
 
 // CreateProgramRequest represents the request body for creating a program.
@@ -123,7 +133,21 @@ func programToResponse(p *program.Program) ProgramResponse {
 	}
 }
 
-func programToDetailResponse(p *program.Program, cycle *program.ProgramCycle, weeklyLookup *program.LookupReference, dailyLookup *program.LookupReference) ProgramDetailResponse {
+// ProgramDetailData holds all the data needed to build a program detail response.
+type ProgramDetailData struct {
+	Program                 *program.Program
+	Cycle                   *program.ProgramCycle
+	WeeklyLookup            *program.LookupReference
+	DailyLookup             *program.LookupReference
+	SampleWeek              []SampleWeekDayResponse
+	LiftRequirements        []string
+	EstimatedSessionMinutes int
+}
+
+func programToDetailResponse(data ProgramDetailData) ProgramDetailResponse {
+	p := data.Program
+	cycle := data.Cycle
+
 	var cycleResp *ProgramCycleResponse
 	if cycle != nil {
 		weeks := make([]ProgramCycleWeekResponse, len(cycle.Weeks))
@@ -142,36 +166,49 @@ func programToDetailResponse(p *program.Program, cycle *program.ProgramCycle, we
 	}
 
 	var weeklyLookupResp *LookupReferenceResponse
-	if weeklyLookup != nil {
+	if data.WeeklyLookup != nil {
 		weeklyLookupResp = &LookupReferenceResponse{
-			ID:   weeklyLookup.ID,
-			Name: weeklyLookup.Name,
+			ID:   data.WeeklyLookup.ID,
+			Name: data.WeeklyLookup.Name,
 		}
 	}
 
 	var dailyLookupResp *LookupReferenceResponse
-	if dailyLookup != nil {
+	if data.DailyLookup != nil {
 		dailyLookupResp = &LookupReferenceResponse{
-			ID:   dailyLookup.ID,
-			Name: dailyLookup.Name,
+			ID:   data.DailyLookup.ID,
+			Name: data.DailyLookup.Name,
 		}
 	}
 
+	// Ensure non-nil slices for JSON
+	sampleWeek := data.SampleWeek
+	if sampleWeek == nil {
+		sampleWeek = []SampleWeekDayResponse{}
+	}
+	liftRequirements := data.LiftRequirements
+	if liftRequirements == nil {
+		liftRequirements = []string{}
+	}
+
 	return ProgramDetailResponse{
-		ID:              p.ID,
-		Name:            p.Name,
-		Slug:            p.Slug,
-		Description:     p.Description,
-		Cycle:           cycleResp,
-		WeeklyLookup:    weeklyLookupResp,
-		DailyLookup:     dailyLookupResp,
-		DefaultRounding: p.DefaultRounding,
-		Difficulty:      p.Difficulty,
-		DaysPerWeek:     p.DaysPerWeek,
-		Focus:           p.Focus,
-		HasAmrap:        p.HasAmrap,
-		CreatedAt:       p.CreatedAt,
-		UpdatedAt:       p.UpdatedAt,
+		ID:                      p.ID,
+		Name:                    p.Name,
+		Slug:                    p.Slug,
+		Description:             p.Description,
+		Cycle:                   cycleResp,
+		WeeklyLookup:            weeklyLookupResp,
+		DailyLookup:             dailyLookupResp,
+		DefaultRounding:         p.DefaultRounding,
+		Difficulty:              p.Difficulty,
+		DaysPerWeek:             p.DaysPerWeek,
+		Focus:                   p.Focus,
+		HasAmrap:                p.HasAmrap,
+		SampleWeek:              sampleWeek,
+		LiftRequirements:        liftRequirements,
+		EstimatedSessionMinutes: data.EstimatedSessionMinutes,
+		CreatedAt:               p.CreatedAt,
+		UpdatedAt:               p.UpdatedAt,
 	}
 }
 
@@ -350,7 +387,57 @@ func (h *ProgramHandler) Get(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	writeData(w, http.StatusOK, programToDetailResponse(p, cycle, weeklyLookup, dailyLookup))
+	// Get sample week data
+	sampleWeekData, err := h.repo.GetSampleWeek(id)
+	if err != nil {
+		writeDomainError(w, apperrors.NewInternal("failed to get sample week", err))
+		return
+	}
+
+	// Convert to response format with day numbers
+	sampleWeek := make([]SampleWeekDayResponse, len(sampleWeekData))
+	for i, day := range sampleWeekData {
+		sampleWeek[i] = SampleWeekDayResponse{
+			Day:           i + 1,
+			Name:          day.Name,
+			ExerciseCount: day.ExerciseCount,
+		}
+	}
+
+	// Get lift requirements
+	liftRequirements, err := h.repo.GetLiftRequirements(id)
+	if err != nil {
+		writeDomainError(w, apperrors.NewInternal("failed to get lift requirements", err))
+		return
+	}
+
+	// Get session stats for duration estimation
+	sessionStats, err := h.repo.GetSessionStats(id)
+	if err != nil {
+		writeDomainError(w, apperrors.NewInternal("failed to get session stats", err))
+		return
+	}
+
+	// Calculate estimated session minutes
+	// Formula: (total sets per average day * 3 minutes) + (exercises per day * 2 minutes warmup)
+	var estimatedSessionMinutes int
+	if sessionStats.TotalDays > 0 {
+		avgSetsPerDay := sessionStats.TotalSets / sessionStats.TotalDays
+		avgExercisesPerDay := sessionStats.TotalExercises / sessionStats.TotalDays
+		estimatedSessionMinutes = (avgSetsPerDay * 3) + (avgExercisesPerDay * 2)
+	}
+
+	detailData := ProgramDetailData{
+		Program:                 p,
+		Cycle:                   cycle,
+		WeeklyLookup:            weeklyLookup,
+		DailyLookup:             dailyLookup,
+		SampleWeek:              sampleWeek,
+		LiftRequirements:        liftRequirements,
+		EstimatedSessionMinutes: estimatedSessionMinutes,
+	}
+
+	writeData(w, http.StatusOK, programToDetailResponse(detailData))
 }
 
 // Create handles POST /programs

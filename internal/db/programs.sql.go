@@ -242,6 +242,148 @@ func (q *Queries) GetProgramBySlug(ctx context.Context, slug string) (GetProgram
 	return i, err
 }
 
+const getProgramLiftRequirements = `-- name: GetProgramLiftRequirements :many
+SELECT DISTINCT l.name
+FROM lifts l
+INNER JOIN prescriptions pr ON pr.lift_id = l.id
+INNER JOIN day_prescriptions dp ON dp.prescription_id = pr.id
+INNER JOIN days d ON d.id = dp.day_id
+WHERE d.program_id = ?
+ORDER BY l.name ASC
+`
+
+// Returns unique lift names used in a program, sorted alphabetically
+func (q *Queries) GetProgramLiftRequirements(ctx context.Context, programID sql.NullString) ([]string, error) {
+	rows, err := q.db.QueryContext(ctx, getProgramLiftRequirements, programID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []string{}
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return nil, err
+		}
+		items = append(items, name)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getProgramSampleWeek = `-- name: GetProgramSampleWeek :many
+SELECT
+    d.id,
+    d.name,
+    COALESCE(wd.day_of_week, 'MONDAY') as day_of_week,
+    (SELECT COUNT(*) FROM day_prescriptions dp WHERE dp.day_id = d.id) as exercise_count
+FROM days d
+LEFT JOIN week_days wd ON wd.day_id = d.id
+LEFT JOIN weeks w ON w.id = wd.week_id
+LEFT JOIN cycles c ON c.id = w.cycle_id
+LEFT JOIN programs p ON p.cycle_id = c.id
+WHERE (p.id = ? OR d.program_id = ?)
+  AND (w.week_number = 1 OR w.id IS NULL)
+GROUP BY d.id
+ORDER BY
+    CASE wd.day_of_week
+        WHEN 'MONDAY' THEN 1
+        WHEN 'TUESDAY' THEN 2
+        WHEN 'WEDNESDAY' THEN 3
+        WHEN 'THURSDAY' THEN 4
+        WHEN 'FRIDAY' THEN 5
+        WHEN 'SATURDAY' THEN 6
+        WHEN 'SUNDAY' THEN 7
+        ELSE 8
+    END,
+    d.name ASC
+`
+
+type GetProgramSampleWeekParams struct {
+	ID        string         `json:"id"`
+	ProgramID sql.NullString `json:"program_id"`
+}
+
+type GetProgramSampleWeekRow struct {
+	ID            string `json:"id"`
+	Name          string `json:"name"`
+	DayOfWeek     string `json:"day_of_week"`
+	ExerciseCount int64  `json:"exercise_count"`
+}
+
+// Returns days for the first week of a program with prescription counts
+// For programs with week_days, uses week 1; otherwise falls back to days.program_id
+func (q *Queries) GetProgramSampleWeek(ctx context.Context, arg GetProgramSampleWeekParams) ([]GetProgramSampleWeekRow, error) {
+	rows, err := q.db.QueryContext(ctx, getProgramSampleWeek, arg.ID, arg.ProgramID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetProgramSampleWeekRow{}
+	for rows.Next() {
+		var i GetProgramSampleWeekRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.DayOfWeek,
+			&i.ExerciseCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getProgramSessionStats = `-- name: GetProgramSessionStats :one
+SELECT
+    COALESCE(SUM(total_sets), 0) as total_sets,
+    COALESCE(COUNT(DISTINCT d.id), 0) as total_days,
+    COALESCE(SUM(exercise_count), 0) as total_exercises
+FROM days d
+LEFT JOIN (
+    SELECT
+        dp.day_id,
+        COUNT(*) as exercise_count,
+        SUM(
+            CASE
+                WHEN pr.set_scheme LIKE '%x%' THEN
+                    CAST(SUBSTR(pr.set_scheme, 1, INSTR(pr.set_scheme, 'x') - 1) AS INTEGER)
+                ELSE 3
+            END
+        ) as total_sets
+    FROM day_prescriptions dp
+    INNER JOIN prescriptions pr ON pr.id = dp.prescription_id
+    GROUP BY dp.day_id
+) stats ON stats.day_id = d.id
+WHERE d.program_id = ?
+`
+
+type GetProgramSessionStatsRow struct {
+	TotalSets      interface{} `json:"total_sets"`
+	TotalDays      interface{} `json:"total_days"`
+	TotalExercises interface{} `json:"total_exercises"`
+}
+
+// Returns total sets and exercises per average day for session duration estimation
+func (q *Queries) GetProgramSessionStats(ctx context.Context, programID sql.NullString) (GetProgramSessionStatsRow, error) {
+	row := q.db.QueryRowContext(ctx, getProgramSessionStats, programID)
+	var i GetProgramSessionStatsRow
+	err := row.Scan(&i.TotalSets, &i.TotalDays, &i.TotalExercises)
+	return i, err
+}
+
 const getWeeklyLookupForProgram = `-- name: GetWeeklyLookupForProgram :one
 SELECT id, name, entries, program_id, created_at, updated_at
 FROM weekly_lookups
