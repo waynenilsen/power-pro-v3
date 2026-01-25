@@ -2,12 +2,14 @@ package profile
 
 import (
 	"context"
+	"database/sql"
 	"testing"
 	"time"
 
-	apperrors "github.com/waynenilsen/power-pro-v3/internal/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/waynenilsen/power-pro-v3/internal/database"
+	apperrors "github.com/waynenilsen/power-pro-v3/internal/errors"
 )
 
 // mockProfileRepo is a mock implementation of ProfileRepository for testing.
@@ -605,4 +607,297 @@ func TestWeightUnitConstants(t *testing.T) {
 
 func TestMaxNameLength(t *testing.T) {
 	assert.Equal(t, 100, maxNameLength)
+}
+
+// =============================================================================
+// SQLITE REPOSITORY INTEGRATION TESTS (REQ-TD2-007)
+// =============================================================================
+
+func setupTestDB(t *testing.T) (*SQLiteProfileRepository, func(), *sql.DB) {
+	db, cleanup, err := database.OpenTemp("../../migrations")
+	require.NoError(t, err)
+
+	repo := NewSQLiteProfileRepository(db)
+	return repo, cleanup, db
+}
+
+func createTestUserWithEmail(t *testing.T, db *sql.DB, userID, email string) {
+	ctx := context.Background()
+	_, err := db.ExecContext(ctx, `
+		INSERT INTO users (id, email, weight_unit, created_at, updated_at)
+		VALUES (?, ?, 'lb', datetime('now'), datetime('now'))
+		ON CONFLICT(id) DO UPDATE SET email = excluded.email
+	`, userID, email)
+	require.NoError(t, err)
+}
+
+func TestSQLiteProfileRepository_GetByUserID(t *testing.T) {
+	repo, cleanup, db := setupTestDB(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	t.Run("returns existing user profile", func(t *testing.T) {
+		// Create a test user with email
+		createTestUserWithEmail(t, db, "profile-test-user-001", "profile-test@example.com")
+
+		profile, err := repo.GetByUserID(ctx, "profile-test-user-001")
+		require.NoError(t, err)
+		require.NotNil(t, profile)
+		assert.Equal(t, "profile-test-user-001", profile.ID)
+		assert.Equal(t, "profile-test@example.com", profile.Email)
+		assert.NotEmpty(t, profile.WeightUnit)
+	})
+
+	t.Run("returns not found for nonexistent user", func(t *testing.T) {
+		_, err := repo.GetByUserID(ctx, "nonexistent-user")
+		require.Error(t, err)
+		assert.True(t, apperrors.IsNotFound(err))
+	})
+
+	t.Run("handles user with null name", func(t *testing.T) {
+		createTestUserWithEmail(t, db, "null-name-user", "nullname@example.com")
+
+		profile, err := repo.GetByUserID(ctx, "null-name-user")
+		require.NoError(t, err)
+		// Name should be nil since we didn't set it
+		assert.Nil(t, profile.Name)
+	})
+
+	t.Run("handles user with name set", func(t *testing.T) {
+		ctx := context.Background()
+		_, err := db.ExecContext(ctx, `
+			INSERT INTO users (id, email, name, weight_unit, created_at, updated_at)
+			VALUES ('named-user', 'named@example.com', 'Test User Name', 'kg', datetime('now'), datetime('now'))
+		`)
+		require.NoError(t, err)
+
+		profile, err := repo.GetByUserID(ctx, "named-user")
+		require.NoError(t, err)
+		require.NotNil(t, profile.Name)
+		assert.Equal(t, "Test User Name", *profile.Name)
+		assert.Equal(t, "kg", profile.WeightUnit)
+	})
+}
+
+func TestSQLiteProfileRepository_Update(t *testing.T) {
+	repo, cleanup, db := setupTestDB(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	fixedTime := time.Date(2024, 1, 15, 10, 0, 0, 0, time.UTC)
+
+	// Create test user for updates
+	createTestUserWithEmail(t, db, "update-test-user", "update-test@example.com")
+
+	t.Run("updates name only", func(t *testing.T) {
+		newName := "Updated Name"
+		update := ProfileUpdate{
+			Name:      &newName,
+			SetName:   true,
+			UpdatedAt: fixedTime,
+		}
+
+		profile, err := repo.Update(ctx, "update-test-user", update)
+		require.NoError(t, err)
+		require.NotNil(t, profile)
+		require.NotNil(t, profile.Name)
+		assert.Equal(t, "Updated Name", *profile.Name)
+	})
+
+	t.Run("updates weight unit only", func(t *testing.T) {
+		update := ProfileUpdate{
+			WeightUnit:    "kg",
+			SetWeightUnit: true,
+			UpdatedAt:     fixedTime,
+		}
+
+		profile, err := repo.Update(ctx, "update-test-user", update)
+		require.NoError(t, err)
+		require.NotNil(t, profile)
+		assert.Equal(t, "kg", profile.WeightUnit)
+	})
+
+	t.Run("updates both name and weight unit", func(t *testing.T) {
+		newName := "Both Updated"
+		update := ProfileUpdate{
+			Name:          &newName,
+			SetName:       true,
+			WeightUnit:    "lb",
+			SetWeightUnit: true,
+			UpdatedAt:     fixedTime,
+		}
+
+		profile, err := repo.Update(ctx, "update-test-user", update)
+		require.NoError(t, err)
+		require.NotNil(t, profile)
+		require.NotNil(t, profile.Name)
+		assert.Equal(t, "Both Updated", *profile.Name)
+		assert.Equal(t, "lb", profile.WeightUnit)
+	})
+
+	t.Run("clears name to NULL", func(t *testing.T) {
+		update := ProfileUpdate{
+			Name:      nil, // Set to NULL
+			SetName:   true,
+			UpdatedAt: fixedTime,
+		}
+
+		profile, err := repo.Update(ctx, "update-test-user", update)
+		require.NoError(t, err)
+		require.NotNil(t, profile)
+		assert.Nil(t, profile.Name)
+	})
+
+	t.Run("returns not found for nonexistent user", func(t *testing.T) {
+		newName := "Test"
+		update := ProfileUpdate{
+			Name:      &newName,
+			SetName:   true,
+			UpdatedAt: fixedTime,
+		}
+
+		_, err := repo.Update(ctx, "nonexistent-user", update)
+		require.Error(t, err)
+		assert.True(t, apperrors.IsNotFound(err))
+	})
+
+	t.Run("updates timestamp correctly", func(t *testing.T) {
+		newName := "Timestamp Test"
+		update := ProfileUpdate{
+			Name:      &newName,
+			SetName:   true,
+			UpdatedAt: fixedTime,
+		}
+
+		profile, err := repo.Update(ctx, "update-test-user", update)
+		require.NoError(t, err)
+		require.NotNil(t, profile)
+		assert.Equal(t, fixedTime.Format("2006-01-02"), profile.UpdatedAt.Format("2006-01-02"))
+	})
+}
+
+func TestSQLiteProfileRepository_UpdateAndGet(t *testing.T) {
+	repo, cleanup, db := setupTestDB(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	fixedTime := time.Date(2024, 1, 15, 10, 0, 0, 0, time.UTC)
+
+	// Create test user
+	createTestUserWithEmail(t, db, "update-get-user", "update-get@example.com")
+
+	// Get original profile
+	original, err := repo.GetByUserID(ctx, "update-get-user")
+	require.NoError(t, err)
+
+	// Update the profile
+	newName := "Integration Test Update"
+	update := ProfileUpdate{
+		Name:          &newName,
+		SetName:       true,
+		WeightUnit:    "kg",
+		SetWeightUnit: true,
+		UpdatedAt:     fixedTime,
+	}
+
+	updated, err := repo.Update(ctx, "update-get-user", update)
+	require.NoError(t, err)
+
+	// Get the profile again
+	retrieved, err := repo.GetByUserID(ctx, "update-get-user")
+	require.NoError(t, err)
+
+	// Verify the update persisted
+	assert.Equal(t, original.ID, retrieved.ID)
+	assert.Equal(t, original.Email, retrieved.Email)
+	require.NotNil(t, retrieved.Name)
+	assert.Equal(t, "Integration Test Update", *retrieved.Name)
+	assert.Equal(t, "kg", retrieved.WeightUnit)
+	assert.Equal(t, updated.WeightUnit, retrieved.WeightUnit)
+}
+
+// TestProfileServiceWithRealDB tests the service layer with real database
+func TestProfileServiceWithRealDB(t *testing.T) {
+	repo, cleanup, db := setupTestDB(t)
+	defer cleanup()
+
+	svc := NewService(repo)
+	fixedTime := time.Date(2024, 1, 15, 10, 0, 0, 0, time.UTC)
+	svc.now = func() time.Time { return fixedTime }
+
+	ctx := context.Background()
+
+	// Create test user
+	createTestUserWithEmail(t, db, "svc-test-user", "svc-test@example.com")
+
+	t.Run("GetProfile with real DB", func(t *testing.T) {
+		profile, err := svc.GetProfile(ctx, "svc-test-user")
+		require.NoError(t, err)
+		require.NotNil(t, profile)
+		assert.Equal(t, "svc-test-user", profile.ID)
+	})
+
+	t.Run("UpdateProfile with real DB - name only", func(t *testing.T) {
+		req := UpdateProfileRequest{
+			Name: strPtr("Real DB Test Name"),
+		}
+
+		profile, err := svc.UpdateProfile(ctx, "svc-test-user", req)
+		require.NoError(t, err)
+		require.NotNil(t, profile)
+		require.NotNil(t, profile.Name)
+		assert.Equal(t, "Real DB Test Name", *profile.Name)
+	})
+
+	t.Run("UpdateProfile with real DB - weight unit only", func(t *testing.T) {
+		req := UpdateProfileRequest{
+			WeightUnit: strPtr("kg"),
+		}
+
+		profile, err := svc.UpdateProfile(ctx, "svc-test-user", req)
+		require.NoError(t, err)
+		require.NotNil(t, profile)
+		assert.Equal(t, "kg", profile.WeightUnit)
+	})
+
+	t.Run("UpdateProfile with real DB - both fields", func(t *testing.T) {
+		req := UpdateProfileRequest{
+			Name:       strPtr("Both Fields Updated"),
+			WeightUnit: strPtr("lb"),
+		}
+
+		profile, err := svc.UpdateProfile(ctx, "svc-test-user", req)
+		require.NoError(t, err)
+		require.NotNil(t, profile)
+		require.NotNil(t, profile.Name)
+		assert.Equal(t, "Both Fields Updated", *profile.Name)
+		assert.Equal(t, "lb", profile.WeightUnit)
+	})
+
+	t.Run("UpdateProfile with real DB - clear name", func(t *testing.T) {
+		req := UpdateProfileRequest{
+			Name: strPtr(""),
+		}
+
+		profile, err := svc.UpdateProfile(ctx, "svc-test-user", req)
+		require.NoError(t, err)
+		require.NotNil(t, profile)
+		assert.Nil(t, profile.Name, "name should be cleared")
+	})
+
+	t.Run("GetProfile returns not found for nonexistent user", func(t *testing.T) {
+		_, err := svc.GetProfile(ctx, "nonexistent")
+		require.Error(t, err)
+		assert.True(t, apperrors.IsNotFound(err))
+	})
+
+	t.Run("UpdateProfile returns not found for nonexistent user", func(t *testing.T) {
+		req := UpdateProfileRequest{
+			Name: strPtr("Test"),
+		}
+		_, err := svc.UpdateProfile(ctx, "nonexistent", req)
+		require.Error(t, err)
+		assert.True(t, apperrors.IsNotFound(err))
+	})
 }

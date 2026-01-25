@@ -1564,6 +1564,132 @@ func TestConcurrentSessions(t *testing.T) {
 }
 
 // TestSessionLogoutIsolation verifies that logging out one session doesn't affect others.
+// =============================================================================
+// SESSION VALIDATOR ADAPTER TESTS (REQ-TD2-006)
+// =============================================================================
+
+// TestSessionValidatorAdapter verifies that the adapter correctly wraps the auth service.
+func TestSessionValidatorAdapter(t *testing.T) {
+	baseTime := time.Date(2024, 1, 15, 10, 0, 0, 0, time.UTC)
+
+	t.Run("successful validation returns AuthUser", func(t *testing.T) {
+		userRepo := newMockUserRepo()
+		sessionRepo := newMockSessionRepo()
+
+		user := &User{
+			ID:        "user-123",
+			Email:     "test@example.com",
+			Name:      "Test User",
+			IsAdmin:   false,
+			CreatedAt: baseTime.Add(-24 * time.Hour),
+			UpdatedAt: baseTime.Add(-24 * time.Hour),
+		}
+		userRepo.users[user.ID] = user
+
+		sessionRepo.sessions["valid-token"] = &Session{
+			ID:        "session-123",
+			UserID:    "user-123",
+			Token:     "valid-token",
+			ExpiresAt: baseTime.Add(24 * time.Hour),
+			CreatedAt: baseTime.Add(-1 * time.Hour),
+		}
+
+		svc := NewService(userRepo, sessionRepo)
+		svc.now = func() time.Time { return baseTime }
+
+		adapter := NewSessionValidatorAdapter(svc)
+
+		authUser, err := adapter.ValidateSession(context.Background(), "valid-token")
+		require.NoError(t, err)
+		require.NotNil(t, authUser)
+		assert.Equal(t, "user-123", authUser.ID)
+		assert.Equal(t, "test@example.com", authUser.Email)
+		assert.Equal(t, "Test User", authUser.Name)
+		assert.False(t, authUser.IsAdmin)
+	})
+
+	t.Run("admin user validation returns correct IsAdmin flag", func(t *testing.T) {
+		userRepo := newMockUserRepo()
+		sessionRepo := newMockSessionRepo()
+
+		user := &User{
+			ID:        "admin-123",
+			Email:     "admin@example.com",
+			Name:      "Admin User",
+			IsAdmin:   true,
+			CreatedAt: baseTime.Add(-24 * time.Hour),
+			UpdatedAt: baseTime.Add(-24 * time.Hour),
+		}
+		userRepo.users[user.ID] = user
+
+		sessionRepo.sessions["admin-token"] = &Session{
+			ID:        "session-admin",
+			UserID:    "admin-123",
+			Token:     "admin-token",
+			ExpiresAt: baseTime.Add(24 * time.Hour),
+			CreatedAt: baseTime.Add(-1 * time.Hour),
+		}
+
+		svc := NewService(userRepo, sessionRepo)
+		svc.now = func() time.Time { return baseTime }
+
+		adapter := NewSessionValidatorAdapter(svc)
+
+		authUser, err := adapter.ValidateSession(context.Background(), "admin-token")
+		require.NoError(t, err)
+		require.NotNil(t, authUser)
+		assert.True(t, authUser.IsAdmin)
+	})
+
+	t.Run("invalid token returns error", func(t *testing.T) {
+		userRepo := newMockUserRepo()
+		sessionRepo := newMockSessionRepo()
+
+		svc := NewService(userRepo, sessionRepo)
+		adapter := NewSessionValidatorAdapter(svc)
+
+		authUser, err := adapter.ValidateSession(context.Background(), "invalid-token")
+		require.Error(t, err)
+		assert.Nil(t, authUser)
+		assert.True(t, apperrors.IsUnauthorized(err))
+	})
+
+	t.Run("empty token returns error", func(t *testing.T) {
+		userRepo := newMockUserRepo()
+		sessionRepo := newMockSessionRepo()
+
+		svc := NewService(userRepo, sessionRepo)
+		adapter := NewSessionValidatorAdapter(svc)
+
+		authUser, err := adapter.ValidateSession(context.Background(), "")
+		require.Error(t, err)
+		assert.Nil(t, authUser)
+	})
+
+	t.Run("expired session returns error", func(t *testing.T) {
+		userRepo := newMockUserRepo()
+		sessionRepo := newMockSessionRepo()
+
+		sessionRepo.sessions["expired-token"] = &Session{
+			ID:        "session-expired",
+			UserID:    "user-123",
+			Token:     "expired-token",
+			ExpiresAt: baseTime.Add(-1 * time.Hour), // Already expired
+			CreatedAt: baseTime.Add(-8 * 24 * time.Hour),
+		}
+
+		svc := NewService(userRepo, sessionRepo)
+		svc.now = func() time.Time { return baseTime }
+
+		adapter := NewSessionValidatorAdapter(svc)
+
+		authUser, err := adapter.ValidateSession(context.Background(), "expired-token")
+		require.Error(t, err)
+		assert.Nil(t, authUser)
+		assert.True(t, apperrors.IsUnauthorized(err))
+	})
+}
+
 func TestSessionLogoutIsolation(t *testing.T) {
 	baseTime := time.Date(2024, 1, 15, 10, 0, 0, 0, time.UTC)
 	hashedPassword, _ := bcrypt.GenerateFromPassword([]byte("password123"), bcryptCost)
