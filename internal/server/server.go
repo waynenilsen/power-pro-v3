@@ -301,10 +301,12 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	// User Program Enrollment routes:
 	// - Users can manage their own enrollment (enroll, view, unenroll)
 	// - Admins can manage any user's enrollment
-	enrollmentHandler := api.NewEnrollmentHandler(s.userProgramStateRepo, s.programRepo)
+	enrollmentHandler := api.NewEnrollmentHandler(s.userProgramStateRepo, s.programRepo, s.workoutSessionRepo, s.eventBus)
 	mux.Handle("POST /users/{userId}/program", withAuth(enrollmentHandler.Enroll))
 	mux.Handle("GET /users/{userId}/program", withAuth(enrollmentHandler.Get))
 	mux.Handle("DELETE /users/{userId}/program", withAuth(enrollmentHandler.Unenroll))
+	mux.Handle("POST /users/{userId}/enrollment/next-cycle", withAuth(enrollmentHandler.NextCycle))
+	mux.Handle("POST /users/{userId}/enrollment/advance-week", withAuth(enrollmentHandler.AdvanceWeek))
 
 	// Meet Date routes:
 	// - Users can manage their own meet date

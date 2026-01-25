@@ -1,10 +1,12 @@
 package api
 
 import (
+	"context"
 	"net/http"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/waynenilsen/power-pro-v3/internal/domain/event"
 	"github.com/waynenilsen/power-pro-v3/internal/domain/userprogramstate"
 	apperrors "github.com/waynenilsen/power-pro-v3/internal/errors"
 	"github.com/waynenilsen/power-pro-v3/internal/middleware"
@@ -15,13 +17,22 @@ import (
 type EnrollmentHandler struct {
 	stateRepo   *repository.UserProgramStateRepository
 	programRepo *repository.ProgramRepository
+	sessionRepo *repository.WorkoutSessionRepository
+	eventBus    *event.Bus
 }
 
 // NewEnrollmentHandler creates a new EnrollmentHandler.
-func NewEnrollmentHandler(stateRepo *repository.UserProgramStateRepository, programRepo *repository.ProgramRepository) *EnrollmentHandler {
+func NewEnrollmentHandler(
+	stateRepo *repository.UserProgramStateRepository,
+	programRepo *repository.ProgramRepository,
+	sessionRepo *repository.WorkoutSessionRepository,
+	eventBus *event.Bus,
+) *EnrollmentHandler {
 	return &EnrollmentHandler{
 		stateRepo:   stateRepo,
 		programRepo: programRepo,
+		sessionRepo: sessionRepo,
+		eventBus:    eventBus,
 	}
 }
 
@@ -41,14 +52,28 @@ type EnrollmentStateResponse struct {
 	CurrentDayIndex       *int `json:"currentDayIndex,omitempty"`
 }
 
+// CurrentWorkoutSessionResponse represents the current workout session in an enrollment response.
+type CurrentWorkoutSessionResponse struct {
+	ID         string     `json:"id"`
+	WeekNumber int        `json:"weekNumber"`
+	DayIndex   int        `json:"dayIndex"`
+	Status     string     `json:"status"`
+	StartedAt  time.Time  `json:"startedAt"`
+	FinishedAt *time.Time `json:"finishedAt,omitempty"`
+}
+
 // EnrollmentResponse represents the API response format for a user's program enrollment.
 type EnrollmentResponse struct {
-	ID         string                    `json:"id"`
-	UserID     string                    `json:"userId"`
-	Program    EnrollmentProgramResponse `json:"program"`
-	State      EnrollmentStateResponse   `json:"state"`
-	EnrolledAt time.Time                 `json:"enrolledAt"`
-	UpdatedAt  time.Time                 `json:"updatedAt"`
+	ID                    string                         `json:"id"`
+	UserID                string                         `json:"userId"`
+	Program               EnrollmentProgramResponse      `json:"program"`
+	State                 EnrollmentStateResponse        `json:"state"`
+	EnrollmentStatus      string                         `json:"enrollmentStatus"`
+	CycleStatus           string                         `json:"cycleStatus"`
+	WeekStatus            string                         `json:"weekStatus"`
+	CurrentWorkoutSession *CurrentWorkoutSessionResponse `json:"currentWorkoutSession"`
+	EnrolledAt            time.Time                      `json:"enrolledAt"`
+	UpdatedAt             time.Time                      `json:"updatedAt"`
 }
 
 // EnrollRequest represents the request body for enrolling a user in a program.
@@ -56,7 +81,7 @@ type EnrollRequest struct {
 	ProgramID string `json:"programId"`
 }
 
-func enrollmentToResponse(e *userprogramstate.EnrollmentWithProgram) EnrollmentResponse {
+func enrollmentToResponse(e *userprogramstate.EnrollmentWithProgram, currentSession *CurrentWorkoutSessionResponse) EnrollmentResponse {
 	return EnrollmentResponse{
 		ID:     e.State.ID,
 		UserID: e.State.UserID,
@@ -72,8 +97,12 @@ func enrollmentToResponse(e *userprogramstate.EnrollmentWithProgram) EnrollmentR
 			CurrentCycleIteration: e.State.CurrentCycleIteration,
 			CurrentDayIndex:       e.State.CurrentDayIndex,
 		},
-		EnrolledAt: e.State.EnrolledAt,
-		UpdatedAt:  e.State.UpdatedAt,
+		EnrollmentStatus:      string(e.State.EnrollmentStatus),
+		CycleStatus:           string(e.State.CycleStatus),
+		WeekStatus:            string(e.State.WeekStatus),
+		CurrentWorkoutSession: currentSession,
+		EnrolledAt:            e.State.EnrolledAt,
+		UpdatedAt:             e.State.UpdatedAt,
 	}
 }
 
@@ -162,7 +191,8 @@ func (h *EnrollmentHandler) Enroll(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeData(w, http.StatusCreated, enrollmentToResponse(enrollment))
+	// New enrollment has no active workout session
+	writeData(w, http.StatusCreated, enrollmentToResponse(enrollment, nil))
 }
 
 // Get handles GET /users/{userId}/program
@@ -191,7 +221,27 @@ func (h *EnrollmentHandler) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeData(w, http.StatusOK, enrollmentToResponse(enrollment))
+	// Fetch current workout session if any
+	var currentSessionResponse *CurrentWorkoutSessionResponse
+	if h.sessionRepo != nil {
+		activeSession, err := h.sessionRepo.GetActiveByUserProgramStateID(enrollment.State.ID)
+		if err != nil {
+			writeDomainError(w, apperrors.NewInternal("failed to get active workout session", err))
+			return
+		}
+		if activeSession != nil {
+			currentSessionResponse = &CurrentWorkoutSessionResponse{
+				ID:         activeSession.ID,
+				WeekNumber: activeSession.WeekNumber,
+				DayIndex:   activeSession.DayIndex,
+				Status:     string(activeSession.Status),
+				StartedAt:  activeSession.StartedAt,
+				FinishedAt: activeSession.FinishedAt,
+			}
+		}
+	}
+
+	writeData(w, http.StatusOK, enrollmentToResponse(enrollment, currentSessionResponse))
 }
 
 // Unenroll handles DELETE /users/{userId}/program
@@ -228,4 +278,157 @@ func (h *EnrollmentHandler) Unenroll(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// NextCycle handles POST /users/{userId}/enrollment/next-cycle
+// Starts a new cycle when the enrollment is in BETWEEN_CYCLES state.
+func (h *EnrollmentHandler) NextCycle(w http.ResponseWriter, r *http.Request) {
+	userID := r.PathValue("userId")
+	if userID == "" {
+		writeDomainError(w, apperrors.NewBadRequest("missing user ID"))
+		return
+	}
+
+	// Authorization check
+	authUserID := middleware.GetUserID(r)
+	isAdmin := middleware.IsAdmin(r)
+	if authUserID != userID && !isAdmin {
+		writeDomainError(w, apperrors.NewForbidden("you can only manage your own enrollment"))
+		return
+	}
+
+	// Get current enrollment
+	enrollment, err := h.stateRepo.GetEnrollmentWithProgram(userID)
+	if err != nil {
+		writeDomainError(w, apperrors.NewInternal("failed to get enrollment", err))
+		return
+	}
+	if enrollment == nil {
+		writeDomainError(w, apperrors.NewNotFound("enrollment", userID))
+		return
+	}
+
+	// Validate enrollment is BETWEEN_CYCLES
+	if enrollment.State.EnrollmentStatus != userprogramstate.EnrollmentStatusBetweenCycles {
+		writeDomainError(w, apperrors.NewBadRequest("enrollment must be in BETWEEN_CYCLES state to start a new cycle"))
+		return
+	}
+
+	// Update state: set ACTIVE, increment cycle iteration, reset week to 1
+	enrollment.State.EnrollmentStatus = userprogramstate.EnrollmentStatusActive
+	enrollment.State.CurrentCycleIteration++
+	enrollment.State.CurrentWeek = 1
+	enrollment.State.CurrentDayIndex = nil
+	enrollment.State.CycleStatus = userprogramstate.CycleStatusPending
+	enrollment.State.WeekStatus = userprogramstate.WeekStatusPending
+	enrollment.State.UpdatedAt = time.Now()
+
+	// Persist changes
+	if err := h.stateRepo.Update(enrollment.State); err != nil {
+		writeDomainError(w, apperrors.NewInternal("failed to update enrollment", err))
+		return
+	}
+
+	// Emit CYCLE_STARTED event
+	if h.eventBus != nil {
+		evt := event.NewStateEvent(event.EventCycleStarted, userID, enrollment.State.ProgramID).
+			WithPayload(event.PayloadCycleIteration, enrollment.State.CurrentCycleIteration).
+			WithPayload(event.PayloadWeekNumber, enrollment.State.CurrentWeek)
+		h.eventBus.PublishAsync(context.Background(), evt)
+	}
+
+	// Fetch updated enrollment for response
+	updatedEnrollment, err := h.stateRepo.GetEnrollmentWithProgram(userID)
+	if err != nil {
+		writeDomainError(w, apperrors.NewInternal("failed to retrieve updated enrollment", err))
+		return
+	}
+
+	writeData(w, http.StatusOK, enrollmentToResponse(updatedEnrollment, nil))
+}
+
+// AdvanceWeek handles POST /users/{userId}/enrollment/advance-week
+// Advances to the next week in the cycle. If at the final week, transitions to BETWEEN_CYCLES.
+func (h *EnrollmentHandler) AdvanceWeek(w http.ResponseWriter, r *http.Request) {
+	userID := r.PathValue("userId")
+	if userID == "" {
+		writeDomainError(w, apperrors.NewBadRequest("missing user ID"))
+		return
+	}
+
+	// Authorization check
+	authUserID := middleware.GetUserID(r)
+	isAdmin := middleware.IsAdmin(r)
+	if authUserID != userID && !isAdmin {
+		writeDomainError(w, apperrors.NewForbidden("you can only manage your own enrollment"))
+		return
+	}
+
+	// Get current enrollment
+	enrollment, err := h.stateRepo.GetEnrollmentWithProgram(userID)
+	if err != nil {
+		writeDomainError(w, apperrors.NewInternal("failed to get enrollment", err))
+		return
+	}
+	if enrollment == nil {
+		writeDomainError(w, apperrors.NewNotFound("enrollment", userID))
+		return
+	}
+
+	// Validate enrollment is ACTIVE
+	if enrollment.State.EnrollmentStatus != userprogramstate.EnrollmentStatusActive {
+		writeDomainError(w, apperrors.NewBadRequest("enrollment must be ACTIVE to advance week"))
+		return
+	}
+
+	previousWeek := enrollment.State.CurrentWeek
+	cycleBoundaryReached := false
+
+	// Check if this is the final week of the cycle
+	if enrollment.State.CurrentWeek >= enrollment.CycleLengthWeeks {
+		// At final week - transition to BETWEEN_CYCLES
+		enrollment.State.EnrollmentStatus = userprogramstate.EnrollmentStatusBetweenCycles
+		enrollment.State.CycleStatus = userprogramstate.CycleStatusCompleted
+		enrollment.State.WeekStatus = userprogramstate.WeekStatusCompleted
+		cycleBoundaryReached = true
+	} else {
+		// Advance to next week
+		enrollment.State.CurrentWeek++
+		enrollment.State.CurrentDayIndex = nil
+		enrollment.State.WeekStatus = userprogramstate.WeekStatusPending
+	}
+
+	enrollment.State.UpdatedAt = time.Now()
+
+	// Persist changes
+	if err := h.stateRepo.Update(enrollment.State); err != nil {
+		writeDomainError(w, apperrors.NewInternal("failed to update enrollment", err))
+		return
+	}
+
+	// Emit WEEK_COMPLETED event
+	if h.eventBus != nil {
+		evt := event.NewStateEvent(event.EventWeekCompleted, userID, enrollment.State.ProgramID).
+			WithPayload(event.PayloadPreviousWeek, previousWeek).
+			WithPayload(event.PayloadNewWeek, enrollment.State.CurrentWeek).
+			WithPayload(event.PayloadCycleIteration, enrollment.State.CurrentCycleIteration)
+		h.eventBus.PublishAsync(context.Background(), evt)
+
+		// Emit CYCLE_BOUNDARY_REACHED if applicable
+		if cycleBoundaryReached {
+			boundaryEvt := event.NewStateEvent(event.EventCycleBoundaryReached, userID, enrollment.State.ProgramID).
+				WithPayload(event.PayloadCompletedCycle, enrollment.State.CurrentCycleIteration).
+				WithPayload(event.PayloadTotalWeeks, enrollment.CycleLengthWeeks)
+			h.eventBus.PublishAsync(context.Background(), boundaryEvt)
+		}
+	}
+
+	// Fetch updated enrollment for response
+	updatedEnrollment, err := h.stateRepo.GetEnrollmentWithProgram(userID)
+	if err != nil {
+		writeDomainError(w, apperrors.NewInternal("failed to retrieve updated enrollment", err))
+		return
+	}
+
+	writeData(w, http.StatusOK, enrollmentToResponse(updatedEnrollment, nil))
 }

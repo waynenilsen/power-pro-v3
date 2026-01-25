@@ -27,14 +27,28 @@ type EnrollmentStateTestResponse struct {
 	CurrentDayIndex       *int `json:"currentDayIndex,omitempty"`
 }
 
+// CurrentWorkoutSessionTestResponse represents the current workout session in an enrollment response.
+type CurrentWorkoutSessionTestResponse struct {
+	ID         string     `json:"id"`
+	WeekNumber int        `json:"weekNumber"`
+	DayIndex   int        `json:"dayIndex"`
+	Status     string     `json:"status"`
+	StartedAt  time.Time  `json:"startedAt"`
+	FinishedAt *time.Time `json:"finishedAt,omitempty"`
+}
+
 // EnrollmentTestResponse represents the API response format for a user's program enrollment.
 type EnrollmentTestResponse struct {
-	ID         string                        `json:"id"`
-	UserID     string                        `json:"userId"`
-	Program    EnrollmentProgramTestResponse `json:"program"`
-	State      EnrollmentStateTestResponse   `json:"state"`
-	EnrolledAt time.Time                     `json:"enrolledAt"`
-	UpdatedAt  time.Time                     `json:"updatedAt"`
+	ID                    string                             `json:"id"`
+	UserID                string                             `json:"userId"`
+	Program               EnrollmentProgramTestResponse      `json:"program"`
+	State                 EnrollmentStateTestResponse        `json:"state"`
+	EnrollmentStatus      string                             `json:"enrollmentStatus"`
+	CycleStatus           string                             `json:"cycleStatus"`
+	WeekStatus            string                             `json:"weekStatus"`
+	CurrentWorkoutSession *CurrentWorkoutSessionTestResponse `json:"currentWorkoutSession"`
+	EnrolledAt            time.Time                          `json:"enrolledAt"`
+	UpdatedAt             time.Time                          `json:"updatedAt"`
 }
 
 // EnrollmentEnvelope wraps single enrollment response with standard envelope.
@@ -130,10 +144,22 @@ func createEnrollmentTestCycle(t *testing.T, ts *testutil.TestServer, name strin
 	if err != nil {
 		t.Fatalf("Failed to create test cycle: %v", err)
 	}
-	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		t.Fatalf("Expected status 201 for cycle creation, got %d: %s", resp.StatusCode, bodyBytes)
+	}
 
 	var envelope CycleEnvelopeForEnrollment
-	json.NewDecoder(resp.Body).Decode(&envelope)
+	if err := json.NewDecoder(resp.Body).Decode(&envelope); err != nil {
+		resp.Body.Close()
+		t.Fatalf("Failed to decode cycle response: %v", err)
+	}
+	resp.Body.Close()
+	if envelope.Data.ID == "" {
+		t.Fatal("Cycle ID is empty")
+	}
 	return envelope.Data.ID
 }
 
@@ -146,8 +172,16 @@ func createEnrollmentTestProgram(t *testing.T, ts *testutil.TestServer, name, sl
 	}
 	defer resp.Body.Close()
 
+	if resp.StatusCode != http.StatusCreated {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		t.Fatalf("Expected status 201 for program creation, got %d: %s", resp.StatusCode, bodyBytes)
+	}
+
 	var envelope ProgramEnvelopeForEnrollment
 	json.NewDecoder(resp.Body).Decode(&envelope)
+	if envelope.Data.ID == "" {
+		t.Fatal("Program ID is empty")
+	}
 	return envelope.Data.ID
 }
 
@@ -563,6 +597,391 @@ func TestEnrollmentResponseFormat(t *testing.T) {
 		}
 		if enrollment.Program.CycleLengthWeeks != 4 {
 			t.Errorf("Expected program.cycleLengthWeeks 4, got %d", enrollment.Program.CycleLengthWeeks)
+		}
+	})
+
+	t.Run("includes enrollment status fields", func(t *testing.T) {
+		resp, _ := userGetEnrollment(ts.URL("/users/"+userID+"/program"), userID)
+		defer resp.Body.Close()
+
+		var envelope EnrollmentEnvelope
+		json.NewDecoder(resp.Body).Decode(&envelope)
+		enrollment := envelope.Data
+
+		if enrollment.EnrollmentStatus != "ACTIVE" {
+			t.Errorf("Expected enrollmentStatus 'ACTIVE', got %s", enrollment.EnrollmentStatus)
+		}
+		if enrollment.CycleStatus != "PENDING" {
+			t.Errorf("Expected cycleStatus 'PENDING', got %s", enrollment.CycleStatus)
+		}
+		if enrollment.WeekStatus != "PENDING" {
+			t.Errorf("Expected weekStatus 'PENDING', got %s", enrollment.WeekStatus)
+		}
+		if enrollment.CurrentWorkoutSession != nil {
+			t.Error("Expected currentWorkoutSession to be nil for new enrollment")
+		}
+	})
+}
+
+// Helper functions for next-cycle and advance-week endpoints
+
+func userPostNextCycle(url string, userID string) (*http.Response, error) {
+	req, err := http.NewRequest(http.MethodPost, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("X-User-ID", userID)
+	return http.DefaultClient.Do(req)
+}
+
+func userPostAdvanceWeek(url string, userID string) (*http.Response, error) {
+	req, err := http.NewRequest(http.MethodPost, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("X-User-ID", userID)
+	return http.DefaultClient.Do(req)
+}
+
+func adminPostNextCycle(url string) (*http.Response, error) {
+	req, err := http.NewRequest(http.MethodPost, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("X-User-ID", testutil.TestAdminID)
+	req.Header.Set("X-Admin", "true")
+	return http.DefaultClient.Do(req)
+}
+
+func adminPostAdvanceWeek(url string) (*http.Response, error) {
+	req, err := http.NewRequest(http.MethodPost, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("X-User-ID", testutil.TestAdminID)
+	req.Header.Set("X-Admin", "true")
+	return http.DefaultClient.Do(req)
+}
+
+func TestEnrollmentAdvanceWeek(t *testing.T) {
+	ts, err := testutil.NewTestServer()
+	if err != nil {
+		t.Fatalf("Failed to create test server: %v", err)
+	}
+	defer ts.Close()
+
+	// Create a cycle with 4 weeks and program for enrollment
+	cycleID := createEnrollmentTestCycle(t, ts, "Advance Week Test Cycle")
+	programID := createEnrollmentTestProgram(t, ts, "Advance Week Test Program", "advance-week-test-program", cycleID)
+
+	userID := testutil.TestUserID
+
+	// Enroll user
+	body := `{"programId": "` + programID + `"}`
+	resp, err := userPostEnrollment(ts.URL("/users/"+userID+"/program"), body, userID)
+	if err != nil {
+		t.Fatalf("Failed to enroll user: %v", err)
+	}
+	if resp.StatusCode != http.StatusCreated {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		t.Fatalf("Expected status 201 for enrollment, got %d: %s", resp.StatusCode, bodyBytes)
+	}
+	resp.Body.Close()
+
+	t.Run("advances from week 1 to week 2", func(t *testing.T) {
+		resp, err := userPostAdvanceWeek(ts.URL("/users/"+userID+"/enrollment/advance-week"), userID)
+		if err != nil {
+			t.Fatalf("Failed to make request: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			bodyBytes, _ := io.ReadAll(resp.Body)
+			t.Fatalf("Expected status 200, got %d: %s", resp.StatusCode, bodyBytes)
+		}
+
+		var envelope EnrollmentEnvelope
+		if err := json.NewDecoder(resp.Body).Decode(&envelope); err != nil {
+			t.Fatalf("Failed to decode response: %v", err)
+		}
+		enrollment := envelope.Data
+
+		if enrollment.State.CurrentWeek != 2 {
+			t.Errorf("Expected currentWeek 2, got %d", enrollment.State.CurrentWeek)
+		}
+		if enrollment.EnrollmentStatus != "ACTIVE" {
+			t.Errorf("Expected enrollmentStatus 'ACTIVE', got %s", enrollment.EnrollmentStatus)
+		}
+		if enrollment.WeekStatus != "PENDING" {
+			t.Errorf("Expected weekStatus 'PENDING', got %s", enrollment.WeekStatus)
+		}
+	})
+
+	t.Run("advances to week 3", func(t *testing.T) {
+		resp, _ := userPostAdvanceWeek(ts.URL("/users/"+userID+"/enrollment/advance-week"), userID)
+		defer resp.Body.Close()
+
+		var envelope EnrollmentEnvelope
+		json.NewDecoder(resp.Body).Decode(&envelope)
+
+		if envelope.Data.State.CurrentWeek != 3 {
+			t.Errorf("Expected currentWeek 3, got %d", envelope.Data.State.CurrentWeek)
+		}
+	})
+
+	t.Run("advances to week 4 (final week)", func(t *testing.T) {
+		resp, _ := userPostAdvanceWeek(ts.URL("/users/"+userID+"/enrollment/advance-week"), userID)
+		defer resp.Body.Close()
+
+		var envelope EnrollmentEnvelope
+		json.NewDecoder(resp.Body).Decode(&envelope)
+
+		if envelope.Data.State.CurrentWeek != 4 {
+			t.Errorf("Expected currentWeek 4, got %d", envelope.Data.State.CurrentWeek)
+		}
+	})
+
+	t.Run("advancing from final week transitions to BETWEEN_CYCLES", func(t *testing.T) {
+		resp, err := userPostAdvanceWeek(ts.URL("/users/"+userID+"/enrollment/advance-week"), userID)
+		if err != nil {
+			t.Fatalf("Failed to make request: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			bodyBytes, _ := io.ReadAll(resp.Body)
+			t.Fatalf("Expected status 200, got %d: %s", resp.StatusCode, bodyBytes)
+		}
+
+		var envelope EnrollmentEnvelope
+		json.NewDecoder(resp.Body).Decode(&envelope)
+		enrollment := envelope.Data
+
+		if enrollment.EnrollmentStatus != "BETWEEN_CYCLES" {
+			t.Errorf("Expected enrollmentStatus 'BETWEEN_CYCLES', got %s", enrollment.EnrollmentStatus)
+		}
+		if enrollment.CycleStatus != "COMPLETED" {
+			t.Errorf("Expected cycleStatus 'COMPLETED', got %s", enrollment.CycleStatus)
+		}
+		if enrollment.WeekStatus != "COMPLETED" {
+			t.Errorf("Expected weekStatus 'COMPLETED', got %s", enrollment.WeekStatus)
+		}
+	})
+
+	t.Run("cannot advance week when BETWEEN_CYCLES", func(t *testing.T) {
+		resp, err := userPostAdvanceWeek(ts.URL("/users/"+userID+"/enrollment/advance-week"), userID)
+		if err != nil {
+			t.Fatalf("Failed to make request: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusBadRequest {
+			t.Errorf("Expected status 400, got %d", resp.StatusCode)
+		}
+	})
+}
+
+func TestEnrollmentNextCycle(t *testing.T) {
+	ts, err := testutil.NewTestServer()
+	if err != nil {
+		t.Fatalf("Failed to create test server: %v", err)
+	}
+	defer ts.Close()
+
+	// Create a cycle with 4 weeks and program for enrollment
+	cycleID := createEnrollmentTestCycle(t, ts, "Next Cycle Test Cycle")
+	programID := createEnrollmentTestProgram(t, ts, "Next Cycle Test Program", "next-cycle-test-program", cycleID)
+
+	userID := testutil.TestUserID
+
+	// Enroll user
+	body := `{"programId": "` + programID + `"}`
+	resp, err := userPostEnrollment(ts.URL("/users/"+userID+"/program"), body, userID)
+	if err != nil {
+		t.Fatalf("Failed to enroll user: %v", err)
+	}
+	if resp.StatusCode != http.StatusCreated {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		t.Fatalf("Expected status 201 for enrollment, got %d: %s", resp.StatusCode, bodyBytes)
+	}
+	resp.Body.Close()
+
+	// Advance through all 4 weeks to reach BETWEEN_CYCLES
+	for i := 0; i < 4; i++ {
+		resp, err := userPostAdvanceWeek(ts.URL("/users/"+userID+"/enrollment/advance-week"), userID)
+		if err != nil {
+			t.Fatalf("Failed to advance week: %v", err)
+		}
+		if resp.StatusCode != http.StatusOK {
+			bodyBytes, _ := io.ReadAll(resp.Body)
+			t.Fatalf("Expected status 200 for advance-week, got %d: %s", resp.StatusCode, bodyBytes)
+		}
+		resp.Body.Close()
+	}
+
+	// Verify we're in BETWEEN_CYCLES
+	getResp, _ := userGetEnrollment(ts.URL("/users/"+userID+"/program"), userID)
+	var checkEnv EnrollmentEnvelope
+	json.NewDecoder(getResp.Body).Decode(&checkEnv)
+	getResp.Body.Close()
+	if checkEnv.Data.EnrollmentStatus != "BETWEEN_CYCLES" {
+		t.Fatalf("Expected to be in BETWEEN_CYCLES state, got %s", checkEnv.Data.EnrollmentStatus)
+	}
+
+	t.Run("starts new cycle from BETWEEN_CYCLES", func(t *testing.T) {
+		resp, err := userPostNextCycle(ts.URL("/users/"+userID+"/enrollment/next-cycle"), userID)
+		if err != nil {
+			t.Fatalf("Failed to make request: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			bodyBytes, _ := io.ReadAll(resp.Body)
+			t.Fatalf("Expected status 200, got %d: %s", resp.StatusCode, bodyBytes)
+		}
+
+		var envelope EnrollmentEnvelope
+		if err := json.NewDecoder(resp.Body).Decode(&envelope); err != nil {
+			t.Fatalf("Failed to decode response: %v", err)
+		}
+		enrollment := envelope.Data
+
+		if enrollment.EnrollmentStatus != "ACTIVE" {
+			t.Errorf("Expected enrollmentStatus 'ACTIVE', got %s", enrollment.EnrollmentStatus)
+		}
+		if enrollment.State.CurrentCycleIteration != 2 {
+			t.Errorf("Expected currentCycleIteration 2, got %d", enrollment.State.CurrentCycleIteration)
+		}
+		if enrollment.State.CurrentWeek != 1 {
+			t.Errorf("Expected currentWeek 1, got %d", enrollment.State.CurrentWeek)
+		}
+		if enrollment.CycleStatus != "PENDING" {
+			t.Errorf("Expected cycleStatus 'PENDING', got %s", enrollment.CycleStatus)
+		}
+		if enrollment.WeekStatus != "PENDING" {
+			t.Errorf("Expected weekStatus 'PENDING', got %s", enrollment.WeekStatus)
+		}
+	})
+
+	t.Run("cannot start next cycle when ACTIVE", func(t *testing.T) {
+		resp, err := userPostNextCycle(ts.URL("/users/"+userID+"/enrollment/next-cycle"), userID)
+		if err != nil {
+			t.Fatalf("Failed to make request: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusBadRequest {
+			t.Errorf("Expected status 400, got %d", resp.StatusCode)
+		}
+	})
+}
+
+func TestEnrollmentStateEndpointsValidation(t *testing.T) {
+	ts, err := testutil.NewTestServer()
+	if err != nil {
+		t.Fatalf("Failed to create test server: %v", err)
+	}
+	defer ts.Close()
+
+	t.Run("returns 404 for non-enrolled user on next-cycle", func(t *testing.T) {
+		resp, err := userPostNextCycle(ts.URL("/users/not-enrolled-user/enrollment/next-cycle"), "not-enrolled-user")
+		if err != nil {
+			t.Fatalf("Failed to make request: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusNotFound {
+			t.Errorf("Expected status 404, got %d", resp.StatusCode)
+		}
+	})
+
+	t.Run("returns 404 for non-enrolled user on advance-week", func(t *testing.T) {
+		resp, err := userPostAdvanceWeek(ts.URL("/users/not-enrolled-user/enrollment/advance-week"), "not-enrolled-user")
+		if err != nil {
+			t.Fatalf("Failed to make request: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusNotFound {
+			t.Errorf("Expected status 404, got %d", resp.StatusCode)
+		}
+	})
+}
+
+func TestEnrollmentStateEndpointsAuthorization(t *testing.T) {
+	ts, err := testutil.NewTestServer()
+	if err != nil {
+		t.Fatalf("Failed to create test server: %v", err)
+	}
+	defer ts.Close()
+
+	// Create a cycle and program for enrollment
+	cycleID := createEnrollmentTestCycle(t, ts, "Auth State Test Cycle")
+	programID := createEnrollmentTestProgram(t, ts, "Auth State Test Program", "auth-state-test-program", cycleID)
+
+	userID := "auth-test-user"
+	otherUserID := "other-user"
+
+	// Enroll user
+	body := `{"programId": "` + programID + `"}`
+	resp, err := userPostEnrollment(ts.URL("/users/"+userID+"/program"), body, userID)
+	if err != nil {
+		t.Fatalf("Failed to enroll user: %v", err)
+	}
+	if resp.StatusCode != http.StatusCreated {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		t.Fatalf("Expected status 201 for enrollment, got %d: %s", resp.StatusCode, bodyBytes)
+	}
+	resp.Body.Close()
+
+	t.Run("unauthenticated user gets 401 on advance-week", func(t *testing.T) {
+		req, _ := http.NewRequest(http.MethodPost, ts.URL("/users/"+userID+"/enrollment/advance-week"), nil)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("Failed to make request: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusUnauthorized {
+			t.Errorf("Expected status 401, got %d", resp.StatusCode)
+		}
+	})
+
+	t.Run("unauthenticated user gets 401 on next-cycle", func(t *testing.T) {
+		req, _ := http.NewRequest(http.MethodPost, ts.URL("/users/"+userID+"/enrollment/next-cycle"), nil)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("Failed to make request: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusUnauthorized {
+			t.Errorf("Expected status 401, got %d", resp.StatusCode)
+		}
+	})
+
+	t.Run("user cannot advance another user's week", func(t *testing.T) {
+		resp, err := userPostAdvanceWeek(ts.URL("/users/"+userID+"/enrollment/advance-week"), otherUserID)
+		if err != nil {
+			t.Fatalf("Failed to make request: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusForbidden {
+			t.Errorf("Expected status 403, got %d", resp.StatusCode)
+		}
+	})
+
+	t.Run("admin can advance any user's week", func(t *testing.T) {
+		resp, err := adminPostAdvanceWeek(ts.URL("/users/" + userID + "/enrollment/advance-week"))
+		if err != nil {
+			t.Fatalf("Failed to make request: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			bodyBytes, _ := io.ReadAll(resp.Body)
+			t.Errorf("Expected status 200, got %d: %s", resp.StatusCode, bodyBytes)
 		}
 	})
 }
