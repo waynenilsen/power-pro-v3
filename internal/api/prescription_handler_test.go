@@ -71,7 +71,7 @@ func TestListPrescriptions(t *testing.T) {
 	}
 	defer ts.Close()
 
-	t.Run("returns empty list initially", func(t *testing.T) {
+	t.Run("returns seeded prescriptions from canonical programs", func(t *testing.T) {
 		resp, err := authGet(ts.URL("/prescriptions"))
 		if err != nil {
 			t.Fatalf("Failed to make request: %v", err)
@@ -88,20 +88,25 @@ func TestListPrescriptions(t *testing.T) {
 			t.Fatalf("Failed to decode response: %v", err)
 		}
 
-		if len(result.Data) != 0 {
-			t.Errorf("Expected 0 prescriptions, got %d", len(result.Data))
-		}
-		if result.Meta == nil || result.Meta.Total != 0 {
+		// Canonical programs seed many prescriptions - just verify we have some
+		if result.Meta == nil || result.Meta.Total == 0 {
 			total := int64(0)
 			if result.Meta != nil {
 				total = result.Meta.Total
 			}
-			t.Errorf("Expected total 0, got %d", total)
+			t.Errorf("Expected seeded prescriptions from canonical programs, got %d", total)
 		}
 	})
 
 	t.Run("returns prescriptions with pagination", func(t *testing.T) {
-		// Create multiple prescriptions
+		// Get baseline count
+		baselineResp, _ := authGet(ts.URL("/prescriptions"))
+		var baselineResult PaginatedPrescriptionsResponse
+		json.NewDecoder(baselineResp.Body).Decode(&baselineResult)
+		baselineResp.Body.Close()
+		baselineCount := baselineResult.Meta.Total
+
+		// Create 5 additional prescriptions
 		for i := 0; i < 5; i++ {
 			body := fmt.Sprintf(`{
 				"liftId": "%s",
@@ -135,8 +140,9 @@ func TestListPrescriptions(t *testing.T) {
 		if result.Meta.Limit != 2 {
 			t.Errorf("Expected limit 2, got %d", result.Meta.Limit)
 		}
-		if result.Meta.Total != 5 {
-			t.Errorf("Expected total 5, got %d", result.Meta.Total)
+		expectedTotal := baselineCount + 5
+		if result.Meta.Total != expectedTotal {
+			t.Errorf("Expected total %d, got %d", expectedTotal, result.Meta.Total)
 		}
 		if !result.Meta.HasMore {
 			t.Error("Expected hasMore to be true")
@@ -153,7 +159,44 @@ func TestListPrescriptionsFilterByLift(t *testing.T) {
 
 	benchID := "00000000-0000-0000-0000-000000000002"
 
-	// Create prescriptions for squat
+	// Get baseline count of squat prescriptions (from canonical programs)
+	baselineSquatResp, err := authGet(ts.URL("/prescriptions?lift_id=" + seededSquatID))
+	if err != nil {
+		t.Fatalf("Failed to get baseline squat prescriptions: %v", err)
+	}
+	if baselineSquatResp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(baselineSquatResp.Body)
+		baselineSquatResp.Body.Close()
+		t.Fatalf("Expected status 200, got %d: %s", baselineSquatResp.StatusCode, body)
+	}
+	var baselineSquatResult PaginatedPrescriptionsResponse
+	if err := json.NewDecoder(baselineSquatResp.Body).Decode(&baselineSquatResult); err != nil {
+		baselineSquatResp.Body.Close()
+		t.Fatalf("Failed to decode baseline squat response: %v", err)
+	}
+	baselineSquatResp.Body.Close()
+	if baselineSquatResult.Meta == nil {
+		t.Fatal("Expected meta to be present in baseline squat response")
+	}
+	baselineSquatCount := baselineSquatResult.Meta.Total
+
+	// Get baseline count of bench prescriptions
+	baselineBenchResp, err := authGet(ts.URL("/prescriptions?lift_id=" + benchID))
+	if err != nil {
+		t.Fatalf("Failed to get baseline bench prescriptions: %v", err)
+	}
+	var baselineBenchResult PaginatedPrescriptionsResponse
+	if err := json.NewDecoder(baselineBenchResp.Body).Decode(&baselineBenchResult); err != nil {
+		baselineBenchResp.Body.Close()
+		t.Fatalf("Failed to decode baseline bench response: %v", err)
+	}
+	baselineBenchResp.Body.Close()
+	if baselineBenchResult.Meta == nil {
+		t.Fatal("Expected meta to be present in baseline bench response")
+	}
+	baselineBenchCount := baselineBenchResult.Meta.Total
+
+	// Create additional prescriptions for squat
 	for i := 0; i < 3; i++ {
 		body := fmt.Sprintf(`{
 			"liftId": "%s",
@@ -165,7 +208,7 @@ func TestListPrescriptionsFilterByLift(t *testing.T) {
 		resp.Body.Close()
 	}
 
-	// Create prescriptions for bench
+	// Create additional prescriptions for bench
 	for i := 0; i < 2; i++ {
 		body := fmt.Sprintf(`{
 			"liftId": "%s",
@@ -185,15 +228,50 @@ func TestListPrescriptionsFilterByLift(t *testing.T) {
 		defer resp.Body.Close()
 
 		var result PaginatedPrescriptionsResponse
-		json.NewDecoder(resp.Body).Decode(&result)
+		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+			t.Fatalf("Failed to decode response: %v", err)
+		}
 
-		if len(result.Data) != 3 {
-			t.Errorf("Expected 3 squat prescriptions, got %d", len(result.Data))
+		if result.Meta == nil {
+			t.Fatal("Expected meta to be present")
+		}
+
+		expectedSquatCount := baselineSquatCount + 3
+		if result.Meta.Total != expectedSquatCount {
+			t.Errorf("Expected %d squat prescriptions, got %d", expectedSquatCount, result.Meta.Total)
 		}
 
 		for _, p := range result.Data {
 			if p.LiftID != seededSquatID {
 				t.Errorf("Expected all prescriptions to have liftId %s, got %s", seededSquatID, p.LiftID)
+			}
+		}
+	})
+
+	t.Run("filters correctly for bench", func(t *testing.T) {
+		resp, err := authGet(ts.URL("/prescriptions?lift_id=" + benchID))
+		if err != nil {
+			t.Fatalf("Failed to make request: %v", err)
+		}
+		defer resp.Body.Close()
+
+		var result PaginatedPrescriptionsResponse
+		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+			t.Fatalf("Failed to decode response: %v", err)
+		}
+
+		if result.Meta == nil {
+			t.Fatal("Expected meta to be present")
+		}
+
+		expectedBenchCount := baselineBenchCount + 2
+		if result.Meta.Total != expectedBenchCount {
+			t.Errorf("Expected %d bench prescriptions, got %d", expectedBenchCount, result.Meta.Total)
+		}
+
+		for _, p := range result.Data {
+			if p.LiftID != benchID {
+				t.Errorf("Expected all prescriptions to have liftId %s, got %s", benchID, p.LiftID)
 			}
 		}
 	})

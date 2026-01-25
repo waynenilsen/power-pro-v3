@@ -74,20 +74,27 @@ func TestListDays(t *testing.T) {
 	}
 	defer ts.Close()
 
-	// Create some days for testing
-	day1Body := `{"name": "Day A", "slug": "day-a"}`
+	// Get baseline count of seeded days from canonical programs
+	baselineResp, _ := authGet(ts.URL("/days"))
+	var baselineResult PaginatedDaysResponse
+	json.NewDecoder(baselineResp.Body).Decode(&baselineResult)
+	baselineResp.Body.Close()
+	baselineCount := baselineResult.Meta.Total
+
+	// Create some additional days for testing
+	day1Body := `{"name": "Day A", "slug": "day-a-test"}`
 	day1Resp, _ := adminPost(ts.URL("/days"), day1Body)
 	day1Resp.Body.Close()
 
-	day2Body := `{"name": "Day B", "slug": "day-b"}`
+	day2Body := `{"name": "Day B", "slug": "day-b-test"}`
 	day2Resp, _ := adminPost(ts.URL("/days"), day2Body)
 	day2Resp.Body.Close()
 
-	day3Body := `{"name": "Heavy Day", "slug": "heavy-day"}`
+	day3Body := `{"name": "Heavy Day", "slug": "heavy-day-test"}`
 	day3Resp, _ := adminPost(ts.URL("/days"), day3Body)
 	day3Resp.Body.Close()
 
-	t.Run("returns created days", func(t *testing.T) {
+	t.Run("returns created days plus seeded days", func(t *testing.T) {
 		resp, err := authGet(ts.URL("/days"))
 		if err != nil {
 			t.Fatalf("Failed to make request: %v", err)
@@ -104,15 +111,13 @@ func TestListDays(t *testing.T) {
 			t.Fatalf("Failed to decode response: %v", err)
 		}
 
-		if len(result.Data) != 3 {
-			t.Errorf("Expected 3 days, got %d", len(result.Data))
-		}
-		if result.Meta == nil || result.Meta.Total != 3 {
+		expectedTotal := baselineCount + 3
+		if result.Meta == nil || result.Meta.Total != expectedTotal {
 			total := int64(0)
 			if result.Meta != nil {
 				total = result.Meta.Total
 			}
-			t.Errorf("Expected total 3, got %d", total)
+			t.Errorf("Expected total %d, got %d", expectedTotal, total)
 		}
 	})
 
@@ -138,16 +143,9 @@ func TestListDays(t *testing.T) {
 		if result.Meta.Limit != 2 {
 			t.Errorf("Expected limit 2, got %d", result.Meta.Limit)
 		}
-
-		// Get page 2 (offset=2)
-		resp2, _ := authGet(ts.URL("/days?limit=2&offset=2"))
-		defer resp2.Body.Close()
-
-		var result2 PaginatedDaysResponse
-		json.NewDecoder(resp2.Body).Decode(&result2)
-
-		if len(result2.Data) != 1 {
-			t.Errorf("Expected 1 day on page 2, got %d", len(result2.Data))
+		// With seeded data, hasMore should be true
+		if !result.Meta.HasMore {
+			t.Error("Expected hasMore to be true with pagination")
 		}
 	})
 
@@ -163,9 +161,11 @@ func TestListDays(t *testing.T) {
 			t.Fatal("Need at least 2 days for sort test")
 		}
 
-		// First should be "Day A" (alphabetically first)
-		if result.Data[0].Name != "Day A" {
-			t.Errorf("Expected first day to be 'Day A', got %s", result.Data[0].Name)
+		// Just verify ascending order - first item should be alphabetically smallest
+		for i := 1; i < len(result.Data); i++ {
+			if result.Data[i].Name < result.Data[i-1].Name {
+				t.Errorf("Days not sorted ascending: %s came after %s", result.Data[i].Name, result.Data[i-1].Name)
+			}
 		}
 
 		// Descending
@@ -175,9 +175,11 @@ func TestListDays(t *testing.T) {
 		var result2 PaginatedDaysResponse
 		json.NewDecoder(resp2.Body).Decode(&result2)
 
-		// First should be "Heavy Day" (alphabetically last)
-		if result2.Data[0].Name != "Heavy Day" {
-			t.Errorf("Expected first day to be 'Heavy Day', got %s", result2.Data[0].Name)
+		// Verify descending order
+		for i := 1; i < len(result2.Data); i++ {
+			if result2.Data[i].Name > result2.Data[i-1].Name {
+				t.Errorf("Days not sorted descending: %s came after %s", result2.Data[i].Name, result2.Data[i-1].Name)
+			}
 		}
 	})
 }

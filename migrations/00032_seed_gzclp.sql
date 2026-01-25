@@ -142,22 +142,22 @@ INSERT OR IGNORE INTO prescriptions (id, lift_id, load_strategy, set_scheme, "or
 INSERT OR IGNORE INTO prescriptions (id, lift_id, load_strategy, set_scheme, "order", notes, rest_seconds, created_at, updated_at) VALUES
     -- Day 1 T2: Bench 3x10
     ('gzclp----------0000-0000-000000000110', '00000000-0000-0000-0000-000000000002',
-     '{"type": "PERCENT_OF", "referenceType": "T2_MAX", "percentage": 100.0}',
+     '{"type": "PERCENT_OF", "referenceType": "TRAINING_MAX", "percentage": 100.0}',
      '{"type": "FIXED", "sets": 3, "reps": 10, "tier": "T2", "stage": 1}',
      1, 'T2: 3x10 (Stage 1)', 120, datetime('now'), datetime('now')),
     -- Day 2 T2: Deadlift 3x10
     ('gzclp----------0000-0000-000000000111', '00000000-0000-0000-0000-000000000003',
-     '{"type": "PERCENT_OF", "referenceType": "T2_MAX", "percentage": 100.0}',
+     '{"type": "PERCENT_OF", "referenceType": "TRAINING_MAX", "percentage": 100.0}',
      '{"type": "FIXED", "sets": 3, "reps": 10, "tier": "T2", "stage": 1}',
      1, 'T2: 3x10 (Stage 1)', 120, datetime('now'), datetime('now')),
     -- Day 3 T2: Squat 3x10
     ('gzclp----------0000-0000-000000000112', '00000000-0000-0000-0000-000000000001',
-     '{"type": "PERCENT_OF", "referenceType": "T2_MAX", "percentage": 100.0}',
+     '{"type": "PERCENT_OF", "referenceType": "TRAINING_MAX", "percentage": 100.0}',
      '{"type": "FIXED", "sets": 3, "reps": 10, "tier": "T2", "stage": 1}',
      1, 'T2: 3x10 (Stage 1)', 120, datetime('now'), datetime('now')),
     -- Day 4 T2: OHP 3x10
     ('gzclp----------0000-0000-000000000113', '00000000-0000-0000-0000-000000000004',
-     '{"type": "PERCENT_OF", "referenceType": "T2_MAX", "percentage": 100.0}',
+     '{"type": "PERCENT_OF", "referenceType": "TRAINING_MAX", "percentage": 100.0}',
      '{"type": "FIXED", "sets": 3, "reps": 10, "tier": "T2", "stage": 1}',
      1, 'T2: 3x10 (Stage 1)', 120, datetime('now'), datetime('now'));
 -- +goose StatementEnd

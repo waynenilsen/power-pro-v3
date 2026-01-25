@@ -183,8 +183,8 @@ func TestProgramCRUD(t *testing.T) {
 
 	t.Run("creates program with all fields", func(t *testing.T) {
 		body := `{
-			"name": "Starting Strength",
-			"slug": "starting-strength",
+			"name": "Starting Strength Custom",
+			"slug": "starting-strength-custom-test",
 			"description": "Classic beginner program",
 			"cycleId": "` + cycleID + `",
 			"defaultRounding": 2.5

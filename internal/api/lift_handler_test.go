@@ -134,15 +134,15 @@ func TestListLifts(t *testing.T) {
 			t.Fatalf("Failed to decode response: %v", err)
 		}
 
-		// Should have 3 seeded lifts
-		if len(result.Data) != 3 {
-			t.Errorf("Expected 3 lifts, got %d", len(result.Data))
+		// Should have 5 seeded lifts (squat, bench, deadlift, overhead press, power clean)
+		if len(result.Data) != 5 {
+			t.Errorf("Expected 5 lifts, got %d", len(result.Data))
 		}
 		if result.Meta == nil {
 			t.Fatal("Expected meta to be present")
 		}
-		if result.Meta.Total != 3 {
-			t.Errorf("Expected total 3, got %d", result.Meta.Total)
+		if result.Meta.Total != 5 {
+			t.Errorf("Expected total 5, got %d", result.Meta.Total)
 		}
 	})
 
@@ -172,15 +172,15 @@ func TestListLifts(t *testing.T) {
 			t.Error("Expected hasMore to be true for page 1")
 		}
 
-		// Get page 2 (offset=2)
-		resp2, _ := authGet(ts.URL("/lifts?limit=2&offset=2"))
+		// Get page 3 (offset=4) - should have 1 lift with 5 total
+		resp2, _ := authGet(ts.URL("/lifts?limit=2&offset=4"))
 		defer resp2.Body.Close()
 
 		var result2 PaginatedLiftsResponse
 		json.NewDecoder(resp2.Body).Decode(&result2)
 
 		if len(result2.Data) != 1 {
-			t.Errorf("Expected 1 lift on page 2, got %d", len(result2.Data))
+			t.Errorf("Expected 1 lift on page 3 (offset=4), got %d", len(result2.Data))
 		}
 		if result2.Meta.HasMore {
 			t.Error("Expected hasMore to be false for last page")
@@ -197,7 +197,8 @@ func TestListLifts(t *testing.T) {
 		var result PaginatedLiftsResponse
 		json.NewDecoder(resp.Body).Decode(&result)
 
-		// All seeded lifts are competition lifts
+		// Only 3 lifts are competition lifts (squat, bench, deadlift)
+		// Overhead press and power clean are not competition lifts
 		if len(result.Data) != 3 {
 			t.Errorf("Expected 3 competition lifts, got %d", len(result.Data))
 		}
@@ -215,8 +216,9 @@ func TestListLifts(t *testing.T) {
 		var result2 PaginatedLiftsResponse
 		json.NewDecoder(resp2.Body).Decode(&result2)
 
-		if len(result2.Data) != 0 {
-			t.Errorf("Expected 0 non-competition lifts, got %d", len(result2.Data))
+		// 2 non-competition lifts (overhead press, power clean)
+		if len(result2.Data) != 2 {
+			t.Errorf("Expected 2 non-competition lifts, got %d", len(result2.Data))
 		}
 	})
 
