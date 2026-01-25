@@ -204,6 +204,17 @@ type EnrollmentResponse struct {
 	Data EnrollmentData `json:"data"`
 }
 
+// WorkoutSessionData matches the workout session data format.
+type WorkoutSessionData struct {
+	ID     string `json:"id"`
+	Status string `json:"status"`
+}
+
+// WorkoutSessionResponse is the standard envelope for workout session responses.
+type WorkoutSessionResponse struct {
+	Data WorkoutSessionData `json:"data"`
+}
+
 // =============================================================================
 // HTTP HELPER FUNCTIONS
 // =============================================================================
@@ -250,6 +261,52 @@ func authPostTrigger(url string, body any, userID string) (*http.Response, error
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-User-ID", userID)
 	return http.DefaultClient.Do(req)
+}
+
+// startWorkoutSession starts a new workout session and returns its ID.
+func startWorkoutSession(t *testing.T, ts *testutil.TestServer, userID string) string {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodPost, ts.URL("/workouts/start"), nil)
+	if err != nil {
+		t.Fatalf("Failed to create request: %v", err)
+	}
+	req.Header.Set("X-User-ID", userID)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("Failed to start workout: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("Failed to start workout session, status %d: %s", resp.StatusCode, body)
+	}
+
+	var envelope WorkoutSessionResponse
+	json.NewDecoder(resp.Body).Decode(&envelope)
+	return envelope.Data.ID
+}
+
+// finishWorkoutSession completes a workout session.
+func finishWorkoutSession(t *testing.T, ts *testutil.TestServer, sessionID, userID string) {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodPost, ts.URL("/workouts/"+sessionID+"/finish"), nil)
+	if err != nil {
+		t.Fatalf("Failed to create request: %v", err)
+	}
+	req.Header.Set("X-User-ID", userID)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("Failed to finish workout: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("Failed to finish workout session, status %d: %s", resp.StatusCode, body)
+	}
 }
 
 // =============================================================================

@@ -350,7 +350,7 @@ func TestGreyskullLPProgram(t *testing.T) {
 	// =============================================================================
 	// Log Bench AMRAP with 7 reps (standard progression)
 	// =============================================================================
-	sessionID := "session-w1d1-" + testID
+	sessionID := startWorkoutSession(t, ts, userID)
 	t.Run("Log Bench AMRAP with 7 reps (standard increment +2.5lb)", func(t *testing.T) {
 		workoutResp, _ := userGet(ts.URL("/users/"+userID+"/workout"), userID)
 		var workout WorkoutResponse
@@ -423,7 +423,8 @@ func TestGreyskullLPProgram(t *testing.T) {
 		}
 	})
 
-	// Advance to Day B1
+	// Finish current workout and advance to Day B1
+	finishWorkoutSession(t, ts, sessionID, userID)
 	advanceUserState(t, ts, userID)
 
 	// =============================================================================
@@ -489,7 +490,7 @@ func TestGreyskullLPProgram(t *testing.T) {
 	// =============================================================================
 	// Log Deadlift AMRAP with 12 reps (double progression)
 	// =============================================================================
-	sessionID2 := "session-w1d2-" + testID
+	sessionID2 := startWorkoutSession(t, ts, userID)
 	t.Run("Log Deadlift AMRAP with 12 reps (double increment +5lb)", func(t *testing.T) {
 		workoutResp, _ := userGet(ts.URL("/users/"+userID+"/workout"), userID)
 		var workout WorkoutResponse
@@ -529,7 +530,8 @@ func TestGreyskullLPProgram(t *testing.T) {
 		logResp.Body.Close()
 	})
 
-	// Advance to Day A2
+	// Finish current workout and advance to Day A2
+	finishWorkoutSession(t, ts, sessionID2, userID)
 	advanceUserState(t, ts, userID)
 
 	// =============================================================================
@@ -622,7 +624,7 @@ func TestGreyskullLPProgram(t *testing.T) {
 	// =============================================================================
 	// Test Deload on Failure: Log Squat AMRAP with 3 reps (< 5 target)
 	// =============================================================================
-	sessionID3 := "session-w2d1-" + testID
+	sessionID3 := startWorkoutSession(t, ts, userID)
 	t.Run("Log failed Squat AMRAP with 3 reps (triggers 10% deload)", func(t *testing.T) {
 		workoutResp, _ := userGet(ts.URL("/users/"+userID+"/workout"), userID)
 		var workout WorkoutResponse

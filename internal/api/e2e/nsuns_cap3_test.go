@@ -377,7 +377,7 @@ func TestNSunsCAP3Program(t *testing.T) {
 	})
 
 	// Log Deadlift AMRAP with 4 reps (exceeds minimum of 2)
-	sessionW1D5 := "session-w1d5-" + testID
+	sessionW1D5 := startWorkoutSession(t, ts, userID)
 	t.Run("Log Week 1 Deadlift AMRAP with 4 reps", func(t *testing.T) {
 		workoutResp, _ := userGet(ts.URL("/users/"+userID+"/workout"), userID)
 		var workout WorkoutResponse
@@ -415,7 +415,8 @@ func TestNSunsCAP3Program(t *testing.T) {
 		logResp.Body.Close()
 	})
 
-	// Advance to Week 2
+	// Finish session and advance to Week 2
+	finishWorkoutSession(t, ts, sessionW1D5, userID)
 	advanceUserState(t, ts, userID)
 
 	// =============================================================================
@@ -486,7 +487,7 @@ func TestNSunsCAP3Program(t *testing.T) {
 	})
 
 	// Log Squat AMRAP with 5 reps
-	sessionW2D3 := "session-w2d3-" + testID
+	sessionW2D3 := startWorkoutSession(t, ts, userID)
 	t.Run("Log Week 2 Squat AMRAP with 5 reps", func(t *testing.T) {
 		workoutResp, _ := userGet(ts.URL("/users/"+userID+"/workout"), userID)
 		var workout WorkoutResponse
@@ -524,7 +525,8 @@ func TestNSunsCAP3Program(t *testing.T) {
 		logResp.Body.Close()
 	})
 
-	// Advance through Week 2 Day 5 to Week 3
+	// Finish session and advance through Week 2 Day 5 to Week 3
+	finishWorkoutSession(t, ts, sessionW2D3, userID)
 	advanceUserState(t, ts, userID) // W2 D5
 	advanceUserState(t, ts, userID) // W3 D1
 
@@ -569,7 +571,7 @@ func TestNSunsCAP3Program(t *testing.T) {
 	})
 
 	// Log Bench AMRAP with 6 reps
-	sessionW3D1 := "session-w3d1-" + testID
+	sessionW3D1 := startWorkoutSession(t, ts, userID)
 	t.Run("Log Week 3 Bench AMRAP with 6 reps", func(t *testing.T) {
 		workoutResp, _ := userGet(ts.URL("/users/"+userID+"/workout"), userID)
 		var workout WorkoutResponse
@@ -607,7 +609,8 @@ func TestNSunsCAP3Program(t *testing.T) {
 		logResp.Body.Close()
 	})
 
-	// Advance through Week 3 to end of cycle
+	// Finish session and advance through Week 3 to end of cycle
+	finishWorkoutSession(t, ts, sessionW3D1, userID)
 	advanceUserState(t, ts, userID) // W3 D3
 	advanceUserState(t, ts, userID) // W3 D5
 	advanceUserState(t, ts, userID) // New cycle W1 D1

@@ -344,7 +344,7 @@ func TestNuckolsHighFrequencyProgram(t *testing.T) {
 	})
 
 	// Log AMRAP set with 7 reps
-	sessionID := "session-week3-" + testID
+	sessionID := startWorkoutSession(t, ts, userID)
 	t.Run("Log Week 3 AMRAP with 7 reps", func(t *testing.T) {
 		workoutResp, _ := userGet(ts.URL("/users/"+userID+"/workout"), userID)
 		var workout WorkoutResponse
@@ -382,7 +382,8 @@ func TestNuckolsHighFrequencyProgram(t *testing.T) {
 		logResp.Body.Close()
 	})
 
-	// Advance to end of cycle
+	// Finish session and advance to end of cycle
+	finishWorkoutSession(t, ts, sessionID, userID)
 	advanceUserState(t, ts, userID) // Thu -> Fri
 	advanceUserState(t, ts, userID) // Fri -> Week 1 Mon (new cycle)
 

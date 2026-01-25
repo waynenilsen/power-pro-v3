@@ -955,6 +955,72 @@ type NextSetEnvelopeInteg struct {
 	Data NextSetTestResponse `json:"data"`
 }
 
+// setupIntegTestEnrollment creates a program, enrolls the user, and starts a workout session.
+// Returns the sessionID for logging sets.
+func setupIntegTestEnrollment(t *testing.T, ts *testutil.TestServer, userID string, testID string) string {
+	t.Helper()
+
+	// Create a cycle
+	cycleBody := fmt.Sprintf(`{"name": "Integ Test Cycle %s", "lengthWeeks": 4}`, testID)
+	cycleResp, err := adminPost(ts.URL("/cycles"), cycleBody)
+	if err != nil {
+		t.Fatalf("Failed to create cycle: %v", err)
+	}
+	var cycleEnvelope CycleEnvelopeInteg
+	json.NewDecoder(cycleResp.Body).Decode(&cycleEnvelope)
+	cycleResp.Body.Close()
+	cycleID := cycleEnvelope.Data.ID
+
+	// Create a program
+	programBody := fmt.Sprintf(`{"name": "Integ Test Program %s", "slug": "integ-test-prog-%s", "cycleId": "%s"}`, testID, testID, cycleID)
+	programResp, err := adminPost(ts.URL("/programs"), programBody)
+	if err != nil {
+		t.Fatalf("Failed to create program: %v", err)
+	}
+	var programEnvelope ProgramEnvelopeInteg
+	json.NewDecoder(programResp.Body).Decode(&programEnvelope)
+	programResp.Body.Close()
+	programID := programEnvelope.Data.ID
+
+	// Enroll the user
+	enrollResp, err := userPostEnrollment(ts.URL("/users/"+userID+"/program"), fmt.Sprintf(`{"programId": "%s"}`, programID), userID)
+	if err != nil {
+		t.Fatalf("Failed to enroll user: %v", err)
+	}
+	if enrollResp.StatusCode != http.StatusCreated {
+		body, _ := io.ReadAll(enrollResp.Body)
+		enrollResp.Body.Close()
+		t.Fatalf("Failed to enroll user, status %d: %s", enrollResp.StatusCode, body)
+	}
+	enrollResp.Body.Close()
+
+	// Start a workout session
+	req, err := http.NewRequest(http.MethodPost, ts.URL("/workouts/start"), nil)
+	if err != nil {
+		t.Fatalf("Failed to create request: %v", err)
+	}
+	req.Header.Set("X-User-ID", userID)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("Failed to start workout: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("Failed to start workout session, status %d: %s", resp.StatusCode, body)
+	}
+
+	var sessionEnvelope struct {
+		Data struct {
+			ID string `json:"id"`
+		} `json:"data"`
+	}
+	json.NewDecoder(resp.Body).Decode(&sessionEnvelope)
+	return sessionEnvelope.Data.ID
+}
+
 // TestVariableSchemeSessionHandling tests the dynamic set generation for MRS and FatigueDrop schemes.
 func TestVariableSchemeSessionHandling(t *testing.T) {
 	ts, err := testutil.NewTestServer()
@@ -965,10 +1031,12 @@ func TestVariableSchemeSessionHandling(t *testing.T) {
 
 	squatID := "00000000-0000-0000-0000-000000000001"
 	userID := testutil.TestUserID
+	testID := uuid.New().String()[:8]
+
+	// Set up enrollment and get a valid session ID
+	sessionID := setupIntegTestEnrollment(t, ts, userID, testID)
 
 	t.Run("MRS scheme generates next set until target total reps reached", func(t *testing.T) {
-		sessionID := uuid.New().String()
-
 		// Create an MRS prescription: target 25 total reps, min 3 reps per set
 		prescBody := fmt.Sprintf(`{
 			"liftId": "%s",
@@ -1119,8 +1187,6 @@ func TestVariableSchemeSessionHandling(t *testing.T) {
 	})
 
 	t.Run("returns error for non-variable scheme", func(t *testing.T) {
-		sessionID := uuid.New().String()
-
 		// Create a FIXED prescription (not variable)
 		prescBody := fmt.Sprintf(`{
 			"liftId": "%s",
@@ -1134,7 +1200,7 @@ func TestVariableSchemeSessionHandling(t *testing.T) {
 		prescResp.Body.Close()
 		prescriptionID := prescEnvelope.Data.ID
 
-		// Log a set
+		// Log a set using the shared session
 		loggedSetBody := fmt.Sprintf(`{
 			"sets": [
 				{
@@ -1165,7 +1231,6 @@ func TestVariableSchemeSessionHandling(t *testing.T) {
 	})
 
 	t.Run("returns error for non-existent prescription", func(t *testing.T) {
-		sessionID := uuid.New().String()
 		fakePrescriptionID := uuid.New().String()
 
 		resp, err := authGetLoggedSets(ts.URL("/sessions/"+sessionID+"/prescriptions/"+fakePrescriptionID+"/next-set"), userID)
@@ -1181,9 +1246,7 @@ func TestVariableSchemeSessionHandling(t *testing.T) {
 	})
 
 	t.Run("logged sets with RPE are returned correctly", func(t *testing.T) {
-		sessionID := uuid.New().String()
-
-		// Log a set with RPE
+		// Log a set with RPE using the shared session
 		loggedSetBody := fmt.Sprintf(`{
 			"sets": [
 				{
@@ -1227,10 +1290,16 @@ func TestVariableSchemeSessionHandling(t *testing.T) {
 		if len(listResponse.Data) == 0 {
 			t.Fatal("Expected logged sets in response")
 		}
-		if listResponse.Data[0].RPE == nil {
-			t.Error("Expected RPE to be returned in logged set response")
-		} else if *listResponse.Data[0].RPE != 8.5 {
-			t.Errorf("Expected RPE 8.5, got %f", *listResponse.Data[0].RPE)
+		// Find the set with RPE (may not be first due to other tests)
+		var foundRPE *float64
+		for _, ls := range listResponse.Data {
+			if ls.RPE != nil && *ls.RPE == 8.5 {
+				foundRPE = ls.RPE
+				break
+			}
+		}
+		if foundRPE == nil {
+			t.Error("Expected to find a logged set with RPE 8.5 in response")
 		}
 	})
 }

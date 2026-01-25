@@ -273,7 +273,7 @@ func TestNSuns531LP5DayProgram(t *testing.T) {
 	// =============================================================================
 	// Log Bench AMRAP with 5 reps
 	// =============================================================================
-	sessionID := "session-day1-" + testID
+	sessionID := startWorkoutSession(t, ts, userID)
 	t.Run("Log Day 1 Bench AMRAP with 5 reps", func(t *testing.T) {
 		workoutResp, _ := userGet(ts.URL("/users/"+userID+"/workout"), userID)
 		var workout WorkoutResponse
@@ -340,7 +340,8 @@ func TestNSuns531LP5DayProgram(t *testing.T) {
 		}
 	})
 
-	// Advance to Day 2
+	// Finish first session and advance to Day 2
+	finishWorkoutSession(t, ts, sessionID, userID)
 	advanceUserState(t, ts, userID)
 
 	// =============================================================================
@@ -382,7 +383,7 @@ func TestNSuns531LP5DayProgram(t *testing.T) {
 	})
 
 	// Log Squat AMRAP with 3 reps
-	sessionID2 := "session-day2-" + testID
+	sessionID2 := startWorkoutSession(t, ts, userID)
 	t.Run("Log Day 2 Squat AMRAP with 3 reps", func(t *testing.T) {
 		workoutResp, _ := userGet(ts.URL("/users/"+userID+"/workout"), userID)
 		var workout WorkoutResponse
@@ -416,7 +417,8 @@ func TestNSuns531LP5DayProgram(t *testing.T) {
 		logResp.Body.Close()
 	})
 
-	// Advance to Day 3 and Day 4
+	// Finish session and advance to Day 3 and Day 4
+	finishWorkoutSession(t, ts, sessionID2, userID)
 	advanceUserState(t, ts, userID) // Day 2 -> Day 3
 	advanceUserState(t, ts, userID) // Day 3 -> Day 4
 

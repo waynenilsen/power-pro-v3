@@ -405,7 +405,7 @@ func TestNuckolsBeginnerProgram(t *testing.T) {
 	// =============================================================================
 	// Log Bench AMAP with 10 reps (above 8 target by 2 = +5lb)
 	// =============================================================================
-	sessionID := "session-w1d1-" + testID
+	sessionID := startWorkoutSession(t, ts, userID)
 	t.Run("Log Bench AMAP with 10 reps on Day 1", func(t *testing.T) {
 		workoutResp, _ := userGet(ts.URL("/users/"+userID+"/workout"), userID)
 		var workout WorkoutResponse

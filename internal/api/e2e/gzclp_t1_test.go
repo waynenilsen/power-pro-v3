@@ -198,7 +198,7 @@ func TestGZCLPT1StageProgression(t *testing.T) {
 	// Test 2: Simulate failure at stage 0 (5x3+) and verify stage advances
 	t.Run("failure at stage 0 advances to stage 1", func(t *testing.T) {
 		// Log sets with failure (only 13 total reps < 15 minimum volume)
-		sessionID := uuid.New().String()
+		sessionID := startWorkoutSession(t, ts, userID)
 		logSets(t, ts, userID, sessionID, squatPrescID, squatID, []setLog{
 			{weight: squatMax, targetReps: 3, repsPerformed: 3, isAMRAP: false},
 			{weight: squatMax, targetReps: 3, repsPerformed: 3, isAMRAP: false},
@@ -212,6 +212,7 @@ func TestGZCLPT1StageProgression(t *testing.T) {
 		if failureCount != 1 {
 			t.Errorf("Expected failure count 1, got %d", failureCount)
 		}
+		finishWorkoutSession(t, ts, sessionID, userID)
 	})
 
 	// Test 3: After stage advancement, verify stage 1 (6x2+)
@@ -327,7 +328,7 @@ func TestGZCLPT1FullCycle(t *testing.T) {
 
 	// Stage 0 (5x3+) - Fail
 	t.Run("stage 0 failure", func(t *testing.T) {
-		sessionID := uuid.New().String()
+		sessionID := startWorkoutSession(t, ts, userID)
 		// Log failure: 13 reps < 15 minimum
 		logSets(t, ts, userID, sessionID, squatPrescID, squatID, []setLog{
 			{weight: squatMax, targetReps: 3, repsPerformed: 3, isAMRAP: false},
@@ -349,13 +350,14 @@ func TestGZCLPT1FullCycle(t *testing.T) {
 				t.Errorf("Expected delta=0 on stage advance, got %.1f", delta)
 			}
 		}
+		finishWorkoutSession(t, ts, sessionID, userID)
 	})
 
 	advanceUserState(t, ts, userID)
 
 	// Stage 1 (6x2+) - Fail
 	t.Run("stage 1 failure", func(t *testing.T) {
-		sessionID := uuid.New().String()
+		sessionID := startWorkoutSession(t, ts, userID)
 		// Log failure: 10 reps < 12 minimum
 		logSets(t, ts, userID, sessionID, squatPrescID, squatID, []setLog{
 			{weight: squatMax, targetReps: 2, repsPerformed: 2, isAMRAP: false},
@@ -370,13 +372,14 @@ func TestGZCLPT1FullCycle(t *testing.T) {
 		if result.Data.TotalApplied != 1 {
 			t.Errorf("Expected progression to apply, got TotalApplied=%d", result.Data.TotalApplied)
 		}
+		finishWorkoutSession(t, ts, sessionID, userID)
 	})
 
 	advanceUserState(t, ts, userID)
 
 	// Stage 2 (10x1+) - Fail -> Reset with deload
 	t.Run("stage 2 failure triggers reset with deload", func(t *testing.T) {
-		sessionID := uuid.New().String()
+		sessionID := startWorkoutSession(t, ts, userID)
 		// Log failure: 8 reps < 10 minimum
 		logSets(t, ts, userID, sessionID, squatPrescID, squatID, []setLog{
 			{weight: squatMax, targetReps: 1, repsPerformed: 1, isAMRAP: false},
@@ -408,6 +411,7 @@ func TestGZCLPT1FullCycle(t *testing.T) {
 				t.Errorf("Expected new value ~%.1f after 15%% deload, got %.1f", expectedNewValue, res.NewValue)
 			}
 		}
+		finishWorkoutSession(t, ts, sessionID, userID)
 	})
 }
 
@@ -495,7 +499,7 @@ func TestDeloadOnFailure(t *testing.T) {
 
 	// Test: First failure - counter should be 1, no deload yet
 	t.Run("first failure increments counter but no deload", func(t *testing.T) {
-		sessionID := uuid.New().String()
+		sessionID := startWorkoutSession(t, ts, userID)
 		logSets(t, ts, userID, sessionID, squatPrescID, squatID, []setLog{
 			{weight: squatMax, targetReps: 5, repsPerformed: 4, isAMRAP: false}, // Failure
 		})
@@ -510,13 +514,14 @@ func TestDeloadOnFailure(t *testing.T) {
 		if result.Data.TotalApplied != 0 {
 			t.Errorf("Expected no progression (threshold not met), got TotalApplied=%d", result.Data.TotalApplied)
 		}
+		finishWorkoutSession(t, ts, sessionID, userID)
 	})
 
 	advanceUserState(t, ts, userID)
 
 	// Test: Second failure - counter should be 2, deload triggers
 	t.Run("second failure triggers deload", func(t *testing.T) {
-		sessionID := uuid.New().String()
+		sessionID := startWorkoutSession(t, ts, userID)
 		logSets(t, ts, userID, sessionID, squatPrescID, squatID, []setLog{
 			{weight: squatMax, targetReps: 5, repsPerformed: 3, isAMRAP: false}, // Second failure
 		})
@@ -543,6 +548,7 @@ func TestDeloadOnFailure(t *testing.T) {
 				t.Errorf("Expected new value ~%.1f after 10%% deload, got %.1f", expectedNewValue, res.NewValue)
 			}
 		}
+		finishWorkoutSession(t, ts, sessionID, userID)
 	})
 }
 

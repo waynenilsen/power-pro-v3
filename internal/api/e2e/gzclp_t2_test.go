@@ -146,7 +146,7 @@ func TestGZCLPT2StageProgression(t *testing.T) {
 
 	// Test 2: Stage 0 (3x10) SUCCESS - failure counter should reset
 	t.Run("success at stage 0 keeps counter at 0", func(t *testing.T) {
-		sessionID := uuid.New().String()
+		sessionID := startWorkoutSession(t, ts, userID)
 		// Hit all reps: 30 total >= 30 minimum
 		logSets(t, ts, userID, sessionID, benchPrescID, benchID, []setLog{
 			{weight: benchMax, targetReps: 10, repsPerformed: 10, isAMRAP: false},
@@ -158,13 +158,14 @@ func TestGZCLPT2StageProgression(t *testing.T) {
 		if count != 0 {
 			t.Errorf("Expected failure count 0 after success, got %d", count)
 		}
+		finishWorkoutSession(t, ts, sessionID, userID)
 	})
 
 	advanceUserState(t, ts, userID)
 
 	// Test 3: Stage 0 (3x10) FAIL - advance to stage 1
 	t.Run("failure at stage 0 advances to stage 1", func(t *testing.T) {
-		sessionID := uuid.New().String()
+		sessionID := startWorkoutSession(t, ts, userID)
 		// Only 27 reps < 30 minimum
 		logSets(t, ts, userID, sessionID, benchPrescID, benchID, []setLog{
 			{weight: benchMax, targetReps: 10, repsPerformed: 10, isAMRAP: false},
@@ -189,13 +190,14 @@ func TestGZCLPT2StageProgression(t *testing.T) {
 				t.Errorf("Expected delta=0 on stage advance, got %.1f", result.Data.Results[0].Result.Delta)
 			}
 		}
+		finishWorkoutSession(t, ts, sessionID, userID)
 	})
 
 	advanceUserState(t, ts, userID)
 
 	// Test 4: Stage 1 (3x8) FAIL - advance to stage 2
 	t.Run("failure at stage 1 advances to stage 2", func(t *testing.T) {
-		sessionID := uuid.New().String()
+		sessionID := startWorkoutSession(t, ts, userID)
 		// Only 22 reps < 24 minimum (3x8)
 		logSets(t, ts, userID, sessionID, benchPrescID, benchID, []setLog{
 			{weight: benchMax, targetReps: 8, repsPerformed: 8, isAMRAP: false},
@@ -212,13 +214,14 @@ func TestGZCLPT2StageProgression(t *testing.T) {
 		if result.Data.TotalApplied != 1 {
 			t.Errorf("Expected progression to apply, got TotalApplied=%d", result.Data.TotalApplied)
 		}
+		finishWorkoutSession(t, ts, sessionID, userID)
 	})
 
 	advanceUserState(t, ts, userID)
 
 	// Test 5: Stage 2 (3x6) FAIL - reset to stage 0 WITHOUT deload
 	t.Run("failure at stage 2 resets to stage 0 without deload", func(t *testing.T) {
-		sessionID := uuid.New().String()
+		sessionID := startWorkoutSession(t, ts, userID)
 		// Only 16 reps < 18 minimum (3x6)
 		logSets(t, ts, userID, sessionID, benchPrescID, benchID, []setLog{
 			{weight: benchMax, targetReps: 6, repsPerformed: 6, isAMRAP: false},
@@ -241,6 +244,7 @@ func TestGZCLPT2StageProgression(t *testing.T) {
 				t.Errorf("Expected weight to remain %.1f, got %.1f", benchMax, res.NewValue)
 			}
 		}
+		finishWorkoutSession(t, ts, sessionID, userID)
 	})
 }
 
@@ -324,7 +328,7 @@ func TestGZCLPT2SuccessAfterFailure(t *testing.T) {
 
 	// Log a failure first (only one set fails)
 	t.Run("failure increments counter", func(t *testing.T) {
-		sessionID := uuid.New().String()
+		sessionID := startWorkoutSession(t, ts, userID)
 		logSets(t, ts, userID, sessionID, benchPrescID, benchID, []setLog{
 			{weight: benchMax, targetReps: 10, repsPerformed: 10, isAMRAP: false}, // Success
 			{weight: benchMax, targetReps: 10, repsPerformed: 10, isAMRAP: false}, // Success
@@ -335,13 +339,14 @@ func TestGZCLPT2SuccessAfterFailure(t *testing.T) {
 		if count != 1 {
 			t.Errorf("Expected failure count 1, got %d", count)
 		}
+		finishWorkoutSession(t, ts, sessionID, userID)
 	})
 
 	advanceUserState(t, ts, userID)
 
 	// Log a success - counter should reset
 	t.Run("success resets counter to 0", func(t *testing.T) {
-		sessionID := uuid.New().String()
+		sessionID := startWorkoutSession(t, ts, userID)
 		logSets(t, ts, userID, sessionID, benchPrescID, benchID, []setLog{
 			{weight: benchMax, targetReps: 10, repsPerformed: 10, isAMRAP: false}, // Success
 			{weight: benchMax, targetReps: 10, repsPerformed: 10, isAMRAP: false},
@@ -352,6 +357,7 @@ func TestGZCLPT2SuccessAfterFailure(t *testing.T) {
 		if count != 0 {
 			t.Errorf("Expected failure count 0 after success, got %d", count)
 		}
+		finishWorkoutSession(t, ts, sessionID, userID)
 	})
 }
 
@@ -434,7 +440,7 @@ func TestGZCLPT2ManualInterventionNeeded(t *testing.T) {
 
 	// Fail at last stage with ResetOnExhaustion=false
 	t.Run("failure at last stage with no reset returns not applied", func(t *testing.T) {
-		sessionID := uuid.New().String()
+		sessionID := startWorkoutSession(t, ts, userID)
 		logSets(t, ts, userID, sessionID, benchPrescID, benchID, []setLog{
 			{weight: benchMax, targetReps: 8, repsPerformed: 6, isAMRAP: false}, // Fail
 			{weight: benchMax, targetReps: 8, repsPerformed: 6, isAMRAP: false},
@@ -454,5 +460,6 @@ func TestGZCLPT2ManualInterventionNeeded(t *testing.T) {
 				t.Error("Expected progression to not be applied")
 			}
 		}
+		finishWorkoutSession(t, ts, sessionID, userID)
 	})
 }
