@@ -1,23 +1,39 @@
 import { Link } from 'react-router-dom';
 import { Container } from '../../components/layout';
 import { useAuth } from '../../contexts/useAuth';
-import { useEnrollment } from '../../hooks/useCurrentUser';
-import { BookOpen, ChevronRight, Dumbbell, Play, Loader2 } from 'lucide-react';
+import { useEnrollment, useAdvanceState } from '../../hooks';
+import { BookOpen, ChevronRight, Dumbbell, Play, RotateCcw, Trophy, Loader2 } from 'lucide-react';
+import type { EnrollmentStatus, WorkoutSessionSummary } from '../../api/types';
 
 function EnrolledProgramCard({
   programName,
   programSlug,
   currentWeek,
+  currentDayIndex,
   cycleLengthWeeks,
   currentCycleIteration,
+  enrollmentStatus,
+  currentWorkoutSession,
+  onStartNextCycle,
+  isAdvancing,
 }: {
   programName: string;
   programSlug: string;
   currentWeek: number;
+  currentDayIndex?: number;
   cycleLengthWeeks: number;
   currentCycleIteration: number;
+  enrollmentStatus: EnrollmentStatus;
+  currentWorkoutSession?: WorkoutSessionSummary;
+  onStartNextCycle: () => void;
+  isAdvancing: boolean;
 }) {
   const progressPercentage = (currentWeek / cycleLengthWeeks) * 100;
+  const hasActiveSession = currentWorkoutSession?.status === 'IN_PROGRESS';
+  const isBetweenCycles = enrollmentStatus === 'BETWEEN_CYCLES';
+
+  // Format day display (1-indexed for display)
+  const dayDisplay = currentDayIndex !== undefined ? currentDayIndex + 1 : null;
 
   return (
     <div className="space-y-4">
@@ -34,6 +50,16 @@ function EnrolledProgramCard({
             <Dumbbell className="w-5 h-5 text-accent" />
           </div>
         </div>
+
+        {/* Current position indicator */}
+        {!isBetweenCycles && (
+          <div className="mb-3 px-3 py-2 bg-surface-elevated rounded-md border border-border">
+            <p className="text-sm font-medium text-foreground">
+              Week {currentWeek}{dayDisplay !== null && `, Day ${dayDisplay}`}
+            </p>
+            <p className="text-xs text-muted">Cycle {currentCycleIteration}</p>
+          </div>
+        )}
 
         {/* Progress */}
         <div className="mb-4">
@@ -53,6 +79,16 @@ function EnrolledProgramCard({
           </div>
         </div>
 
+        {/* Active session indicator */}
+        {hasActiveSession && (
+          <div className="mb-4 px-3 py-2 bg-accent/10 border border-accent/20 rounded-md">
+            <p className="text-sm font-medium text-accent">Workout in progress</p>
+            <p className="text-xs text-muted">
+              Started {new Date(currentWorkoutSession!.startedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
+            </p>
+          </div>
+        )}
+
         {/* View details link */}
         <Link
           to={`/programs/${programSlug}`}
@@ -62,22 +98,58 @@ function EnrolledProgramCard({
         </Link>
       </div>
 
-      {/* Start workout CTA */}
-      <Link
-        to="/workout"
-        className="
-          group flex items-center justify-center gap-3
-          w-full py-4 px-6
-          bg-accent rounded-lg
-          text-background font-bold text-lg
-          hover:bg-accent-light
-          active:scale-[0.98]
-          transition-all duration-200
-        "
-      >
-        <Play size={22} className="group-hover:scale-110 transition-transform" />
-        <span>Start Workout</span>
-      </Link>
+      {/* Cycle complete message */}
+      {isBetweenCycles && (
+        <div className="bg-surface border border-accent/30 rounded-lg p-5 text-center">
+          <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-accent/10 border border-accent/20 flex items-center justify-center">
+            <Trophy className="w-6 h-6 text-accent" />
+          </div>
+          <h3 className="text-lg font-bold text-foreground mb-1">Cycle Complete!</h3>
+          <p className="text-sm text-muted mb-4">
+            You've finished cycle {currentCycleIteration}. Ready for the next one?
+          </p>
+          <button
+            onClick={onStartNextCycle}
+            disabled={isAdvancing}
+            className="
+              group flex items-center justify-center gap-3
+              w-full py-4 px-6
+              bg-accent rounded-lg
+              text-background font-bold text-lg
+              hover:bg-accent-light
+              active:scale-[0.98]
+              transition-all duration-200
+              disabled:opacity-50 disabled:cursor-not-allowed
+            "
+          >
+            {isAdvancing ? (
+              <Loader2 size={22} className="animate-spin" />
+            ) : (
+              <RotateCcw size={22} className="group-hover:scale-110 transition-transform" />
+            )}
+            <span>{isAdvancing ? 'Starting...' : 'Start Next Cycle'}</span>
+          </button>
+        </div>
+      )}
+
+      {/* Start/Continue workout CTA */}
+      {!isBetweenCycles && (
+        <Link
+          to="/workout"
+          className="
+            group flex items-center justify-center gap-3
+            w-full py-4 px-6
+            bg-accent rounded-lg
+            text-background font-bold text-lg
+            hover:bg-accent-light
+            active:scale-[0.98]
+            transition-all duration-200
+          "
+        >
+          <Play size={22} className="group-hover:scale-110 transition-transform" />
+          <span>{hasActiveSession ? 'Continue Workout' : 'Start Workout'}</span>
+        </Link>
+      )}
     </div>
   );
 }
@@ -124,8 +196,14 @@ function LoadingState() {
 export default function Home() {
   const { userId } = useAuth();
   const { data: enrollment, isLoading } = useEnrollment(userId ?? undefined);
+  const advanceState = useAdvanceState(userId ?? undefined);
 
-  const isEnrolled = enrollment?.data && enrollment.data.enrollmentStatus === 'ACTIVE';
+  const isEnrolled = enrollment?.data &&
+    (enrollment.data.enrollmentStatus === 'ACTIVE' || enrollment.data.enrollmentStatus === 'BETWEEN_CYCLES');
+
+  const handleStartNextCycle = () => {
+    advanceState.mutate({ advanceType: 'week' });
+  };
 
   return (
     <div className="py-6 md:py-8">
@@ -145,8 +223,13 @@ export default function Home() {
               programName={enrollment.data.program.name}
               programSlug={enrollment.data.program.slug}
               currentWeek={enrollment.data.state.currentWeek}
+              currentDayIndex={enrollment.data.state.currentDayIndex}
               cycleLengthWeeks={enrollment.data.program.cycleLengthWeeks}
               currentCycleIteration={enrollment.data.state.currentCycleIteration}
+              enrollmentStatus={enrollment.data.enrollmentStatus}
+              currentWorkoutSession={enrollment.data.currentWorkoutSession}
+              onStartNextCycle={handleStartNextCycle}
+              isAdvancing={advanceState.isPending}
             />
           ) : (
             <BrowseProgramsCard />
