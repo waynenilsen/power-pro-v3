@@ -2,12 +2,22 @@ import type { ApiError, PaginationParams } from './types';
 
 const BASE_URL = '/api';
 
+/**
+ * Extended RequestInit options with query parameter support.
+ */
 export interface RequestOptions extends RequestInit {
+  /** Query parameters to append to the URL */
   params?: Record<string, string | number | boolean | undefined>;
 }
 
+/**
+ * Custom error class for API client errors.
+ * Provides structured error information including HTTP status and optional details.
+ */
 export class ApiClientError extends Error {
+  /** HTTP status code of the failed request */
   public readonly status: number;
+  /** Additional error details from the API response */
   public readonly details?: string[];
 
   constructor(message: string, status: number, details?: string[]) {
@@ -18,6 +28,12 @@ export class ApiClientError extends Error {
   }
 }
 
+/**
+ * Builds a URL with query parameters.
+ * @param path - The API endpoint path
+ * @param params - Optional query parameters
+ * @returns The complete URL path with query string
+ */
 function buildUrl(path: string, params?: Record<string, string | number | boolean | undefined>): string {
   const url = new URL(`${BASE_URL}${path}`, window.location.origin);
 
@@ -32,6 +48,12 @@ function buildUrl(path: string, params?: Record<string, string | number | boolea
   return url.pathname + url.search;
 }
 
+/**
+ * Handles API response, parsing JSON or throwing appropriate errors.
+ * @param response - The fetch Response object
+ * @returns Parsed JSON response data
+ * @throws ApiClientError for non-2xx responses
+ */
 async function handleResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {
     let errorMessage = `Request failed with status ${response.status}`;
@@ -56,6 +78,12 @@ async function handleResponse<T>(response: Response): Promise<T> {
   return response.json();
 }
 
+/**
+ * Creates request headers including authentication headers.
+ * @param userId - Optional user ID for X-User-ID header
+ * @param isAdmin - Optional admin flag for X-Admin header
+ * @returns Headers object for fetch requests
+ */
 function createHeaders(userId?: string, isAdmin?: boolean): HeadersInit {
   const headers: HeadersInit = {
     'Content-Type': 'application/json',
@@ -72,21 +100,42 @@ function createHeaders(userId?: string, isAdmin?: boolean): HeadersInit {
   return headers;
 }
 
+/**
+ * Configuration for the API client.
+ */
 export interface ClientConfig {
+  /** User ID to include in X-User-ID header */
   userId?: string;
+  /** Whether to include X-Admin header */
   isAdmin?: boolean;
 }
 
 let globalConfig: ClientConfig = {};
 
+/**
+ * Configures the global API client settings.
+ * Settings are merged with existing configuration.
+ * @param config - Configuration options to apply
+ */
 export function configureClient(config: ClientConfig): void {
   globalConfig = { ...globalConfig, ...config };
 }
 
+/**
+ * Returns a copy of the current client configuration.
+ * @returns Current client configuration
+ */
 export function getClientConfig(): ClientConfig {
   return { ...globalConfig };
 }
 
+/**
+ * Performs a GET request to the API.
+ * @param path - The API endpoint path
+ * @param options - Optional request options including query parameters
+ * @returns Promise resolving to the response data
+ * @throws ApiClientError for non-2xx responses
+ */
 export async function get<T>(path: string, options?: RequestOptions): Promise<T> {
   const url = buildUrl(path, options?.params);
 
@@ -99,6 +148,14 @@ export async function get<T>(path: string, options?: RequestOptions): Promise<T>
   return handleResponse<T>(response);
 }
 
+/**
+ * Performs a POST request to the API.
+ * @param path - The API endpoint path
+ * @param body - Optional request body (will be JSON stringified)
+ * @param options - Optional request options including query parameters
+ * @returns Promise resolving to the response data
+ * @throws ApiClientError for non-2xx responses
+ */
 export async function post<T, B = unknown>(path: string, body?: B, options?: RequestOptions): Promise<T> {
   const url = buildUrl(path, options?.params);
 
@@ -112,6 +169,14 @@ export async function post<T, B = unknown>(path: string, body?: B, options?: Req
   return handleResponse<T>(response);
 }
 
+/**
+ * Performs a PUT request to the API.
+ * @param path - The API endpoint path
+ * @param body - Optional request body (will be JSON stringified)
+ * @param options - Optional request options including query parameters
+ * @returns Promise resolving to the response data
+ * @throws ApiClientError for non-2xx responses
+ */
 export async function put<T, B = unknown>(path: string, body?: B, options?: RequestOptions): Promise<T> {
   const url = buildUrl(path, options?.params);
 
@@ -125,6 +190,13 @@ export async function put<T, B = unknown>(path: string, body?: B, options?: Requ
   return handleResponse<T>(response);
 }
 
+/**
+ * Performs a DELETE request to the API.
+ * @param path - The API endpoint path
+ * @param options - Optional request options including query parameters
+ * @returns Promise resolving to the response data (or void for 204 responses)
+ * @throws ApiClientError for non-2xx responses
+ */
 export async function del<T = void>(path: string, options?: RequestOptions): Promise<T> {
   const url = buildUrl(path, options?.params);
 
@@ -137,6 +209,12 @@ export async function del<T = void>(path: string, options?: RequestOptions): Pro
   return handleResponse<T>(response);
 }
 
+/**
+ * Builds query parameters object from pagination options.
+ * Filters out undefined values for clean query strings.
+ * @param pagination - Optional pagination parameters
+ * @returns Query parameters object for use with request options
+ */
 export function buildPaginationParams(pagination?: PaginationParams): Record<string, string | number | undefined> {
   if (!pagination) return {};
 

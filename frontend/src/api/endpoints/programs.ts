@@ -8,9 +8,7 @@ import type {
   EnrollmentResponse,
 } from '../types';
 
-export interface ListProgramsParams extends PaginationParams {
-  // Add any program-specific filters here if needed
-}
+export type ListProgramsParams = PaginationParams;
 
 export async function listPrograms(params?: ListProgramsParams): Promise<PaginatedResponse<ProgramListItem>> {
   return get<PaginatedResponse<ProgramListItem>>('/programs', {
