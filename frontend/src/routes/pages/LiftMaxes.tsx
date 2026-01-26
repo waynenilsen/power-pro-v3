@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Container } from '../../components/layout';
 import { useAuth } from '../../contexts/useAuth';
 import { useLiftMaxes, useLifts, useDeleteLiftMax } from '../../hooks';
@@ -206,6 +206,7 @@ function ErrorState({ message }: { message: string }) {
 }
 
 export default function LiftMaxes() {
+  const navigate = useNavigate();
   const { userId } = useAuth();
   const { data: maxesData, isLoading: maxesLoading, error: maxesError } = useLiftMaxes(userId ?? undefined);
   const { data: liftsData, isLoading: liftsLoading } = useLifts();
@@ -293,9 +294,7 @@ export default function LiftMaxes() {
                       key={max.id}
                       liftMax={max}
                       liftName={group.liftName}
-                      onEdit={() => {
-                        window.location.href = `/lift-maxes/${max.id}/edit`;
-                      }}
+                      onEdit={() => navigate(`/lift-maxes/${max.id}/edit`)}
                       onDelete={() => setDeleteTarget({ id: max.id, liftName: group.liftName })}
                     />
                   ))}
