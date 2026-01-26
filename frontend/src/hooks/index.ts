@@ -7,4 +7,10 @@ export {
   useWorkoutSession,
   useCurrentWorkoutSession,
 } from './useWorkouts';
-export { useEnrollment, useLiftMaxes, useProgressionHistory } from './useCurrentUser';
+export {
+  useEnrollment,
+  useLiftMaxes,
+  useProgressionHistory,
+  useEnrollInProgram,
+  useUnenroll,
+} from './useCurrentUser';
