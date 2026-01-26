@@ -1,8 +1,9 @@
 import { NavLink } from 'react-router-dom';
-import { Home, Dumbbell, History, User } from 'lucide-react';
+import { Home, Dumbbell, BookOpen, History, User } from 'lucide-react';
 
 const navItems = [
   { to: '/', icon: Home, label: 'Home' },
+  { to: '/programs', icon: BookOpen, label: 'Programs' },
   { to: '/workout', icon: Dumbbell, label: 'Workout' },
   { to: '/history', icon: History, label: 'History' },
   { to: '/profile', icon: User, label: 'Profile' },
