@@ -155,4 +155,3 @@ This authentication system integrates with:
 
 - See `tech-stack.md` for technology stack details
 - See `erd.md` for requirements document structure (if creating auth ERD)
-- See `ticket-system.md` for breaking auth into tickets

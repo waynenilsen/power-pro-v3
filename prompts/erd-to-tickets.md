@@ -119,7 +119,7 @@ Crumb: Implement user registration API
 - Easier rollback if needed
 - Better traceability
 
-See `tech-stack.md` and `ticket-system.md` for more details.
+See `tech-stack.md` for more details.
 
 ## Using Crumbler for Work Management
 
