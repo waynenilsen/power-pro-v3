@@ -1,5 +1,6 @@
 import { createBrowserRouter } from 'react-router-dom';
 import { Layout } from '../components/layout';
+import { ProtectedRoute } from '../components/auth';
 import Home from './pages/Home';
 import Login from './pages/Login';
 import Programs from './pages/Programs';
@@ -12,31 +13,36 @@ import NotFound from './pages/NotFound';
 export const router = createBrowserRouter([
   {
     path: '/',
-    element: <Layout />,
+    element: <ProtectedRoute />,
     children: [
       {
-        index: true,
-        element: <Home />,
-      },
-      {
-        path: 'programs',
-        element: <Programs />,
-      },
-      {
-        path: 'programs/:id',
-        element: <ProgramDetails />,
-      },
-      {
-        path: 'workout',
-        element: <Workout />,
-      },
-      {
-        path: 'history',
-        element: <History />,
-      },
-      {
-        path: 'profile',
-        element: <Profile />,
+        element: <Layout />,
+        children: [
+          {
+            index: true,
+            element: <Home />,
+          },
+          {
+            path: 'programs',
+            element: <Programs />,
+          },
+          {
+            path: 'programs/:id',
+            element: <ProgramDetails />,
+          },
+          {
+            path: 'workout',
+            element: <Workout />,
+          },
+          {
+            path: 'history',
+            element: <History />,
+          },
+          {
+            path: 'profile',
+            element: <Profile />,
+          },
+        ],
       },
     ],
   },

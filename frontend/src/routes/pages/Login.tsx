@@ -1,11 +1,14 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/useAuth';
 import { Dumbbell, ChevronDown, Loader2, Zap, User } from 'lucide-react';
 
 export default function Login() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { login, createUser, isLoading } = useAuth();
+
+  const from = (location.state as { from?: { pathname: string } })?.from?.pathname || '/';
   const [showExistingId, setShowExistingId] = useState(false);
   const [existingId, setExistingId] = useState('');
   const [isCreating, setIsCreating] = useState(false);
@@ -17,7 +20,7 @@ export default function Login() {
     try {
       const userId = createUser();
       login(userId);
-      navigate('/');
+      navigate(from, { replace: true });
     } catch {
       setError('Failed to create account. Please try again.');
     } finally {
@@ -33,7 +36,7 @@ export default function Login() {
       return;
     }
     login(existingId.trim());
-    navigate('/');
+    navigate(from, { replace: true });
   };
 
   const loading = isLoading || isCreating;
