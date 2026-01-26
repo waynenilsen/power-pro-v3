@@ -11,7 +11,6 @@ interface ExerciseCardProps {
 
 interface SetRowProps {
   set: GeneratedSet;
-  exerciseIndex: number;
   isCompleted: boolean;
   onToggle: () => void;
   isReadOnly?: boolean;
@@ -195,7 +194,6 @@ export function ExerciseCard({
             <SetRow
               key={setKey}
               set={set}
-              exerciseIndex={exerciseIndex}
               isCompleted={isCompleted}
               onToggle={() => onSetToggle(exerciseIndex, set.setNumber)}
               isReadOnly={isReadOnly}

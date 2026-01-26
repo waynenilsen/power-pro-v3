@@ -117,7 +117,10 @@ export default function Workout() {
   const currentDayIndex = enrollment?.data?.state.currentDayIndex ?? 0;
   const currentWeek = enrollment?.data?.state.currentWeek ?? 1;
   const cycleLengthWeeks = enrollment?.data?.program.cycleLengthWeeks ?? 1;
-  const isLastDayOfWeek = currentDayIndex >= 2; // Assuming 3 days per week (0, 1, 2)
+  // TODO: daysPerWeek should come from the program definition, not hardcoded
+  // Currently assumes 3 days per week (indices 0, 1, 2)
+  const daysPerWeek = 3;
+  const isLastDayOfWeek = currentDayIndex >= daysPerWeek - 1;
   const isLastWeekOfCycle = currentWeek >= cycleLengthWeeks;
 
   // Loading state
