@@ -2,6 +2,9 @@
 export { configureClient, getClientConfig, ApiClientError } from './client';
 export type { ClientConfig, RequestOptions } from './client';
 
+// Auth error handling
+export { onUnauthorized, clearUnauthorizedHandler } from './auth-error-handler';
+
 // Types
 export * from './types';
 

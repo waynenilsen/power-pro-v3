@@ -1,5 +1,7 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { configureClient } from '../api/client';
+import { onUnauthorized, clearUnauthorizedHandler } from '../api/auth-error-handler';
+import { queryClient } from '../lib/query';
 import { AUTH_STORAGE_KEY, type AuthContextValue, type AuthProviderProps } from './auth-types';
 import { AuthContext } from './auth-context';
 
@@ -26,8 +28,18 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   const logout = useCallback(() => {
     localStorage.removeItem(AUTH_STORAGE_KEY);
+    configureClient({ userId: undefined });
+    queryClient.clear();
     setUserId(null);
   }, []);
+
+  // Register the unauthorized handler to trigger logout on 401 responses
+  useEffect(() => {
+    onUnauthorized(logout);
+    return () => {
+      clearUnauthorizedHandler();
+    };
+  }, [logout]);
 
   const createUser = useCallback((): string => {
     const newUserId = generateUserId();

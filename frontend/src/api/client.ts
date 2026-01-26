@@ -1,4 +1,5 @@
 import type { ApiError, PaginationParams } from './types';
+import { triggerUnauthorized } from './auth-error-handler';
 
 const BASE_URL = '/api';
 
@@ -50,6 +51,7 @@ function buildUrl(path: string, params?: Record<string, string | number | boolea
 
 /**
  * Handles API response, parsing JSON or throwing appropriate errors.
+ * Triggers logout on 401 Unauthorized responses.
  * @param response - The fetch Response object
  * @returns Parsed JSON response data
  * @throws ApiClientError for non-2xx responses
@@ -65,6 +67,11 @@ async function handleResponse<T>(response: Response): Promise<T> {
       details = errorBody.details;
     } catch {
       // Failed to parse error body, use default message
+    }
+
+    // Trigger logout on 401 Unauthorized
+    if (response.status === 401) {
+      triggerUnauthorized();
     }
 
     throw new ApiClientError(errorMessage, response.status, details);

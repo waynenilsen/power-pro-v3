@@ -1,5 +1,6 @@
 import { QueryClient } from '@tanstack/react-query';
 import { ApiClientError } from '../api/client';
+import { triggerUnauthorized } from '../api/auth-error-handler';
 
 export const queryClient = new QueryClient({
   defaultOptions: {
@@ -18,6 +19,13 @@ export const queryClient = new QueryClient({
     },
     mutations: {
       retry: false,
+      onError: (error) => {
+        // Trigger logout on 401 Unauthorized for mutations
+        // (Queries are handled at the API client level)
+        if (error instanceof ApiClientError && error.status === 401) {
+          triggerUnauthorized();
+        }
+      },
     },
   },
 });
