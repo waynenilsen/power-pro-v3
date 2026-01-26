@@ -18,3 +18,9 @@ export {
   useEnrollInProgram,
   useUnenroll,
 } from './useCurrentUser';
+export { useLifts } from './useLifts';
+export {
+  useCreateLiftMax,
+  useUpdateLiftMax,
+  useDeleteLiftMax,
+} from './useLiftMaxes';

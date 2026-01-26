@@ -12,3 +12,4 @@ export * from './types';
 export * as programs from './endpoints/programs';
 export * as workouts from './endpoints/workouts';
 export * as users from './endpoints/users';
+export * as lifts from './endpoints/lifts';
