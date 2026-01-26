@@ -17,6 +17,11 @@ function formatDateForInput(dateString?: string): string {
   return date.toISOString().split('T')[0];
 }
 
+function formatDateForApi(dateString: string): string {
+  // Convert YYYY-MM-DD to RFC3339 format for Go backend
+  return new Date(dateString + 'T00:00:00Z').toISOString();
+}
+
 interface FormState {
   liftId: string;
   type: MaxType;
@@ -328,13 +333,14 @@ export default function LiftMaxForm() {
 
   const handleSubmit = async (form: FormState) => {
     const valueNum = parseFloat(form.value);
+    const effectiveDateRfc3339 = formatDateForApi(form.effectiveDate);
 
     if (isEditing && id) {
       await updateMax.mutateAsync({
         liftMaxId: id,
         request: {
           value: valueNum,
-          effectiveDate: form.effectiveDate,
+          effectiveDate: effectiveDateRfc3339,
         },
       });
     } else {
@@ -342,7 +348,7 @@ export default function LiftMaxForm() {
         liftId: form.liftId,
         type: form.type,
         value: valueNum,
-        effectiveDate: form.effectiveDate,
+        effectiveDate: effectiveDateRfc3339,
       });
     }
     navigate('/lift-maxes');

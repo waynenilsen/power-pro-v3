@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(bun run dev)",
+      "Bash(agent-browser open:*)",
+      "Bash(agent-browser snapshot:*)",
+      "Bash(agent-browser screenshot:*)",
+      "Bash(agent-browser click:*)",
+      "Bash(agent-browser wait:*)",
+      "Bash(agent-browser network requests)",
+      "Bash(go run:*)",
+      "Bash(agent-browser reload:*)",
+      "Bash(agent-browser:*)",
+      "Bash(npx tsc:*)",
+      "Bash(curl:*)",
+      "Skill(agent-browser)",
+      "Bash(TOKEN=\"6bu2-9ARtUrIqCTgtZDhRGsnUaE3jNAUpMND_E_riJ4=\")",
+      "Bash(USER_ID=\"ac6bd0d8-e352-4030-9da3-e9f5d78c3753\":*)",
+      "Bash(TOKEN=\"hjClcGqKheuZPS6EcRmBzcT6C76xKlIjadf685-DY6E=\")",
+      "Bash(lsof:*)",
+      "Bash(grep:*)",
+      "Bash(sqlite3:*)",
+      "Bash(sqlc generate:*)"
+    ]
+  }
+}

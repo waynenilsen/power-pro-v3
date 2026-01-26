@@ -24,6 +24,7 @@ import {
   Trophy,
   RotateCcw,
   Home,
+  Settings,
 } from 'lucide-react';
 
 type DialogType = 'abandon' | 'finish' | 'advanceWeek' | 'startNextCycle' | null;
@@ -33,7 +34,7 @@ export default function Workout() {
   const { userId } = useAuth();
 
   const { data: enrollment, isLoading: enrollmentLoading } = useEnrollment(userId ?? undefined);
-  const { data: workout, isLoading: workoutLoading } = useCurrentWorkout(userId ?? undefined);
+  const { data: workout, isLoading: workoutLoading, error: workoutError } = useCurrentWorkout(userId ?? undefined);
   const { data: session, isLoading: sessionLoading } = useCurrentWorkoutSession(userId ?? undefined);
 
   const startSession = useStartWorkoutSession(userId ?? undefined);
@@ -46,8 +47,12 @@ export default function Workout() {
   const [showCompletionSummary, setShowCompletionSummary] = useState(false);
 
   const isLoading = enrollmentLoading || workoutLoading || sessionLoading;
-  const isEnrolled = enrollment?.data?.enrollmentStatus === 'ACTIVE';
-  const hasActiveSession = session?.data?.status === 'IN_PROGRESS';
+  const isEnrolled = enrollment?.enrollmentStatus === 'ACTIVE';
+  const hasActiveSession = session?.status === 'IN_PROGRESS';
+
+  // Check if the error is about missing lift maxes
+  const isMissingLiftMaxes = workoutError?.message?.toLowerCase().includes('missing lift max') ||
+    workoutError?.message?.toLowerCase().includes('training max');
 
   const handleSetToggle = (exerciseIndex: number, setNumber: number) => {
     const key = `${exerciseIndex}-${setNumber}`;
@@ -71,16 +76,26 @@ export default function Workout() {
   };
 
   const handleFinishWorkout = () => {
-    finishSession.mutate(undefined, {
+    if (!session?.id) return;
+    finishSession.mutate(session.id, {
       onSuccess: () => {
-        setActiveDialog(null);
-        setShowCompletionSummary(true);
+        // Advance to next day after finishing workout
+        advanceState.mutate(
+          { advanceType: 'day' },
+          {
+            onSettled: () => {
+              setActiveDialog(null);
+              setShowCompletionSummary(true);
+            },
+          }
+        );
       },
     });
   };
 
   const handleAbandonWorkout = () => {
-    abandonSession.mutate(undefined, {
+    if (!session?.id) return;
+    abandonSession.mutate(session.id, {
       onSuccess: () => {
         setActiveDialog(null);
         setCompletedSets(new Set());
@@ -114,12 +129,10 @@ export default function Workout() {
   const progressPercentage = totalSets > 0 ? (completedCount / totalSets) * 100 : 0;
 
   // Determine if we're at end of week or cycle
-  const currentDayIndex = enrollment?.data?.state.currentDayIndex ?? 0;
-  const currentWeek = enrollment?.data?.state.currentWeek ?? 1;
-  const cycleLengthWeeks = enrollment?.data?.program.cycleLengthWeeks ?? 1;
-  // TODO: daysPerWeek should come from the program definition, not hardcoded
-  // Currently assumes 3 days per week (indices 0, 1, 2)
-  const daysPerWeek = 3;
+  const currentDayIndex = enrollment?.state.currentDayIndex ?? 0;
+  const currentWeek = enrollment?.state.currentWeek ?? 1;
+  const cycleLengthWeeks = enrollment?.program.cycleLengthWeeks ?? 1;
+  const daysPerWeek = enrollment?.program.daysPerWeek ?? 4;
   const isLastDayOfWeek = currentDayIndex >= daysPerWeek - 1;
   const isLastWeekOfCycle = currentWeek >= cycleLengthWeeks;
 
@@ -167,6 +180,40 @@ export default function Workout() {
               "
             >
               Browse Programs
+              <ChevronRight size={18} />
+            </button>
+          </div>
+        </Container>
+      </div>
+    );
+  }
+
+  // Missing lift maxes state
+  if (isMissingLiftMaxes) {
+    return (
+      <div className="py-8">
+        <Container>
+          <div className="max-w-md mx-auto text-center">
+            <div className="w-20 h-20 mx-auto mb-6 rounded-2xl bg-warning/10 border border-warning/30 flex items-center justify-center">
+              <Settings className="w-10 h-10 text-warning" />
+            </div>
+            <h1 className="text-2xl font-bold text-foreground mb-3">
+              Set Up Your Training Maxes
+            </h1>
+            <p className="text-muted mb-8">
+              Before you can generate workouts, you need to set your training maxes for the main lifts.
+              This helps calculate the weights for your program.
+            </p>
+            <button
+              onClick={() => navigate('/profile')}
+              className="
+                inline-flex items-center gap-2 px-6 py-3
+                bg-accent text-background font-bold rounded-lg
+                hover:bg-accent-light active:scale-[0.98]
+                transition-all duration-200
+              "
+            >
+              Go to Profile Settings
               <ChevronRight size={18} />
             </button>
           </div>

@@ -83,11 +83,12 @@ type UserProgramState struct {
 
 // EnrollmentWithProgram represents a user's enrollment with program details for responses.
 type EnrollmentWithProgram struct {
-	State            *UserProgramState
-	ProgramName      string
-	ProgramSlug      string
+	State              *UserProgramState
+	ProgramName        string
+	ProgramSlug        string
 	ProgramDescription *string
-	CycleLengthWeeks int
+	CycleLengthWeeks   int
+	DaysPerWeek        int
 }
 
 // ValidationResult is an alias for the shared validation.Result type.

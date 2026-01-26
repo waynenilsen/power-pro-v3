@@ -1,10 +1,10 @@
-import { get, buildPaginationParams } from '../client';
+import { get, getRaw, buildPaginationParams } from '../client';
 import type { Lift, PaginatedResponse, PaginationParams } from '../types';
 
 export type ListLiftsParams = PaginationParams;
 
 export async function listLifts(params?: ListLiftsParams): Promise<PaginatedResponse<Lift>> {
-  return get<PaginatedResponse<Lift>>('/lifts', {
+  return getRaw<PaginatedResponse<Lift>>('/lifts', {
     params: buildPaginationParams(params),
   });
 }

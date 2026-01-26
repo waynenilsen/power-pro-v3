@@ -43,6 +43,7 @@ type EnrollmentProgramResponse struct {
 	Slug             string  `json:"slug"`
 	Description      *string `json:"description,omitempty"`
 	CycleLengthWeeks int     `json:"cycleLengthWeeks"`
+	DaysPerWeek      int     `json:"daysPerWeek"`
 }
 
 // EnrollmentStateResponse represents the state portion of an enrollment response.
@@ -91,6 +92,7 @@ func enrollmentToResponse(e *userprogramstate.EnrollmentWithProgram, currentSess
 			Slug:             e.ProgramSlug,
 			Description:      e.ProgramDescription,
 			CycleLengthWeeks: e.CycleLengthWeeks,
+			DaysPerWeek:      e.DaysPerWeek,
 		},
 		State: EnrollmentStateResponse{
 			CurrentWeek:           e.State.CurrentWeek,

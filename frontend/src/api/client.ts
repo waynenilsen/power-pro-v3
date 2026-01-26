@@ -56,6 +56,13 @@ function buildUrl(path: string, params?: Record<string, string | number | boolea
  * @returns Parsed JSON response data
  * @throws ApiClientError for non-2xx responses
  */
+/**
+ * API response wrapper type - backend wraps all responses in { data: T }
+ */
+interface ApiResponse<T> {
+  data: T;
+}
+
 async function handleResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {
     let errorMessage = `Request failed with status ${response.status}`;
@@ -63,8 +70,8 @@ async function handleResponse<T>(response: Response): Promise<T> {
 
     try {
       const errorBody: ApiError = await response.json();
-      errorMessage = errorBody.error;
-      details = errorBody.details;
+      errorMessage = errorBody.error.message;
+      details = errorBody.error.details?.validationErrors;
     } catch {
       // Failed to parse error body, use default message
     }
@@ -82,21 +89,27 @@ async function handleResponse<T>(response: Response): Promise<T> {
     return undefined as T;
   }
 
-  return response.json();
+  // Backend wraps all responses in { data: T }, so unwrap it
+  const json: ApiResponse<T> = await response.json();
+  return json.data;
 }
 
 /**
  * Creates request headers including authentication headers.
  * @param userId - Optional user ID for X-User-ID header
  * @param isAdmin - Optional admin flag for X-Admin header
+ * @param token - Optional Bearer token for Authorization header
  * @returns Headers object for fetch requests
  */
-function createHeaders(userId?: string, isAdmin?: boolean): HeadersInit {
+function createHeaders(userId?: string, isAdmin?: boolean, token?: string): HeadersInit {
   const headers: HeadersInit = {
     'Content-Type': 'application/json',
   };
 
-  if (userId) {
+  // Bearer token takes precedence over X-User-ID if both are set
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  } else if (userId) {
     headers['X-User-ID'] = userId;
   }
 
@@ -115,9 +128,29 @@ export interface ClientConfig {
   userId?: string;
   /** Whether to include X-Admin header */
   isAdmin?: boolean;
+  /** Bearer token for Authorization header */
+  token?: string;
 }
 
-let globalConfig: ClientConfig = {};
+// Storage keys for auth - must match auth-types.ts
+const AUTH_STORAGE_KEY = 'powerpro_user_id';
+const TOKEN_STORAGE_KEY = 'powerpro_token';
+
+// Initialize config from localStorage synchronously on module load
+function getInitialConfig(): ClientConfig {
+  if (typeof window === 'undefined') return {};
+
+  const token = localStorage.getItem(TOKEN_STORAGE_KEY);
+  const userId = localStorage.getItem(AUTH_STORAGE_KEY);
+
+  const config: ClientConfig = {};
+  if (token) config.token = token;
+  if (userId) config.userId = userId;
+
+  return config;
+}
+
+let globalConfig: ClientConfig = getInitialConfig();
 
 /**
  * Configures the global API client settings.
@@ -137,6 +170,37 @@ export function getClientConfig(): ClientConfig {
 }
 
 /**
+ * Handles response without unwrapping {data: T} - for paginated endpoints
+ * that return {data: items[], meta: {...}} directly.
+ */
+async function handleRawResponse<T>(response: Response): Promise<T> {
+  if (!response.ok) {
+    let errorMessage = `Request failed with status ${response.status}`;
+    let details: string[] | undefined;
+
+    try {
+      const errorBody: ApiError = await response.json();
+      errorMessage = errorBody.error.message;
+      details = errorBody.error.details?.validationErrors;
+    } catch {
+      // Failed to parse error body, use default message
+    }
+
+    if (response.status === 401) {
+      triggerUnauthorized();
+    }
+
+    throw new ApiClientError(errorMessage, response.status, details);
+  }
+
+  if (response.status === 204) {
+    return undefined as T;
+  }
+
+  return response.json();
+}
+
+/**
  * Performs a GET request to the API.
  * @param path - The API endpoint path
  * @param options - Optional request options including query parameters
@@ -148,11 +212,27 @@ export async function get<T>(path: string, options?: RequestOptions): Promise<T>
 
   const response = await fetch(url, {
     method: 'GET',
-    headers: createHeaders(globalConfig.userId, globalConfig.isAdmin),
+    headers: createHeaders(globalConfig.userId, globalConfig.isAdmin, globalConfig.token),
     ...options,
   });
 
   return handleResponse<T>(response);
+}
+
+/**
+ * Performs a GET request without unwrapping {data: T}.
+ * Use for paginated endpoints that return {data: items[], meta: {...}}.
+ */
+export async function getRaw<T>(path: string, options?: RequestOptions): Promise<T> {
+  const url = buildUrl(path, options?.params);
+
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: createHeaders(globalConfig.userId, globalConfig.isAdmin, globalConfig.token),
+    ...options,
+  });
+
+  return handleRawResponse<T>(response);
 }
 
 /**
@@ -168,7 +248,7 @@ export async function post<T, B = unknown>(path: string, body?: B, options?: Req
 
   const response = await fetch(url, {
     method: 'POST',
-    headers: createHeaders(globalConfig.userId, globalConfig.isAdmin),
+    headers: createHeaders(globalConfig.userId, globalConfig.isAdmin, globalConfig.token),
     body: body ? JSON.stringify(body) : undefined,
     ...options,
   });
@@ -189,7 +269,7 @@ export async function put<T, B = unknown>(path: string, body?: B, options?: Requ
 
   const response = await fetch(url, {
     method: 'PUT',
-    headers: createHeaders(globalConfig.userId, globalConfig.isAdmin),
+    headers: createHeaders(globalConfig.userId, globalConfig.isAdmin, globalConfig.token),
     body: body ? JSON.stringify(body) : undefined,
     ...options,
   });
@@ -209,7 +289,7 @@ export async function del<T = void>(path: string, options?: RequestOptions): Pro
 
   const response = await fetch(url, {
     method: 'DELETE',
-    headers: createHeaders(globalConfig.userId, globalConfig.isAdmin),
+    headers: createHeaders(globalConfig.userId, globalConfig.isAdmin, globalConfig.token),
     ...options,
   });
 

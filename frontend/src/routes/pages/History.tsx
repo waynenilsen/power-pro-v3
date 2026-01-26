@@ -345,11 +345,11 @@ export default function History() {
     pageSize: 1,
   });
 
-  const isEnrolled = enrollment?.data?.enrollmentStatus === 'ACTIVE' ||
-    enrollment?.data?.enrollmentStatus === 'BETWEEN_CYCLES';
+  const isEnrolled = enrollment?.enrollmentStatus === 'ACTIVE' ||
+    enrollment?.enrollmentStatus === 'BETWEEN_CYCLES';
 
-  const totalCompleted = allCompletedSessions?.meta.totalItems ?? 0;
-  const totalAbandoned = allAbandonedSessions?.meta.totalItems ?? 0;
+  const totalCompleted = allCompletedSessions?.meta.total ?? 0;
+  const totalAbandoned = allAbandonedSessions?.meta.total ?? 0;
 
   const handleFilterChange = (newFilter: FilterStatus) => {
     setFilter(newFilter);
@@ -416,7 +416,7 @@ export default function History() {
 
                 <Pagination
                   page={page}
-                  totalPages={sessions.meta.totalPages}
+                  totalPages={Math.ceil(sessions.meta.total / sessions.meta.limit)}
                   onPageChange={setPage}
                 />
               </>

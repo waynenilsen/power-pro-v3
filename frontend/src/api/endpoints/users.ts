@@ -1,4 +1,4 @@
-import { get, post, put, del, buildPaginationParams } from '../client';
+import { get, getRaw, post, put, del, buildPaginationParams } from '../client';
 import type {
   EnrollmentResponse,
   LiftMax,
@@ -16,11 +16,11 @@ import type {
 // Enrollment
 
 export async function getEnrollment(userId: string): Promise<EnrollmentResponse> {
-  return get<EnrollmentResponse>(`/users/${userId}/enrollment`);
+  return get<EnrollmentResponse>(`/users/${userId}/program`);
 }
 
 export async function unenroll(userId: string): Promise<void> {
-  return del<void>(`/users/${userId}/enrollment`);
+  return del<void>(`/users/${userId}/program`);
 }
 
 // Lift Maxes
@@ -34,7 +34,7 @@ export async function listLiftMaxes(
   userId: string,
   params?: ListLiftMaxesParams
 ): Promise<PaginatedResponse<LiftMax>> {
-  return get<PaginatedResponse<LiftMax>>(`/users/${userId}/lift-maxes`, {
+  return getRaw<PaginatedResponse<LiftMax>>(`/users/${userId}/lift-maxes`, {
     params: {
       ...buildPaginationParams(params),
       lift_id: params?.liftId,

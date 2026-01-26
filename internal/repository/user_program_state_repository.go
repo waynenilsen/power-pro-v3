@@ -87,6 +87,7 @@ func (r *UserProgramStateRepository) GetEnrollmentWithProgram(userID string) (*u
 		ProgramSlug:        row.ProgramSlug,
 		ProgramDescription: nullStringToStringPtr(row.ProgramDescription),
 		CycleLengthWeeks:   int(row.CycleLengthWeeks),
+		DaysPerWeek:        int(row.DaysPerWeek),
 	}, nil
 }
 

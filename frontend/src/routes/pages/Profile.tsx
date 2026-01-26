@@ -95,7 +95,7 @@ function EnrollmentCard({ userId }: { userId: string }) {
     );
   }
 
-  if (error || !enrollment?.data) {
+  if (error || !enrollment) {
     return (
       <Link
         to="/programs"
@@ -121,7 +121,7 @@ function EnrollmentCard({ userId }: { userId: string }) {
     );
   }
 
-  const { program, state, enrollmentStatus } = enrollment.data;
+  const { program, state, enrollmentStatus } = enrollment;
   const progressPercentage = (state.currentWeek / program.cycleLengthWeeks) * 100;
 
   return (

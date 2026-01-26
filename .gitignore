@@ -34,3 +34,7 @@ Thumbs.db
 frontend/node_modules/
 frontend/dist/
 frontend/dist-ssr/
+
+*.db
+*.db-journal
+*.db-wal

@@ -98,7 +98,8 @@ function ErrorState({ message }: { message: string }) {
 export default function Programs() {
   const { data, isLoading, error } = usePrograms();
 
-  const programs = data?.data ?? [];
+  // Handle both array response (simple list) and paginated response ({data: [], ...})
+  const programs = Array.isArray(data) ? data : (data?.data ?? []);
 
   return (
     <div className="py-6 md:py-8">

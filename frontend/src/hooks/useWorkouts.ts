@@ -35,14 +35,11 @@ export function useWorkoutSessions(
   });
 }
 
-export function useWorkoutSession(
-  userId: string | undefined,
-  sessionId: string | undefined
-) {
+export function useWorkoutSession(sessionId: string | undefined) {
   return useQuery({
-    queryKey: queryKeys.workouts.sessionDetail(userId!, sessionId!),
-    queryFn: () => workouts.getWorkoutSession(userId!, sessionId!),
-    enabled: !!userId && !!sessionId,
+    queryKey: queryKeys.workouts.sessionDetail(sessionId!),
+    queryFn: () => workouts.getWorkoutSession(sessionId!),
+    enabled: !!sessionId,
   });
 }
 
@@ -76,9 +73,9 @@ export function useFinishWorkoutSession(userId: string | undefined) {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: () => {
-      if (!userId) throw new Error('User ID is required');
-      return workouts.finishWorkoutSession(userId);
+    mutationFn: (sessionId: string) => {
+      if (!sessionId) throw new Error('Session ID is required');
+      return workouts.finishWorkoutSession(sessionId);
     },
     onSuccess: () => {
       if (userId) {
@@ -94,9 +91,9 @@ export function useAbandonWorkoutSession(userId: string | undefined) {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: () => {
-      if (!userId) throw new Error('User ID is required');
-      return workouts.abandonWorkoutSession(userId);
+    mutationFn: (sessionId: string) => {
+      if (!sessionId) throw new Error('Session ID is required');
+      return workouts.abandonWorkoutSession(sessionId);
     },
     onSuccess: () => {
       if (userId) {

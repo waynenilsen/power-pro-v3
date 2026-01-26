@@ -198,8 +198,8 @@ export default function Home() {
   const { data: enrollment, isLoading } = useEnrollment(userId ?? undefined);
   const advanceState = useAdvanceState(userId ?? undefined);
 
-  const isEnrolled = enrollment?.data &&
-    (enrollment.data.enrollmentStatus === 'ACTIVE' || enrollment.data.enrollmentStatus === 'BETWEEN_CYCLES');
+  const isEnrolled = enrollment &&
+    (enrollment.enrollmentStatus === 'ACTIVE' || enrollment.enrollmentStatus === 'BETWEEN_CYCLES');
 
   const handleStartNextCycle = () => {
     advanceState.mutate({ advanceType: 'week' });
@@ -218,16 +218,16 @@ export default function Home() {
         <div className="mt-8">
           {isLoading ? (
             <LoadingState />
-          ) : isEnrolled && enrollment.data ? (
+          ) : isEnrolled && enrollment ? (
             <EnrolledProgramCard
-              programName={enrollment.data.program.name}
-              programSlug={enrollment.data.program.slug}
-              currentWeek={enrollment.data.state.currentWeek}
-              currentDayIndex={enrollment.data.state.currentDayIndex}
-              cycleLengthWeeks={enrollment.data.program.cycleLengthWeeks}
-              currentCycleIteration={enrollment.data.state.currentCycleIteration}
-              enrollmentStatus={enrollment.data.enrollmentStatus}
-              currentWorkoutSession={enrollment.data.currentWorkoutSession}
+              programName={enrollment.program.name}
+              programSlug={enrollment.program.slug}
+              currentWeek={enrollment.state.currentWeek}
+              currentDayIndex={enrollment.state.currentDayIndex}
+              cycleLengthWeeks={enrollment.program.cycleLengthWeeks}
+              currentCycleIteration={enrollment.state.currentCycleIteration}
+              enrollmentStatus={enrollment.enrollmentStatus}
+              currentWorkoutSession={enrollment.currentWorkoutSession}
               onStartNextCycle={handleStartNextCycle}
               isAdvancing={advanceState.isPending}
             />

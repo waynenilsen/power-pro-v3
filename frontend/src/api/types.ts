@@ -1,19 +1,27 @@
 // Common types
 
+export interface ApiErrorBody {
+  code: string;
+  message: string;
+  details?: {
+    validationErrors?: string[];
+  };
+}
+
 export interface ApiError {
-  error: string;
-  details?: string[];
+  error: ApiErrorBody;
 }
 
 export interface PaginationMeta {
-  page: number;
-  pageSize: number;
-  totalItems: number;
-  totalPages: number;
+  total: number;
+  limit: number;
+  offset: number;
+  hasMore: boolean;
 }
 
-export interface PaginatedResponse<T> extends PaginationMeta {
+export interface PaginatedResponse<T> {
   data: T[];
+  meta: PaginationMeta;
 }
 
 export interface PaginationParams {
@@ -314,6 +322,7 @@ export interface EnrollmentProgram {
   slug: string;
   description?: string;
   cycleLengthWeeks: number;
+  daysPerWeek: number;
 }
 
 export interface Enrollment {
@@ -334,14 +343,12 @@ export interface WorkoutSessionSummary {
   finishedAt?: string;
 }
 
-export interface EnrollmentResponse {
-  data: Enrollment & {
-    enrollmentStatus: EnrollmentStatus;
-    cycleStatus: CycleStatus;
-    weekStatus: WeekStatus;
-    currentWorkoutSession?: WorkoutSessionSummary;
-  };
-}
+export type EnrollmentResponse = Enrollment & {
+  enrollmentStatus: EnrollmentStatus;
+  cycleStatus: CycleStatus;
+  weekStatus: WeekStatus;
+  currentWorkoutSession?: WorkoutSessionSummary;
+};
 
 export interface EnrollRequest {
   programId: string;
@@ -361,9 +368,7 @@ export interface WorkoutSession {
   updatedAt: string;
 }
 
-export interface WorkoutSessionDataResponse {
-  data: WorkoutSession;
-}
+export type WorkoutSessionDataResponse = WorkoutSession;
 
 export interface WorkoutSessionListResponse {
   data: WorkoutSession[];

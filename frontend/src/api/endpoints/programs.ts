@@ -25,5 +25,5 @@ export async function getProgramBySlug(slug: string): Promise<ProgramDetail> {
 }
 
 export async function enrollInProgram(userId: string, request: EnrollRequest): Promise<EnrollmentResponse> {
-  return post<EnrollmentResponse, EnrollRequest>(`/users/${userId}/enrollment`, request);
+  return post<EnrollmentResponse, EnrollRequest>(`/users/${userId}/program`, request);
 }

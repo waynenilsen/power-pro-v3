@@ -62,8 +62,8 @@ export const queryKeys = {
     sessions: (userId: string) => [...queryKeys.workouts.all, 'sessions', userId] as const,
     sessionList: <T extends object>(userId: string, filters?: T) =>
       [...queryKeys.workouts.sessions(userId), 'list', filters] as const,
-    sessionDetail: (userId: string, sessionId: string) =>
-      [...queryKeys.workouts.sessions(userId), sessionId] as const,
+    sessionDetail: (sessionId: string) =>
+      [...queryKeys.workouts.all, 'session', sessionId] as const,
     sessionCurrent: (userId: string) =>
       [...queryKeys.workouts.sessions(userId), 'current'] as const,
   },

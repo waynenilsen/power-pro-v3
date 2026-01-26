@@ -45,7 +45,8 @@ SELECT
     p.name AS program_name,
     p.slug AS program_slug,
     p.description AS program_description,
-    c.length_weeks AS cycle_length_weeks
+    c.length_weeks AS cycle_length_weeks,
+    p.days_per_week
 FROM user_program_states ups
 JOIN programs p ON ups.program_id = p.id
 JOIN cycles c ON p.cycle_id = c.id
