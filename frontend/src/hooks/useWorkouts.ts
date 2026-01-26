@@ -1,7 +1,8 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { queryKeys } from '../lib/query';
 import { workouts } from '../api';
 import type { ListWorkoutSessionsParams } from '../api/endpoints/workouts';
+import type { AdvanceStateRequest } from '../api/types';
 
 export function useCurrentWorkout(userId: string | undefined) {
   return useQuery({
@@ -50,5 +51,76 @@ export function useCurrentWorkoutSession(userId: string | undefined) {
     queryKey: queryKeys.workouts.sessionCurrent(userId!),
     queryFn: () => workouts.getCurrentWorkoutSession(userId!),
     enabled: !!userId,
+  });
+}
+
+export function useStartWorkoutSession(userId: string | undefined) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: () => {
+      if (!userId) throw new Error('User ID is required');
+      return workouts.startWorkoutSession(userId);
+    },
+    onSuccess: () => {
+      if (userId) {
+        queryClient.invalidateQueries({ queryKey: queryKeys.workouts.sessionCurrent(userId) });
+        queryClient.invalidateQueries({ queryKey: queryKeys.workouts.sessions(userId) });
+        queryClient.invalidateQueries({ queryKey: queryKeys.users.enrollment(userId) });
+      }
+    },
+  });
+}
+
+export function useFinishWorkoutSession(userId: string | undefined) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: () => {
+      if (!userId) throw new Error('User ID is required');
+      return workouts.finishWorkoutSession(userId);
+    },
+    onSuccess: () => {
+      if (userId) {
+        queryClient.invalidateQueries({ queryKey: queryKeys.workouts.sessionCurrent(userId) });
+        queryClient.invalidateQueries({ queryKey: queryKeys.workouts.sessions(userId) });
+        queryClient.invalidateQueries({ queryKey: queryKeys.users.enrollment(userId) });
+      }
+    },
+  });
+}
+
+export function useAbandonWorkoutSession(userId: string | undefined) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: () => {
+      if (!userId) throw new Error('User ID is required');
+      return workouts.abandonWorkoutSession(userId);
+    },
+    onSuccess: () => {
+      if (userId) {
+        queryClient.invalidateQueries({ queryKey: queryKeys.workouts.sessionCurrent(userId) });
+        queryClient.invalidateQueries({ queryKey: queryKeys.workouts.sessions(userId) });
+        queryClient.invalidateQueries({ queryKey: queryKeys.users.enrollment(userId) });
+      }
+    },
+  });
+}
+
+export function useAdvanceState(userId: string | undefined) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (request: AdvanceStateRequest) => {
+      if (!userId) throw new Error('User ID is required');
+      return workouts.advanceState(userId, request);
+    },
+    onSuccess: () => {
+      if (userId) {
+        queryClient.invalidateQueries({ queryKey: queryKeys.users.enrollment(userId) });
+        queryClient.invalidateQueries({ queryKey: queryKeys.workouts.current(userId) });
+      }
+    },
   });
 }

@@ -6,6 +6,10 @@ export {
   useWorkoutSessions,
   useWorkoutSession,
   useCurrentWorkoutSession,
+  useStartWorkoutSession,
+  useFinishWorkoutSession,
+  useAbandonWorkoutSession,
+  useAdvanceState,
 } from './useWorkouts';
 export {
   useEnrollment,
