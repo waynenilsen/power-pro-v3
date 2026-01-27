@@ -127,7 +127,7 @@ function EnrollmentCard({ userId }: { userId: string }) {
 
   return (
     <Link
-      to={`/programs/${program.slug}`}
+      to={`/programs/${program.id}`}
       className="
         block bg-surface border border-border rounded-lg p-6 mb-6
         hover:border-accent/30 hover:bg-surface-elevated

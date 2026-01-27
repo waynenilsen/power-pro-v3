@@ -503,9 +503,9 @@ export default function ProgramDetails() {
   let enrollmentStatus: 'not-enrolled' | 'enrolled-this' | 'enrolled-other' = 'not-enrolled';
   let currentProgram: EnrollmentProgram | undefined;
 
-  if (enrollmentData?.data) {
-    currentProgram = enrollmentData.data.program;
-    const currentProgramId = enrollmentData.data.program.id;
+  if (enrollmentData) {
+    currentProgram = enrollmentData.program;
+    const currentProgramId = enrollmentData.program.id;
     if (currentProgramId === id) {
       enrollmentStatus = 'enrolled-this';
     } else {

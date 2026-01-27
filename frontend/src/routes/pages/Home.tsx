@@ -7,7 +7,7 @@ import type { EnrollmentStatus, WorkoutSessionSummary } from '../../api/types';
 
 function EnrolledProgramCard({
   programName,
-  programSlug,
+  programId,
   currentWeek,
   currentDayIndex,
   cycleLengthWeeks,
@@ -18,7 +18,7 @@ function EnrolledProgramCard({
   isAdvancing,
 }: {
   programName: string;
-  programSlug: string;
+  programId: string;
   currentWeek: number;
   currentDayIndex?: number;
   cycleLengthWeeks: number;
@@ -91,7 +91,7 @@ function EnrolledProgramCard({
 
         {/* View details link */}
         <Link
-          to={`/programs/${programSlug}`}
+          to={`/programs/${programId}`}
           className="text-sm text-muted hover:text-accent transition-colors"
         >
           View program details →
@@ -221,7 +221,7 @@ export default function Home() {
           ) : isEnrolled && enrollment ? (
             <EnrolledProgramCard
               programName={enrollment.program.name}
-              programSlug={enrollment.program.slug}
+              programId={enrollment.program.id}
               currentWeek={enrollment.state.currentWeek}
               currentDayIndex={enrollment.state.currentDayIndex}
               cycleLengthWeeks={enrollment.program.cycleLengthWeeks}
