@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"strings"
 	"testing"
@@ -68,9 +69,9 @@ func TestListLiftMaxes(t *testing.T) {
 	userID := testutil.TestUserID
 
 	// Create some test maxes first
-	createMax(t, ts, userID, testSquatID, "ONE_RM", 315.0, nil)
-	createMax(t, ts, userID, testSquatID, "TRAINING_MAX", 285.0, nil)
-	createMax(t, ts, userID, testBenchID, "ONE_RM", 225.0, nil)
+	// Note: Creating 1RM auto-creates TM at 90%, so we create 1RMs that result in desired TMs
+	createMax(t, ts, userID, testSquatID, "ONE_RM", 315.0, nil)  // Creates TM = 283.5 (90% of 315)
+	createMax(t, ts, userID, testBenchID, "ONE_RM", 225.0, nil) // Creates TM = 202.5 (90% of 225)
 
 	t.Run("returns user's lift maxes", func(t *testing.T) {
 		resp, err := authGetUser(ts.URL(fmt.Sprintf("/users/%s/lift-maxes", userID)), userID)
@@ -89,15 +90,17 @@ func TestListLiftMaxes(t *testing.T) {
 			t.Fatalf("Failed to decode response: %v", err)
 		}
 
-		if len(result.Data) != 3 {
-			t.Errorf("Expected 3 lift maxes, got %d", len(result.Data))
+		// Creating 1RM auto-creates TM, so we get 2 maxes per lift (1RM + TM)
+		// Squat: ONE_RM=315 + auto TM=283.5, Bench: ONE_RM=225 + auto TM=202.5 = 4 total
+		if len(result.Data) != 4 {
+			t.Errorf("Expected 4 lift maxes (2 per lift with auto-created TMs), got %d", len(result.Data))
 		}
-		if result.Meta == nil || result.Meta.Total != 3 {
+		if result.Meta == nil || result.Meta.Total != 4 {
 			total := int64(0)
 			if result.Meta != nil {
 				total = result.Meta.Total
 			}
-			t.Errorf("Expected total 3, got %d", total)
+			t.Errorf("Expected total 4, got %d", total)
 		}
 	})
 
@@ -126,14 +129,15 @@ func TestListLiftMaxes(t *testing.T) {
 		}
 
 		// Get page 2 (offset=2)
+		// With 4 total maxes (2 per lift: 1RM + TM), page 2 should have 2 maxes
 		resp2, _ := authGetUser(ts.URL(fmt.Sprintf("/users/%s/lift-maxes?limit=2&offset=2", userID)), userID)
 		defer resp2.Body.Close()
 
 		var result2 PaginatedLiftMaxesResponse
 		json.NewDecoder(resp2.Body).Decode(&result2)
 
-		if len(result2.Data) != 1 {
-			t.Errorf("Expected 1 lift max on page 2, got %d", len(result2.Data))
+		if len(result2.Data) != 2 {
+			t.Errorf("Expected 2 lift maxes on page 2 (4 total with auto-created TMs), got %d", len(result2.Data))
 		}
 	})
 
@@ -147,8 +151,9 @@ func TestListLiftMaxes(t *testing.T) {
 		var result PaginatedLiftMaxesResponse
 		json.NewDecoder(resp.Body).Decode(&result)
 
+		// Squat has ONE_RM=315 + auto-created TM=283.5 = 2 maxes
 		if len(result.Data) != 2 {
-			t.Errorf("Expected 2 squat maxes, got %d", len(result.Data))
+			t.Errorf("Expected 2 squat maxes (1RM + auto TM), got %d", len(result.Data))
 		}
 
 		for _, max := range result.Data {
@@ -168,6 +173,7 @@ func TestListLiftMaxes(t *testing.T) {
 		var result PaginatedLiftMaxesResponse
 		json.NewDecoder(resp.Body).Decode(&result)
 
+		// Both lifts have ONE_RM maxes: squat=315, bench=225
 		if len(result.Data) != 2 {
 			t.Errorf("Expected 2 ONE_RM maxes, got %d", len(result.Data))
 		}
@@ -675,7 +681,8 @@ func TestConvertLiftMax(t *testing.T) {
 	oneRM := createMax(t, ts, oneRMUserID, testSquatID, "ONE_RM", 400.0, nil)
 
 	tmUserID := "convert-tm-user"
-	tm := createMax(t, ts, tmUserID, testSquatID, "TRAINING_MAX", 360.0, nil)
+	// Create 1RM that results in TM=360 (1RM = 360/0.9 = 400)
+	createMax(t, ts, tmUserID, testSquatID, "ONE_RM", 400.0, nil)
 
 	t.Run("converts 1RM to Training Max with default percentage", func(t *testing.T) {
 		resp, err := authGetUser(ts.URL("/lift-maxes/"+oneRM.Data.ID+"/convert?to_type=TRAINING_MAX"), oneRMUserID)
@@ -714,7 +721,22 @@ func TestConvertLiftMax(t *testing.T) {
 	})
 
 	t.Run("converts Training Max to 1RM with default percentage", func(t *testing.T) {
-		resp, err := authGetUser(ts.URL("/lift-maxes/"+tm.Data.ID+"/convert?to_type=ONE_RM"), tmUserID)
+		// Get the auto-created TM (360) that was created from the 1RM=400
+		// Query for current TM
+		resp, err := authGetUser(ts.URL(fmt.Sprintf("/users/%s/lift-maxes/current?lift=%s&type=TRAINING_MAX", tmUserID, testSquatID)), tmUserID)
+		if err != nil {
+			t.Fatalf("Failed to get TM: %v", err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			t.Fatalf("Failed to get TM, status %d: %s", resp.StatusCode, body)
+		}
+		var tmResp LiftMaxResponse
+		json.NewDecoder(resp.Body).Decode(&tmResp)
+
+		// Now convert the TM back to 1RM
+		resp, err = authGetUser(ts.URL("/lift-maxes/"+tmResp.Data.ID+"/convert?to_type=ONE_RM"), tmUserID)
 		if err != nil {
 			t.Fatalf("Failed to make request: %v", err)
 		}
@@ -729,7 +751,7 @@ func TestConvertLiftMax(t *testing.T) {
 		json.NewDecoder(resp.Body).Decode(&envelope)
 		result := envelope.Data
 
-		// 360 / 0.90 = 400
+		// TM = 360 (90% of 400), converting back: 360 / 0.90 = 400
 		if result.ConvertedValue != 400.0 {
 			t.Errorf("Expected convertedValue 400.0, got %f", result.ConvertedValue)
 		}
@@ -883,9 +905,17 @@ func TestGetCurrentLiftMax(t *testing.T) {
 	createMax(t, ts, testUser, testSquatID, "ONE_RM", 315.0, &yesterday)
 	mostRecent := createMax(t, ts, testUser, testSquatID, "ONE_RM", 320.0, &now)
 
-	// Also create a training max
-	createMax(t, ts, testUser, testSquatID, "TRAINING_MAX", 285.0, &yesterday)
-	mostRecentTM := createMax(t, ts, testUser, testSquatID, "TRAINING_MAX", 290.0, &now)
+	// Also create training maxes by creating 1RMs (which auto-create TMs)
+	// Create 1RM that results in TM=285 (1RM = 285/0.9 = 316.67, rounded to 316.75)
+	createMax(t, ts, testUser, testSquatID, "ONE_RM", math.Round((285.0/0.9)*4)/4, &yesterday)
+	// Create 1RM that results in TM=290 (1RM = 290/0.9 = 322.22, rounded to 322.25)
+	createMax(t, ts, testUser, testSquatID, "ONE_RM", math.Round((290.0/0.9)*4)/4, &now)
+	// Get the auto-created most recent TM for assertions
+	url := fmt.Sprintf("/users/%s/lift-maxes/current?lift=%s&type=TRAINING_MAX", testUser, testSquatID)
+	resp, _ := authGetUser(ts.URL(url), testUser)
+	defer resp.Body.Close()
+	var mostRecentTM LiftMaxResponse
+	json.NewDecoder(resp.Body).Decode(&mostRecentTM)
 
 	// Create max for a different lift
 	createMax(t, ts, testUser, testBenchID, "ONE_RM", 225.0, &now)
@@ -937,6 +967,7 @@ func TestGetCurrentLiftMax(t *testing.T) {
 		if max.Data.ID != mostRecentTM.Data.ID {
 			t.Errorf("Expected most recent TM ID %s, got %s", mostRecentTM.Data.ID, max.Data.ID)
 		}
+		// TM should be 90% of 322.22 = 290.0
 		if max.Data.Value != 290.0 {
 			t.Errorf("Expected value 290.0, got %f", max.Data.Value)
 		}

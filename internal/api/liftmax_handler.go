@@ -36,9 +36,11 @@ type LiftMaxResponse struct {
 }
 
 // CreateLiftMaxRequest represents the request body for creating a lift max.
+// Note: Type field is ignored - all lift maxes are created as ONE_RM.
+// Training Max is automatically calculated at 90% of the 1RM.
 type CreateLiftMaxRequest struct {
 	LiftID        string     `json:"liftId"`
-	Type          string     `json:"type"`
+	Type          string     `json:"type"` // Ignored: always creates ONE_RM, TM is auto-calculated
 	Value         float64    `json:"value"`
 	EffectiveDate *time.Time `json:"effectiveDate,omitempty"`
 }
@@ -175,6 +177,9 @@ func (h *LiftMaxHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Force type to ONE_RM - Training Max is auto-calculated
+	reqType := liftmax.OneRM
+
 	// Generate UUID
 	id := uuid.New().String()
 
@@ -182,7 +187,7 @@ func (h *LiftMaxHandler) Create(w http.ResponseWriter, r *http.Request) {
 	input := liftmax.CreateLiftMaxInput{
 		UserID:        userID,
 		LiftID:        req.LiftID,
-		Type:          liftmax.MaxType(req.Type),
+		Type:          reqType,
 		Value:         req.Value,
 		EffectiveDate: req.EffectiveDate,
 	}
@@ -208,10 +213,16 @@ func (h *LiftMaxHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Persist
+	// Persist the 1RM
 	if err := h.repo.Create(newMax); err != nil {
 		writeDomainError(w, apperrors.NewInternal("failed to create lift max", err))
 		return
+	}
+
+	// Auto-create/update Training Max at 90% of 1RM
+	if err := h.syncTrainingMax(newMax); err != nil {
+		// Log but don't fail - the 1RM was created successfully
+		result.AddWarning("Failed to auto-calculate Training Max: " + err.Error())
 	}
 
 	// Return with warnings if any
@@ -222,6 +233,45 @@ func (h *LiftMaxHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeData(w, http.StatusCreated, response)
+}
+
+// syncTrainingMax creates or updates a Training Max based on a 1RM value.
+// The TM is set to 90% of the 1RM, rounded to the nearest 0.25.
+func (h *LiftMaxHandler) syncTrainingMax(oneRM *liftmax.LiftMax) error {
+	calculator := liftmax.NewMaxCalculator()
+	tmValue, err := calculator.ConvertToTM(oneRM.Value, nil) // Uses default 90%
+	if err != nil {
+		return err
+	}
+
+	// Check if a TM already exists for this user/lift with the same effective date
+	existingTM, err := h.repo.GetCurrentMax(oneRM.UserID, oneRM.LiftID, string(liftmax.TrainingMax))
+	if err != nil {
+		return err
+	}
+
+	now := time.Now()
+
+	if existingTM != nil {
+		// Update existing TM
+		existingTM.Value = tmValue
+		existingTM.EffectiveDate = oneRM.EffectiveDate
+		existingTM.UpdatedAt = now
+		return h.repo.Update(existingTM)
+	}
+
+	// Create new TM
+	newTM := &liftmax.LiftMax{
+		ID:            uuid.New().String(),
+		UserID:        oneRM.UserID,
+		LiftID:        oneRM.LiftID,
+		Type:          liftmax.TrainingMax,
+		Value:         tmValue,
+		EffectiveDate: oneRM.EffectiveDate,
+		CreatedAt:     now,
+		UpdatedAt:     now,
+	}
+	return h.repo.Create(newTM)
 }
 
 // Update handles PUT /lift-maxes/{id}
@@ -240,6 +290,12 @@ func (h *LiftMaxHandler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 	if existing == nil {
 		writeDomainError(w, apperrors.NewNotFound("lift max", id))
+		return
+	}
+
+	// Prevent direct modification of Training Maxes - they are auto-calculated from 1RM
+	if existing.Type == liftmax.TrainingMax {
+		writeDomainError(w, apperrors.NewBadRequest("Training Max cannot be modified directly - update your 1RM instead"))
 		return
 	}
 
@@ -291,6 +347,13 @@ func (h *LiftMaxHandler) Update(w http.ResponseWriter, r *http.Request) {
 	if err := h.repo.Update(existing); err != nil {
 		writeDomainError(w, apperrors.NewInternal("failed to update lift max", err))
 		return
+	}
+
+	// Auto-sync Training Max when 1RM is updated
+	if existing.Type == liftmax.OneRM {
+		if err := h.syncTrainingMax(existing); err != nil {
+			result.AddWarning("Failed to auto-calculate Training Max: " + err.Error())
+		}
 	}
 
 	// Return with warnings if any

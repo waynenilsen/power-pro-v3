@@ -7,8 +7,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/waynenilsen/power-pro-v3/internal/testutil"
@@ -89,8 +91,11 @@ func TestPrescriptionResolutionWorkflowIntegration(t *testing.T) {
 	userID := testutil.TestUserID
 
 	t.Run("resolves prescription with PERCENT_OF TRAINING_MAX strategy", func(t *testing.T) {
-		// Step 1: Create a training max for the user using the helper
-		createMax(t, ts, userID, squatID, "TRAINING_MAX", 400.0, nil)
+		// Step 1: Create a 1RM that will result in TM=400 (1RM = 400/0.9 = 444.44, rounded to 444.5)
+		// Backend auto-calculates TM as 90% of 1RM
+		desiredTM := 400.0
+		oneRMValue := math.Round((desiredTM/0.9)*4) / 4 // Round to nearest 0.25: 444.5
+		createMax(t, ts, userID, squatID, "ONE_RM", oneRMValue, nil)
 
 		// Step 2: Create a prescription with PERCENT_OF load strategy
 		prescriptionBody := fmt.Sprintf(`{
@@ -138,7 +143,7 @@ func TestPrescriptionResolutionWorkflowIntegration(t *testing.T) {
 		resolved := resolveEnvelope.Data
 
 		// Verify resolved values
-		// 85% of 400 = 340, rounded to nearest 5 = 340
+		// TM = 400 (90% of 444.44), 85% of 400 = 340, rounded to nearest 5 = 340
 		expectedWeight := 340.0
 		if len(resolved.Sets) != 5 {
 			t.Errorf("Expected 5 sets, got %d", len(resolved.Sets))
@@ -208,8 +213,10 @@ func TestPrescriptionResolutionWorkflowIntegration(t *testing.T) {
 	})
 
 	t.Run("resolves RAMP scheme with progressive weights", func(t *testing.T) {
-		// Create training max for deadlift
-		createMax(t, ts, userID, deadliftID, "TRAINING_MAX", 500.0, nil)
+		// Create 1RM that will result in TM=500 (1RM = 500/0.9 = 555.56, rounded to 555.5)
+		desiredTM := 500.0
+		oneRMValue := math.Round((desiredTM/0.9)*4) / 4 // Round to nearest 0.25: 555.5
+		createMax(t, ts, userID, deadliftID, "ONE_RM", oneRMValue, nil)
 
 		// Create RAMP prescription
 		prescriptionBody := fmt.Sprintf(`{
@@ -238,7 +245,7 @@ func TestPrescriptionResolutionWorkflowIntegration(t *testing.T) {
 		json.NewDecoder(resolveResp.Body).Decode(&resolveEnvelope)
 		resolved := resolveEnvelope.Data
 
-		// Verify RAMP weights: 50% of 500 = 250, 60% = 300, 70% = 350, 80% = 400, 90% = 450
+		// Verify RAMP weights: TM = 500 (90% of 555.56), 50% of 500 = 250, 60% = 300, 70% = 350, 80% = 400, 90% = 450
 		expectedWeights := []float64{250, 300, 350, 400, 450}
 		expectedReps := []int{5, 3, 2, 1, 1}
 		expectedWorkSets := []bool{false, false, true, true, true} // >= 70%
@@ -261,7 +268,16 @@ func TestPrescriptionResolutionWorkflowIntegration(t *testing.T) {
 	})
 
 	t.Run("batch resolution resolves multiple prescriptions", func(t *testing.T) {
-		// Create multiple prescriptions for the same lift (squat max already created)
+		// Use the same user but create max with a different effective date to avoid conflicts
+		batchUserID := userID
+		// Create 1RM that will result in TM=400 (1RM = 400/0.9 = 444.44, rounded to 444.5)
+		desiredTM := 400.0
+		oneRMValue := math.Round((desiredTM/0.9)*4) / 4 // Round to nearest 0.25: 444.5
+		// Use a different effective date to avoid unique constraint violation
+		tomorrow := time.Now().Add(24 * time.Hour)
+		createMax(t, ts, batchUserID, squatID, "ONE_RM", oneRMValue, &tomorrow)
+
+		// Create multiple prescriptions for the same lift
 		var prescriptionIDs []string
 		for i := 0; i < 3; i++ {
 			prescriptionBody := fmt.Sprintf(`{
@@ -279,7 +295,7 @@ func TestPrescriptionResolutionWorkflowIntegration(t *testing.T) {
 
 		// Batch resolve
 		batchBody := fmt.Sprintf(`{"prescriptionIds": ["%s", "%s", "%s"], "userId": "%s"}`,
-			prescriptionIDs[0], prescriptionIDs[1], prescriptionIDs[2], userID)
+			prescriptionIDs[0], prescriptionIDs[1], prescriptionIDs[2], batchUserID)
 		batchResp, _ := authPost(ts.URL("/prescriptions/resolve-batch"), batchBody)
 		defer batchResp.Body.Close()
 
@@ -296,7 +312,7 @@ func TestPrescriptionResolutionWorkflowIntegration(t *testing.T) {
 			t.Fatalf("Expected 3 results, got %d", len(batchResult.Results))
 		}
 
-		// All should succeed and have correct weights (70%, 75%, 80% of 400)
+		// All should succeed and have correct weights (TM = 400, so 70% = 280, 75% = 300, 80% = 320)
 		expectedWeights := []float64{280, 300, 320}
 		for i, result := range batchResult.Results {
 			if result.Status != "success" {
@@ -422,8 +438,10 @@ func TestWorkoutGenerationWorkflowIntegration(t *testing.T) {
 		json.NewDecoder(liftResp.Body).Decode(&lift)
 		liftResp.Body.Close()
 
-		// Create lift max using helper
-		createMax(t, ts, userID, lift.Data.ID, "TRAINING_MAX", 400.0, nil)
+		// Create 1RM that will result in TM=400 (1RM = 400/0.9 = 444.44, rounded to 444.5)
+		desiredTM := 400.0
+		oneRMValue := math.Round((desiredTM/0.9)*4) / 4 // Round to nearest 0.25: 444.5
+		createMax(t, ts, userID, lift.Data.ID, "ONE_RM", oneRMValue, nil)
 
 		// Create RAMP prescription
 		prescBody := fmt.Sprintf(`{
@@ -501,7 +519,7 @@ func TestWorkoutGenerationWorkflowIntegration(t *testing.T) {
 			t.Fatalf("Expected 4 sets (RAMP steps), got %d", len(ex.Sets))
 		}
 
-		// Verify RAMP weights: 50% = 200, 60% = 240, 70% = 280, 80% = 320
+		// Verify RAMP weights: TM = 400 (90% of 444.44), 50% of 400 = 200, 60% = 240, 70% = 280, 80% = 320
 		expectedWeights := []float64{200, 240, 280, 320}
 		expectedReps := []int{5, 3, 2, 1}
 		expectedWorkSets := []bool{false, false, true, true}
@@ -608,8 +626,10 @@ func TestProgressionEvaluationWorkflowIntegration(t *testing.T) {
 		ppResp.Body.Close()
 
 		// Step 4: Create initial lift max for user
+		// Create 1RM that will result in TM=300 (1RM = 300/0.9 = 333.33, rounded to 333.25)
 		initialMax := 300.0
-		createMax(t, ts, userID, squatID, "TRAINING_MAX", initialMax, nil)
+		oneRMValue := math.Round((initialMax/0.9)*4) / 4 // Round to nearest 0.25: 333.25
+		createMax(t, ts, userID, squatID, "ONE_RM", oneRMValue, nil)
 
 		// Step 5: Enroll user in program
 		enrollResp, _ := userPostEnrollment(ts.URL("/users/"+userID+"/program"), `{"programId": "`+program.ID+`"}`, userID)
@@ -720,9 +740,9 @@ func TestProgressionEvaluationWorkflowIntegration(t *testing.T) {
 		pp2Resp, _ := adminPost(ts.URL("/programs/"+program.ID+"/progressions"), pp2Body)
 		pp2Resp.Body.Close()
 
-		// Create lift maxes
-		createMax(t, ts, userID, squatID, "TRAINING_MAX", 300.0, nil)
-		createMax(t, ts, userID, benchID, "TRAINING_MAX", 200.0, nil)
+		// Create lift maxes (1RM values that result in desired TMs, rounded to 0.25)
+		createMax(t, ts, userID, squatID, "ONE_RM", math.Round((300.0/0.9)*4)/4, nil)  // TM = 300
+		createMax(t, ts, userID, benchID, "ONE_RM", math.Round((200.0/0.9)*4)/4, nil)  // TM = 200
 
 		// Enroll user
 		enrollResp, _ := userPostEnrollment(ts.URL("/users/"+userID+"/program"), `{"programId": "`+program.ID+`"}`, userID)
@@ -793,8 +813,8 @@ func TestProgressionEvaluationWorkflowIntegration(t *testing.T) {
 		ppResp, _ := adminPost(ts.URL("/programs/"+program.ID+"/progressions"), ppBody)
 		ppResp.Body.Close()
 
-		// Create lift max
-		createMax(t, ts, userID, deadliftID, "TRAINING_MAX", 400.0, nil)
+		// Create lift max (1RM that results in TM=400, rounded to 0.25)
+		createMax(t, ts, userID, deadliftID, "ONE_RM", math.Round((400.0/0.9)*4)/4, nil)
 
 		// Enroll user
 		enrollResp, _ := userPostEnrollment(ts.URL("/users/"+userID+"/program"), `{"programId": "`+program.ID+`"}`, userID)
@@ -863,8 +883,8 @@ func TestProgressionEvaluationWorkflowIntegration(t *testing.T) {
 		ppResp, _ := adminPost(ts.URL("/programs/"+program.ID+"/progressions"), ppBody)
 		ppResp.Body.Close()
 
-		// Create lift max
-		createMax(t, ts, userID, squatID, "TRAINING_MAX", 300.0, nil)
+		// Create lift max (1RM that results in TM=300, rounded to 0.25)
+		createMax(t, ts, userID, squatID, "ONE_RM", math.Round((300.0/0.9)*4)/4, nil)
 
 		// Enroll user
 		enrollResp, _ := userPostEnrollment(ts.URL("/users/"+userID+"/program"), `{"programId": "`+program.ID+`"}`, userID)
@@ -1053,8 +1073,8 @@ func TestVariableSchemeSessionHandling(t *testing.T) {
 		prescResp.Body.Close()
 		prescriptionID := prescEnvelope.Data.ID
 
-		// Ensure user has a training max
-		createMax(t, ts, userID, squatID, "TRAINING_MAX", 400.0, nil)
+		// Ensure user has a training max (create 1RM that results in TM=400, rounded to 0.25)
+		createMax(t, ts, userID, squatID, "ONE_RM", math.Round((400.0/0.9)*4)/4, nil)
 
 		// Before logging any sets, requesting next-set should fail
 		t.Run("returns error before any sets logged", func(t *testing.T) {

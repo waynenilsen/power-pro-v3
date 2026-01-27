@@ -181,12 +181,12 @@ function LiftMaxesSection({ userId, enrolledProgramId }: { userId: string; enrol
   const requiredLiftNames = programDetail?.liftRequirements ??
     lifts.filter((l) => l.isCompetitionLift).map((l) => l.name);
 
-  // Find lifts that have training maxes
-  const liftsWithTrainingMax = summaries.filter((s) => s.trainingMax).map((s) => s.liftName);
+  // Find lifts that have any max recorded (1RM or TM - doesn't matter since TM auto-creates)
+  const liftsWithAnyMax = summaries.map((s) => s.liftName);
 
-  // Find required lifts that are missing training maxes
+  // Find required lifts that have NO maxes recorded at all
   const missingRequiredLifts = requiredLiftNames.filter(
-    (name) => !liftsWithTrainingMax.includes(name)
+    (name) => !liftsWithAnyMax.includes(name)
   );
 
   return (
@@ -213,14 +213,14 @@ function LiftMaxesSection({ userId, enrolledProgramId }: { userId: string; enrol
         </Link>
       </div>
 
-      {/* Warning for missing required lift maxes */}
+      {/* Warning for missing required lift maxes - only show if user has NO maxes for these lifts */}
       {missingRequiredLifts.length > 0 && (
         <div className="mb-4 p-3 bg-warning/10 border border-warning/20 rounded-lg flex items-start gap-2">
           <AlertCircle className="w-4 h-4 text-warning flex-shrink-0 mt-0.5" />
           <div>
-            <p className="text-sm font-medium text-foreground">Missing Training Maxes</p>
+            <p className="text-sm font-medium text-foreground">Missing Lift Maxes</p>
             <p className="text-xs text-muted mt-0.5">
-              Add maxes for: {missingRequiredLifts.join(', ')}
+              Add 1RM for: {missingRequiredLifts.join(', ')}
             </p>
           </div>
         </div>

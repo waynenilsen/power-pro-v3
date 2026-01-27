@@ -1,6 +1,6 @@
 # Agents
 
-frontend uses bun 
+frontend uses bun but tests with bunx vitest test run ... 
 
 use crumbler as ./crumbler
 
@@ -13,7 +13,7 @@ whenever you break down a crumb include as a last crumb a tech debt audit and cl
 3. **Follow the roadmap** - You MUST follow the existing roadmap phases
 4. **Extend roadmap only after testing** - You may only extend the roadmap once comprehensive testing has been completed for current work
 5. **No external paid services** - Never mention or use Auth0, Stripe, AWS services, or any external paid service
-6. **frontend** - in the frontend folder
+6. **frontend** - in the frontend folder    
 7. **No other tech** - Don't suggest or mention alternative technologies. Work with Go and SQLite.
 
 ---

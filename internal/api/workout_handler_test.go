@@ -206,8 +206,9 @@ func setupWorkoutTest(t *testing.T, ts *testutil.TestServer, userID string) *wor
 	json.Unmarshal(body, &liftEnvelope)
 	setup.LiftID = liftEnvelope.Data.ID
 
-	// 2. Create a lift max for the user (training max)
-	maxBody := `{"liftId": "` + setup.LiftID + `", "type": "TRAINING_MAX", "value": 300}`
+	// 2. Create a lift max for the user (1RM that results in TM=300)
+	// Backend auto-calculates TM as 90% of 1RM, so 1RM = 300/0.9 = 333.33, rounded to 333.25
+	maxBody := `{"liftId": "` + setup.LiftID + `", "type": "ONE_RM", "value": 333.25}`
 	resp, err = userPostLiftMax(ts.URL("/users/"+userID+"/lift-maxes"), maxBody, userID)
 	if err != nil {
 		t.Fatalf("Failed to create lift max: %v", err)

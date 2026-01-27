@@ -7,10 +7,10 @@ import {
   Loader2,
   ChevronLeft,
   Save,
-  Calculator,
   AlertCircle,
+  Info,
 } from 'lucide-react';
-import type { MaxType, LiftMax, Lift } from '../../api/types';
+import type { LiftMax, Lift } from '../../api/types';
 
 function formatDateForInput(dateString?: string): string {
   const date = dateString ? new Date(dateString) : new Date();
@@ -24,49 +24,8 @@ function formatDateForApi(dateString: string): string {
 
 interface FormState {
   liftId: string;
-  type: MaxType;
   value: string;
   effectiveDate: string;
-}
-
-function TrainingMaxCalculator({
-  value,
-  onCalculate,
-}: {
-  value: string;
-  onCalculate: (tmValue: number) => void;
-}) {
-  const oneRM = parseFloat(value);
-  if (!oneRM || oneRM <= 0) return null;
-
-  const trainingMax = Math.round(oneRM * 0.9);
-
-  return (
-    <div className="mt-4 p-4 bg-accent/5 border border-accent/20 rounded-lg">
-      <div className="flex items-start gap-3">
-        <Calculator className="w-5 h-5 text-accent mt-0.5" />
-        <div className="flex-1">
-          <p className="text-sm font-medium text-foreground">
-            Training Max Calculator
-          </p>
-          <p className="text-xs text-muted mt-1">
-            90% of {oneRM} lbs = <span className="font-bold text-accent">{trainingMax} lbs</span>
-          </p>
-          <button
-            type="button"
-            onClick={() => onCalculate(trainingMax)}
-            className="
-              mt-2 text-xs font-semibold text-accent
-              hover:text-accent-light
-              transition-colors
-            "
-          >
-            Use {trainingMax} lbs as Training Max →
-          </button>
-        </div>
-      </div>
-    </div>
-  );
 }
 
 interface LiftMaxFormInnerProps {
@@ -88,20 +47,17 @@ function LiftMaxFormInner({
     if (existingMax) {
       return {
         liftId: existingMax.liftId,
-        type: existingMax.type,
         value: existingMax.value.toString(),
         effectiveDate: formatDateForInput(existingMax.effectiveDate),
       };
     }
     return {
       liftId: '',
-      type: 'ONE_RM',
       value: '',
       effectiveDate: formatDateForInput(),
     };
   });
   const [error, setError] = useState<string | null>(null);
-  const [showCalculator, setShowCalculator] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -124,14 +80,9 @@ function LiftMaxFormInner({
     }
   };
 
-  const handleCalculatorUse = (tmValue: number) => {
-    setForm((prev) => ({
-      ...prev,
-      type: 'TRAINING_MAX',
-      value: tmValue.toString(),
-    }));
-    setShowCalculator(false);
-  };
+  // Calculate what the TM will be
+  const valueNum = parseFloat(form.value);
+  const trainingMax = valueNum > 0 ? Math.round(valueNum * 0.9 * 4) / 4 : null;
 
   return (
     <form onSubmit={handleSubmit} className="max-w-lg">
@@ -170,64 +121,10 @@ function LiftMaxFormInner({
         </select>
       </div>
 
-      {/* Max Type */}
-      <div className="mb-6">
-        <label className="block text-sm font-medium text-foreground mb-2">
-          Max Type
-        </label>
-        <div className="flex gap-3">
-          <button
-            type="button"
-            onClick={() => {
-              setForm((prev) => ({ ...prev, type: 'ONE_RM' }));
-              setShowCalculator(true);
-            }}
-            disabled={isEditing}
-            className={`
-              flex-1 py-3 px-4 rounded-lg
-              font-medium text-sm
-              border transition-all duration-200
-              disabled:cursor-not-allowed
-              ${form.type === 'ONE_RM'
-                ? 'bg-accent text-background border-accent'
-                : 'bg-surface border-border text-muted hover:text-foreground hover:border-accent/30'
-              }
-            `}
-          >
-            1RM (One Rep Max)
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setForm((prev) => ({ ...prev, type: 'TRAINING_MAX' }));
-              setShowCalculator(false);
-            }}
-            disabled={isEditing}
-            className={`
-              flex-1 py-3 px-4 rounded-lg
-              font-medium text-sm
-              border transition-all duration-200
-              disabled:cursor-not-allowed
-              ${form.type === 'TRAINING_MAX'
-                ? 'bg-success text-background border-success'
-                : 'bg-surface border-border text-muted hover:text-foreground hover:border-success/30'
-              }
-            `}
-          >
-            Training Max
-          </button>
-        </div>
-        <p className="mt-2 text-xs text-muted">
-          {form.type === 'ONE_RM'
-            ? 'Your actual one-rep max (tested or estimated).'
-            : 'Your working max, typically 85-90% of your 1RM.'}
-        </p>
-      </div>
-
       {/* Weight Value */}
       <div className="mb-6">
         <label htmlFor="value" className="block text-sm font-medium text-foreground mb-2">
-          Weight (lbs)
+          1RM (One Rep Max) in lbs
         </label>
         <input
           type="number"
@@ -245,10 +142,25 @@ function LiftMaxFormInner({
           "
           placeholder="0"
         />
+        <p className="mt-2 text-xs text-muted">
+          Enter your actual or estimated one-rep max.
+        </p>
 
-        {/* Training Max Calculator (only for 1RM) */}
-        {form.type === 'ONE_RM' && showCalculator && (
-          <TrainingMaxCalculator value={form.value} onCalculate={handleCalculatorUse} />
+        {/* Training Max Info */}
+        {trainingMax && (
+          <div className="mt-4 p-4 bg-success/5 border border-success/20 rounded-lg">
+            <div className="flex items-start gap-3">
+              <Info className="w-5 h-5 text-success mt-0.5" />
+              <div className="flex-1">
+                <p className="text-sm font-medium text-foreground">
+                  Training Max: <span className="text-success">{trainingMax} lbs</span>
+                </p>
+                <p className="text-xs text-muted mt-1">
+                  Automatically calculated at 90% of your 1RM
+                </p>
+              </div>
+            </div>
+          </div>
         )}
       </div>
 
@@ -327,8 +239,9 @@ export default function LiftMaxForm() {
   const updateMax = useUpdateLiftMax(userId ?? undefined);
 
   const lifts = liftsData?.data ?? [];
+  // Only allow editing 1RM entries
   const existingMax = isEditing && maxesData?.data
-    ? maxesData.data.find((m: LiftMax) => m.id === id) ?? null
+    ? maxesData.data.find((m: LiftMax) => m.id === id && m.type === 'ONE_RM') ?? null
     : null;
 
   const handleSubmit = async (form: FormState) => {
@@ -346,7 +259,6 @@ export default function LiftMaxForm() {
     } else {
       await createMax.mutateAsync({
         liftId: form.liftId,
-        type: form.type,
         value: valueNum,
         effectiveDate: effectiveDateRfc3339,
       });
@@ -369,6 +281,15 @@ export default function LiftMaxForm() {
     );
   }
 
+  // If editing a TM directly, redirect to list (shouldn't happen but safety check)
+  if (isEditing && maxesData?.data) {
+    const targetMax = maxesData.data.find((m: LiftMax) => m.id === id);
+    if (targetMax && targetMax.type === 'TRAINING_MAX') {
+      navigate('/lift-maxes');
+      return null;
+    }
+  }
+
   return (
     <div className="py-6 md:py-8">
       <Container>
@@ -383,12 +304,12 @@ export default function LiftMaxForm() {
           </Link>
 
           <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-foreground">
-            {isEditing ? 'Edit Lift Max' : 'Add Lift Max'}
+            {isEditing ? 'Edit 1RM' : 'Record 1RM'}
           </h1>
           <p className="mt-2 text-muted">
             {isEditing
-              ? 'Update your recorded max for this lift.'
-              : 'Record a new personal record or training max.'}
+              ? 'Update your one-rep max. Training max will be recalculated automatically.'
+              : 'Record your one-rep max. A training max at 90% will be set automatically.'}
           </p>
         </div>
 

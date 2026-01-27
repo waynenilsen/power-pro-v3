@@ -2997,9 +2997,11 @@ components:
 
     CreateLiftMaxRequest:
       type: object
+      description: |
+        Request to create a lift max. All maxes are created as ONE_RM (1 rep max).
+        Training Max is automatically calculated at 90% of the 1RM value.
       required:
         - liftId
-        - type
         - value
       properties:
         liftId:
@@ -3008,10 +3010,12 @@ components:
         type:
           type: string
           enum: [ONE_RM, TRAINING_MAX]
+          deprecated: true
+          description: Ignored - always creates ONE_RM. Training Max is auto-calculated at 90%.
         value:
           type: number
           format: float
-          description: Weight value (must be positive)
+          description: Weight value (must be positive). Training Max will be set to 90% of this value.
         effectiveDate:
           type: string
           format: date-time

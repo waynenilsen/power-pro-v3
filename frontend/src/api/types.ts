@@ -86,9 +86,9 @@ export interface LiftMaxWithWarnings {
 
 export interface CreateLiftMaxRequest {
   liftId: string;
-  type: MaxType;
   value: number;
   effectiveDate?: string;
+  // Note: type is always ONE_RM - Training Max is auto-calculated at 90% by backend
 }
 
 export interface UpdateLiftMaxRequest {
