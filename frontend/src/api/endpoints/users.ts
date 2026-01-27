@@ -59,11 +59,13 @@ export async function updateLiftMax(
   liftMaxId: string,
   request: UpdateLiftMaxRequest
 ): Promise<LiftMax> {
-  return put<LiftMax, UpdateLiftMaxRequest>(`/users/${userId}/lift-maxes/${liftMaxId}`, request);
+  // Note: Backend uses /lift-maxes/{id} not /users/{userId}/lift-maxes/{id}
+  return put<LiftMax, UpdateLiftMaxRequest>(`/lift-maxes/${liftMaxId}`, request);
 }
 
 export async function deleteLiftMax(userId: string, liftMaxId: string): Promise<void> {
-  return del<void>(`/users/${userId}/lift-maxes/${liftMaxId}`);
+  // Note: Backend uses /lift-maxes/{id} not /users/{userId}/lift-maxes/{id}
+  return del<void>(`/lift-maxes/${liftMaxId}`);
 }
 
 export async function getLatestLiftMax(

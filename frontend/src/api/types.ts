@@ -276,6 +276,7 @@ export interface ProgramDetail {
     name: string;
   };
   defaultRounding?: number;
+  liftRequirements?: string[];
   createdAt: string;
   updatedAt: string;
 }

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/useAuth';
 import { useEnrollment, useLiftMaxes, useLifts } from '../../hooks';
+import { useProgram } from '../../hooks/useProgram';
 import {
   LogOut,
   User,
@@ -165,19 +166,28 @@ function EnrollmentCard({ userId }: { userId: string }) {
   );
 }
 
-function LiftMaxesSection({ userId }: { userId: string }) {
+function LiftMaxesSection({ userId, enrolledProgramId }: { userId: string; enrolledProgramId?: string }) {
   const { data: maxesData, isLoading: maxesLoading, error: maxesError } = useLiftMaxes(userId);
   const { data: liftsData, isLoading: liftsLoading } = useLifts();
+  const { data: programDetail } = useProgram(enrolledProgramId);
 
   const isLoading = maxesLoading || liftsLoading;
   const maxes = maxesData?.data ?? [];
   const lifts = liftsData?.data ?? [];
 
   const summaries = getLiftMaxSummaries(maxes, lifts);
-  const competitionLifts = summaries.filter((s) => s.isCompetitionLift);
-  const missingCompetitionLifts = lifts
-    .filter((l) => l.isCompetitionLift)
-    .filter((l) => !competitionLifts.find((s) => s.liftId === l.id));
+
+  // Get required lifts from the enrolled program, or fall back to competition lifts
+  const requiredLiftNames = programDetail?.liftRequirements ??
+    lifts.filter((l) => l.isCompetitionLift).map((l) => l.name);
+
+  // Find lifts that have training maxes
+  const liftsWithTrainingMax = summaries.filter((s) => s.trainingMax).map((s) => s.liftName);
+
+  // Find required lifts that are missing training maxes
+  const missingRequiredLifts = requiredLiftNames.filter(
+    (name) => !liftsWithTrainingMax.includes(name)
+  );
 
   return (
     <div className="bg-surface border border-border rounded-lg p-6 mb-6">
@@ -203,14 +213,14 @@ function LiftMaxesSection({ userId }: { userId: string }) {
         </Link>
       </div>
 
-      {/* Warning for missing competition lift maxes */}
-      {missingCompetitionLifts.length > 0 && (
+      {/* Warning for missing required lift maxes */}
+      {missingRequiredLifts.length > 0 && (
         <div className="mb-4 p-3 bg-warning/10 border border-warning/20 rounded-lg flex items-start gap-2">
           <AlertCircle className="w-4 h-4 text-warning flex-shrink-0 mt-0.5" />
           <div>
             <p className="text-sm font-medium text-foreground">Missing Training Maxes</p>
             <p className="text-xs text-muted mt-0.5">
-              Add maxes for: {missingCompetitionLifts.map((l) => l.name).join(', ')}
+              Add maxes for: {missingRequiredLifts.join(', ')}
             </p>
           </div>
         </div>
@@ -306,6 +316,10 @@ export default function Profile() {
   const [showConfirm, setShowConfirm] = useState(false);
   const [copied, setCopied] = useState(false);
 
+  // Fetch enrollment to get the enrolled program ID
+  const { data: enrollment } = useEnrollment(userId ?? undefined);
+  const enrolledProgramId = enrollment?.program?.id;
+
   const handleLogout = () => {
     logout();
     navigate('/login', { replace: true });
@@ -327,7 +341,7 @@ export default function Profile() {
       {userId && <EnrollmentCard userId={userId} />}
 
       {/* Lift Maxes Section */}
-      {userId && <LiftMaxesSection userId={userId} />}
+      {userId && <LiftMaxesSection userId={userId} enrolledProgramId={enrolledProgramId} />}
 
       {/* User ID Section */}
       <div className="bg-surface border border-border rounded-lg p-6 mb-6">

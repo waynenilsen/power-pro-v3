@@ -18,11 +18,14 @@ import type { LiftMax, Lift, MaxType } from '../../api/types';
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog';
 
 function formatDate(dateString: string): string {
+  // Parse the date as UTC to avoid timezone issues
+  // The backend stores dates at midnight UTC, so we extract just the date part
   const date = new Date(dateString);
   return date.toLocaleDateString('en-US', {
     month: 'short',
     day: 'numeric',
     year: 'numeric',
+    timeZone: 'UTC',
   });
 }
 
