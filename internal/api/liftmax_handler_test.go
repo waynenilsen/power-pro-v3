@@ -70,7 +70,7 @@ func TestListLiftMaxes(t *testing.T) {
 
 	// Create some test maxes first
 	// Note: Creating 1RM auto-creates TM at 90%, so we create 1RMs that result in desired TMs
-	createMax(t, ts, userID, testSquatID, "ONE_RM", 315.0, nil)  // Creates TM = 283.5 (90% of 315)
+	createMax(t, ts, userID, testSquatID, "ONE_RM", 315.0, nil) // Creates TM = 283.5 (90% of 315)
 	createMax(t, ts, userID, testBenchID, "ONE_RM", 225.0, nil) // Creates TM = 202.5 (90% of 225)
 
 	t.Run("returns user's lift maxes", func(t *testing.T) {
@@ -406,8 +406,20 @@ func TestCreateLiftMax(t *testing.T) {
 		resp, _ := authPostUser(ts.URL(fmt.Sprintf("/users/%s/lift-maxes", userID)), body, userID)
 		defer resp.Body.Close()
 
-		if resp.StatusCode != http.StatusBadRequest {
-			t.Errorf("Expected status 400, got %d", resp.StatusCode)
+		if resp.StatusCode != http.StatusCreated {
+			bodyBytes, _ := io.ReadAll(resp.Body)
+			t.Fatalf("Expected status 201, got %d: %s", resp.StatusCode, bodyBytes)
+		}
+
+		var max LiftMaxResponse
+		json.NewDecoder(resp.Body).Decode(&max)
+
+		// Type is optional; create always persists ONE_RM.
+		if max.Data.Type != "ONE_RM" {
+			t.Errorf("Expected type ONE_RM, got %s", max.Data.Type)
+		}
+		if max.Data.Value != 315.0 {
+			t.Errorf("Expected value 315.0, got %f", max.Data.Value)
 		}
 	})
 
@@ -472,28 +484,31 @@ func TestCreateLiftMax(t *testing.T) {
 		}
 	})
 
-	t.Run("includes warning for TM outside expected range", func(t *testing.T) {
+	t.Run("auto-creates Training Max at 90% of 1RM", func(t *testing.T) {
 		userID := "tm-warning-user"
-		// First create a 1RM
-		body1 := fmt.Sprintf(`{"liftId": "%s", "type": "ONE_RM", "value": 400.0}`, testSquatID)
-		resp1, _ := authPostUser(ts.URL(fmt.Sprintf("/users/%s/lift-maxes", userID)), body1, userID)
-		resp1.Body.Close()
 
-		// Now create a TM that's too low (70% = 280)
-		body2 := fmt.Sprintf(`{"liftId": "%s", "type": "TRAINING_MAX", "value": 280.0}`, testSquatID)
-		resp2, _ := authPostUser(ts.URL(fmt.Sprintf("/users/%s/lift-maxes", userID)), body2, userID)
-		defer resp2.Body.Close()
+		// Creating a 1RM should auto-create a TRAINING_MAX at 90%.
+		body := fmt.Sprintf(`{"liftId": "%s", "type": "ONE_RM", "value": 400.0}`, testSquatID)
+		resp, _ := authPostUser(ts.URL(fmt.Sprintf("/users/%s/lift-maxes", userID)), body, userID)
+		resp.Body.Close()
 
-		if resp2.StatusCode != http.StatusCreated {
-			bodyBytes, _ := io.ReadAll(resp2.Body)
-			t.Fatalf("Expected status 201, got %d: %s", resp2.StatusCode, bodyBytes)
+		getURL := fmt.Sprintf("/users/%s/lift-maxes/current?lift=%s&type=TRAINING_MAX", userID, testSquatID)
+		getResp, _ := authGetUser(ts.URL(getURL), userID)
+		defer getResp.Body.Close()
+
+		if getResp.StatusCode != http.StatusOK {
+			bodyBytes, _ := io.ReadAll(getResp.Body)
+			t.Fatalf("Expected status 200, got %d: %s", getResp.StatusCode, bodyBytes)
 		}
 
-		var result LiftMaxWithWarningsResponse
-		json.NewDecoder(resp2.Body).Decode(&result)
+		var max LiftMaxResponse
+		json.NewDecoder(getResp.Body).Decode(&max)
 
-		if len(result.Warnings) == 0 {
-			t.Errorf("Expected warnings for TM below 80%% of 1RM")
+		if max.Data.Type != "TRAINING_MAX" {
+			t.Errorf("Expected type TRAINING_MAX, got %s", max.Data.Type)
+		}
+		if max.Data.Value != 360.0 {
+			t.Errorf("Expected value 360.0 (90%% of 400), got %f", max.Data.Value)
 		}
 	})
 }
@@ -902,14 +917,11 @@ func TestGetCurrentLiftMax(t *testing.T) {
 
 	// Create multiple maxes with different dates to test "most recent" logic
 	createMax(t, ts, testUser, testSquatID, "ONE_RM", 300.0, &lastWeek)
-	createMax(t, ts, testUser, testSquatID, "ONE_RM", 315.0, &yesterday)
-	mostRecent := createMax(t, ts, testUser, testSquatID, "ONE_RM", 320.0, &now)
-
-	// Also create training maxes by creating 1RMs (which auto-create TMs)
-	// Create 1RM that results in TM=285 (1RM = 285/0.9 = 316.67, rounded to 316.75)
+	// Use values that also exercise TM rounding behavior.
+	// - Yesterday: 1RM = 285/0.9 = 316.67 → 316.75 (TM=285)
+	// - Now:       1RM = 290/0.9 = 322.22 → 322.25 (TM=290)
 	createMax(t, ts, testUser, testSquatID, "ONE_RM", math.Round((285.0/0.9)*4)/4, &yesterday)
-	// Create 1RM that results in TM=290 (1RM = 290/0.9 = 322.22, rounded to 322.25)
-	createMax(t, ts, testUser, testSquatID, "ONE_RM", math.Round((290.0/0.9)*4)/4, &now)
+	mostRecent := createMax(t, ts, testUser, testSquatID, "ONE_RM", math.Round((290.0/0.9)*4)/4, &now)
 	// Get the auto-created most recent TM for assertions
 	url := fmt.Sprintf("/users/%s/lift-maxes/current?lift=%s&type=TRAINING_MAX", testUser, testSquatID)
 	resp, _ := authGetUser(ts.URL(url), testUser)
@@ -941,8 +953,8 @@ func TestGetCurrentLiftMax(t *testing.T) {
 		if max.Data.ID != mostRecent.Data.ID {
 			t.Errorf("Expected most recent max ID %s, got %s", mostRecent.Data.ID, max.Data.ID)
 		}
-		if max.Data.Value != 320.0 {
-			t.Errorf("Expected value 320.0, got %f", max.Data.Value)
+		if max.Data.Value != 322.25 {
+			t.Errorf("Expected value 322.25, got %f", max.Data.Value)
 		}
 		if max.Data.Type != "ONE_RM" {
 			t.Errorf("Expected type ONE_RM, got %s", max.Data.Type)
@@ -1011,14 +1023,24 @@ func TestGetCurrentLiftMax(t *testing.T) {
 		}
 	})
 
-	t.Run("returns 404 when user has no maxes for this type", func(t *testing.T) {
-		// User exists but doesn't have a TRAINING_MAX for bench
+	t.Run("returns training max for different lift when auto-created", func(t *testing.T) {
+		// Creating a 1RM auto-creates a TRAINING_MAX, so this should be present.
 		url := fmt.Sprintf("/users/%s/lift-maxes/current?lift=%s&type=TRAINING_MAX", testUser, testBenchID)
 		resp, _ := authGetUser(ts.URL(url), testUser)
 		defer resp.Body.Close()
 
-		if resp.StatusCode != http.StatusNotFound {
-			t.Errorf("Expected status 404, got %d", resp.StatusCode)
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			t.Fatalf("Expected status 200, got %d: %s", resp.StatusCode, body)
+		}
+
+		var max LiftMaxResponse
+		json.NewDecoder(resp.Body).Decode(&max)
+		if max.Data.Type != "TRAINING_MAX" {
+			t.Errorf("Expected type TRAINING_MAX, got %s", max.Data.Type)
+		}
+		if max.Data.Value != 202.5 {
+			t.Errorf("Expected value 202.5 (90%% of 225), got %f", max.Data.Value)
 		}
 	})
 

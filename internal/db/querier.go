@@ -105,8 +105,11 @@ type Querier interface {
 	GetActiveWorkoutSession(ctx context.Context, userProgramStateID string) (WorkoutSession, error)
 	GetActiveWorkoutSessionByUserID(ctx context.Context, userID string) (WorkoutSession, error)
 	GetCurrentMax(ctx context.Context, arg GetCurrentMaxParams) (LiftMax, error)
-	// Get the most recent max for each lift a user has recorded
-	// For each lift, find the record with the maximum effective_date
+	// Get the most recent max for each lift a user has recorded.
+	//
+	// LiftMaxHandler auto-creates TRAINING_MAX entries with the same effective_date
+	// as the corresponding ONE_RM. In that case, prefer returning TRAINING_MAX for
+	// dashboard display.
 	GetCurrentMaxesByUser(ctx context.Context, userID string) ([]GetCurrentMaxesByUserRow, error)
 	GetCurrentOneRM(ctx context.Context, arg GetCurrentOneRMParams) (LiftMax, error)
 	GetCycle(ctx context.Context, id string) (Cycle, error)

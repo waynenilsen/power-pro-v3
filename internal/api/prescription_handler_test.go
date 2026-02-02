@@ -1178,8 +1178,8 @@ func TestResolvePrescription(t *testing.T) {
 	// Create a training max for the user
 	maxBody := fmt.Sprintf(`{
 		"liftId": "%s",
-		"type": "TRAINING_MAX",
-		"value": 300,
+		"type": "ONE_RM",
+		"value": 333.25,
 		"effectiveDate": "2025-01-15T00:00:00Z"
 	}`, seededSquatID)
 	maxResp, _ := adminPost(ts.URL("/users/"+testutil.TestUserID+"/lift-maxes"), maxBody)
@@ -1309,8 +1309,8 @@ func TestResolvePrescriptionBatch(t *testing.T) {
 	// Create training max for squat
 	maxBody := fmt.Sprintf(`{
 		"liftId": "%s",
-		"type": "TRAINING_MAX",
-		"value": 300,
+		"type": "ONE_RM",
+		"value": 333.25,
 		"effectiveDate": "2025-01-15T00:00:00Z"
 	}`, seededSquatID)
 	maxResp, _ := adminPost(ts.URL("/users/"+testutil.TestUserID+"/lift-maxes"), maxBody)
@@ -1319,8 +1319,8 @@ func TestResolvePrescriptionBatch(t *testing.T) {
 	// Create training max for bench
 	maxBody2 := fmt.Sprintf(`{
 		"liftId": "%s",
-		"type": "TRAINING_MAX",
-		"value": 200,
+		"type": "ONE_RM",
+		"value": 222.25,
 		"effectiveDate": "2025-01-15T00:00:00Z"
 	}`, benchID)
 	maxResp2, _ := adminPost(ts.URL("/users/"+testutil.TestUserID+"/lift-maxes"), maxBody2)
@@ -1521,8 +1521,8 @@ func TestResolveWithRampScheme(t *testing.T) {
 	// Create a training max
 	maxBody := fmt.Sprintf(`{
 		"liftId": "%s",
-		"type": "TRAINING_MAX",
-		"value": 400,
+		"type": "ONE_RM",
+		"value": 444.5,
 		"effectiveDate": "2025-01-15T00:00:00Z"
 	}`, seededSquatID)
 	maxResp, _ := adminPost(ts.URL("/users/"+testutil.TestUserID+"/lift-maxes"), maxBody)
@@ -1597,8 +1597,8 @@ func TestResolveResponseFormat(t *testing.T) {
 	// Create a training max
 	maxBody := fmt.Sprintf(`{
 		"liftId": "%s",
-		"type": "TRAINING_MAX",
-		"value": 315,
+		"type": "ONE_RM",
+		"value": 350,
 		"effectiveDate": "2025-01-15T00:00:00Z"
 	}`, seededSquatID)
 	maxResp, _ := adminPost(ts.URL("/users/"+testutil.TestUserID+"/lift-maxes"), maxBody)
@@ -1759,8 +1759,8 @@ func TestCachingBehavior(t *testing.T) {
 	// Create training max for squat
 	maxBody := fmt.Sprintf(`{
 		"liftId": "%s",
-		"type": "TRAINING_MAX",
-		"value": 300,
+		"type": "ONE_RM",
+		"value": 333.25,
 		"effectiveDate": "2025-01-15T00:00:00Z"
 	}`, seededSquatID)
 	maxResp, _ := adminPost(ts.URL("/users/"+testutil.TestUserID+"/lift-maxes"), maxBody)

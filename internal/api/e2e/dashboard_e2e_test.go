@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/waynenilsen/power-pro-v3/internal/domain/liftmax"
 	"github.com/waynenilsen/power-pro-v3/internal/testutil"
 )
 
@@ -62,11 +63,11 @@ type DashboardMaxSummary struct {
 
 // DashboardResponseData represents the full dashboard response.
 type DashboardResponseData struct {
-	Enrollment     *DashboardEnrollmentSummary   `json:"enrollment"`
-	NextWorkout    *DashboardNextWorkoutPreview  `json:"nextWorkout"`
-	CurrentSession *DashboardSessionSummary      `json:"currentSession"`
-	RecentWorkouts []DashboardWorkoutSummary     `json:"recentWorkouts"`
-	CurrentMaxes   []DashboardMaxSummary         `json:"currentMaxes"`
+	Enrollment     *DashboardEnrollmentSummary  `json:"enrollment"`
+	NextWorkout    *DashboardNextWorkoutPreview `json:"nextWorkout"`
+	CurrentSession *DashboardSessionSummary     `json:"currentSession"`
+	RecentWorkouts []DashboardWorkoutSummary    `json:"recentWorkouts"`
+	CurrentMaxes   []DashboardMaxSummary        `json:"currentMaxes"`
 }
 
 // DashboardEnvelopeData wraps dashboard response in data envelope.
@@ -341,8 +342,8 @@ func TestDashboardE2E_WithLiftMaxes(t *testing.T) {
 	deadliftID := dashboardCreateLift(t, ts, "Deadlift", "dash-deadlift-"+testID, false)
 
 	// Create lift maxes for the user
-	dashboardCreateLiftMax(t, ts, user.ID, squatID, "ONE_RM", 315.0)
-	dashboardCreateLiftMax(t, ts, user.ID, benchID, "ONE_RM", 225.0)
+	dashboardCreateLiftMax(t, ts, user.ID, squatID, "TRAINING_MAX", 315.0)
+	dashboardCreateLiftMax(t, ts, user.ID, benchID, "TRAINING_MAX", 225.0)
 	dashboardCreateLiftMax(t, ts, user.ID, deadliftID, "TRAINING_MAX", 365.0)
 
 	t.Run("returns current maxes for user", func(t *testing.T) {
@@ -388,12 +389,15 @@ func TestDashboardE2E_WithLiftMaxes(t *testing.T) {
 				if max.Value != 315.0 {
 					t.Errorf("Expected Squat max 315.0, got %.2f", max.Value)
 				}
-				if max.Type != "ONE_RM" {
-					t.Errorf("Expected Squat type ONE_RM, got %s", max.Type)
+				if max.Type != "TRAINING_MAX" {
+					t.Errorf("Expected Squat type TRAINING_MAX, got %s", max.Type)
 				}
 			case "Bench Press":
 				if max.Value != 225.0 {
 					t.Errorf("Expected Bench Press max 225.0, got %.2f", max.Value)
+				}
+				if max.Type != "TRAINING_MAX" {
+					t.Errorf("Expected Bench Press type TRAINING_MAX, got %s", max.Type)
 				}
 			case "Deadlift":
 				if max.Value != 365.0 {
@@ -447,7 +451,21 @@ func dashboardCreateLift(t *testing.T, ts *testutil.TestServer, name, slug strin
 func dashboardCreateLiftMax(t *testing.T, ts *testutil.TestServer, userID, liftID, maxType string, value float64) {
 	t.Helper()
 
-	body := fmt.Sprintf(`{"liftId": "%s", "type": "%s", "value": %f}`, liftID, maxType, value)
+	// The LiftMax API persists 1RMs and auto-derives Training Maxes at 90% of 1RM.
+	// If the test asks for a TRAINING_MAX, seed the corresponding 1RM that will
+	// generate the desired TM.
+	requestType := maxType
+	requestValue := value
+	if maxType == "TRAINING_MAX" {
+		requestType = "ONE_RM"
+		oneRM, err := liftmax.NewMaxCalculator().ConvertToOneRM(value, nil)
+		if err != nil {
+			t.Fatalf("Failed to convert TRAINING_MAX %.2f to 1RM: %v", value, err)
+		}
+		requestValue = oneRM
+	}
+
+	body := fmt.Sprintf(`{"liftId": "%s", "type": "%s", "value": %f}`, liftID, requestType, requestValue)
 
 	req, err := http.NewRequest(http.MethodPost, ts.URL("/users/"+userID+"/lift-maxes"), bytes.NewBufferString(body))
 	if err != nil {

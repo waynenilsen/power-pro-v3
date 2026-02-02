@@ -26,10 +26,12 @@ import (
 //   - Monday (Volume): 90% of Friday intensity
 //   - Wednesday (Recovery): 80% of Monday (~72% of Friday)
 //   - Friday (Intensity): 100% - PR attempt day
+//
 // - Different set schemes by day:
 //   - Monday: 5x5 (volume accumulation)
 //   - Wednesday: 2x5 (active recovery)
 //   - Friday: 1x5 (intensity/PR attempt)
+//
 // - Weekly LinearProgression: +5lb lower body, +2.5lb upper body after successful Friday
 func TestTexasMethodProgram(t *testing.T) {
 	ts, err := testutil.NewTestServer()
@@ -69,10 +71,11 @@ func TestTexasMethodProgram(t *testing.T) {
 	benchMax := 225.0 // Bench 5RM for Friday
 	pressMax := 135.0 // Press 5RM for Friday
 
-	// Create training maxes for the user
-	createLiftMax(t, ts, userID, squatID, "TRAINING_MAX", squatMax)
-	createLiftMax(t, ts, userID, benchID, "TRAINING_MAX", benchMax)
-	createLiftMax(t, ts, userID, pressID, "TRAINING_MAX", pressMax)
+	// Note: the LiftMax API creates 1RMs and auto-derives TMs at 90% of 1RM, so
+	// we seed 1RMs that produce the desired starting TMs.
+	createLiftMax(t, ts, userID, squatID, "ONE_RM", squatMax/0.9)
+	createLiftMax(t, ts, userID, benchID, "ONE_RM", benchMax/0.9)
+	createLiftMax(t, ts, userID, pressID, "ONE_RM", pressMax/0.9)
 
 	// =============================================================================
 	// Create Daily Lookup for Volume/Recovery/Intensity intensities

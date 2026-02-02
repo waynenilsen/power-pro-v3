@@ -29,34 +29,34 @@ type Config struct {
 
 // Server represents the HTTP server.
 type Server struct {
-	config               Config
-	httpServer           *http.Server
-	liftRepo             *repository.LiftRepository
-	liftMaxRepo          *repository.LiftMaxRepository
-	prescriptionRepo     *repository.PrescriptionRepository
-	dayRepo              *repository.DayRepository
-	weekRepo             *repository.WeekRepository
-	cycleRepo            *repository.CycleRepository
-	weeklyLookupRepo     *repository.WeeklyLookupRepository
-	dailyLookupRepo      *repository.DailyLookupRepository
-	programRepo          *repository.ProgramRepository
-	userProgramStateRepo *repository.UserProgramStateRepository
-	workoutRepo          *repository.WorkoutRepository
-	progressionRepo            *repository.ProgressionRepository
-	programProgressionRepo     *repository.ProgramProgressionRepository
-	progressionHistoryRepo     *repository.ProgressionHistoryRepository
-	loggedSetRepo              *repository.LoggedSetRepository
-	workoutSessionRepo         *repository.WorkoutSessionRepository
-	progressionService         *service.ProgressionService
-	failureService             *service.FailureService
-	sessionService             *service.SessionService
-	strategyFactory            *loadstrategy.StrategyFactory
-	schemeFactory              *setscheme.SchemeFactory
-	eventBus                   *event.Bus
-	authService                *auth.Service
-	authValidator              *auth.SessionValidatorAdapter
-	profileService             *profile.Service
-	dashboardService           *dashboard.Service
+	config                 Config
+	httpServer             *http.Server
+	liftRepo               *repository.LiftRepository
+	liftMaxRepo            *repository.LiftMaxRepository
+	prescriptionRepo       *repository.PrescriptionRepository
+	dayRepo                *repository.DayRepository
+	weekRepo               *repository.WeekRepository
+	cycleRepo              *repository.CycleRepository
+	weeklyLookupRepo       *repository.WeeklyLookupRepository
+	dailyLookupRepo        *repository.DailyLookupRepository
+	programRepo            *repository.ProgramRepository
+	userProgramStateRepo   *repository.UserProgramStateRepository
+	workoutRepo            *repository.WorkoutRepository
+	progressionRepo        *repository.ProgressionRepository
+	programProgressionRepo *repository.ProgramProgressionRepository
+	progressionHistoryRepo *repository.ProgressionHistoryRepository
+	loggedSetRepo          *repository.LoggedSetRepository
+	workoutSessionRepo     *repository.WorkoutSessionRepository
+	progressionService     *service.ProgressionService
+	failureService         *service.FailureService
+	sessionService         *service.SessionService
+	strategyFactory        *loadstrategy.StrategyFactory
+	schemeFactory          *setscheme.SchemeFactory
+	eventBus               *event.Bus
+	authService            *auth.Service
+	authValidator          *auth.SessionValidatorAdapter
+	profileService         *profile.Service
+	dashboardService       *dashboard.Service
 }
 
 // New creates a new Server instance.
@@ -112,33 +112,33 @@ func New(cfg Config) *Server {
 	dashboardService := dashboard.NewService(cfg.DB, profileService)
 
 	s := &Server{
-		config:               cfg,
-		liftRepo:             liftRepo,
-		liftMaxRepo:          liftMaxRepo,
-		prescriptionRepo:     prescriptionRepo,
-		dayRepo:              dayRepo,
-		weekRepo:             weekRepo,
-		cycleRepo:            cycleRepo,
-		weeklyLookupRepo:     weeklyLookupRepo,
-		dailyLookupRepo:      dailyLookupRepo,
-		programRepo:          programRepo,
-		userProgramStateRepo: userProgramStateRepo,
-		workoutRepo:                workoutRepo,
-		progressionRepo:            progressionRepo,
-		programProgressionRepo:     programProgressionRepo,
-		progressionHistoryRepo:     progressionHistoryRepo,
-		loggedSetRepo:              loggedSetRepo,
-		workoutSessionRepo:         workoutSessionRepo,
-		progressionService:         progressionService,
-		failureService:             failureService,
-		sessionService:             sessionService,
-		strategyFactory:            strategyFactory,
-		schemeFactory:              schemeFactory,
-		eventBus:                   eventBus,
-		authService:                authService,
-		authValidator:              authValidator,
-		profileService:             profileService,
-		dashboardService:           dashboardService,
+		config:                 cfg,
+		liftRepo:               liftRepo,
+		liftMaxRepo:            liftMaxRepo,
+		prescriptionRepo:       prescriptionRepo,
+		dayRepo:                dayRepo,
+		weekRepo:               weekRepo,
+		cycleRepo:              cycleRepo,
+		weeklyLookupRepo:       weeklyLookupRepo,
+		dailyLookupRepo:        dailyLookupRepo,
+		programRepo:            programRepo,
+		userProgramStateRepo:   userProgramStateRepo,
+		workoutRepo:            workoutRepo,
+		progressionRepo:        progressionRepo,
+		programProgressionRepo: programProgressionRepo,
+		progressionHistoryRepo: progressionHistoryRepo,
+		loggedSetRepo:          loggedSetRepo,
+		workoutSessionRepo:     workoutSessionRepo,
+		progressionService:     progressionService,
+		failureService:         failureService,
+		sessionService:         sessionService,
+		strategyFactory:        strategyFactory,
+		schemeFactory:          schemeFactory,
+		eventBus:               eventBus,
+		authService:            authService,
+		authValidator:          authValidator,
+		profileService:         profileService,
+		dashboardService:       dashboardService,
 	}
 
 	mux := http.NewServeMux()
@@ -153,6 +153,14 @@ func New(cfg Config) *Server {
 	}
 
 	return s
+}
+
+// Handler returns the server's HTTP handler.
+//
+// This is useful for tests that want to exercise the full HTTP stack without
+// binding to an actual TCP port.
+func (s *Server) Handler() http.Handler {
+	return s.httpServer.Handler
 }
 
 // registerRoutes sets up all API routes.

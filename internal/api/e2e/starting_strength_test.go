@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/waynenilsen/power-pro-v3/internal/domain/liftmax"
 	"github.com/waynenilsen/power-pro-v3/internal/testutil"
 )
 
@@ -368,11 +369,11 @@ func TestStartingStrengthProgram(t *testing.T) {
 	deadliftID := "00000000-0000-0000-0000-000000000003"
 
 	// Starting strength training maxes
-	squatMax := 225.0   // Starting squat training max
-	benchMax := 135.0   // Starting bench training max
+	squatMax := 225.0    // Starting squat training max
+	benchMax := 135.0    // Starting bench training max
 	deadliftMax := 275.0 // Starting deadlift training max
-	pressMax := 95.0    // Starting press training max
-	cleanMax := 135.0   // Starting power clean training max
+	pressMax := 95.0     // Starting press training max
+	cleanMax := 135.0    // Starting power clean training max
 
 	// Create additional lifts (Press and Power Clean are not seeded)
 	pressSlug := "press-" + testID
@@ -819,7 +820,22 @@ func TestStartingStrengthProgram(t *testing.T) {
 
 func createLiftMax(t *testing.T, ts *testutil.TestServer, userID, liftID, maxType string, value float64) {
 	t.Helper()
-	body := fmt.Sprintf(`{"liftId": "%s", "type": "%s", "value": %f}`, liftID, maxType, value)
+
+	// The LiftMax API persists 1RMs and auto-derives Training Maxes (TM) at 90% of 1RM.
+	// Many E2E tests think in terms of TMs, so when callers ask for TRAINING_MAX we
+	// seed the corresponding 1RM that will generate the desired TM.
+	requestType := maxType
+	requestValue := value
+	if maxType == "TRAINING_MAX" {
+		requestType = "ONE_RM"
+		oneRM, err := liftmax.NewMaxCalculator().ConvertToOneRM(value, nil)
+		if err != nil {
+			t.Fatalf("Failed to convert TRAINING_MAX %.2f to 1RM: %v", value, err)
+		}
+		requestValue = oneRM
+	}
+
+	body := fmt.Sprintf(`{"liftId": "%s", "type": "%s", "value": %f}`, liftID, requestType, requestValue)
 	resp, err := userPost(ts.URL("/users/"+userID+"/lift-maxes"), body, userID)
 	if err != nil {
 		t.Fatalf("Failed to create lift max: %v", err)

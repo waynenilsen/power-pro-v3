@@ -4,12 +4,15 @@ package testutil
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"net/http"
+	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
-	"time"
+	"strings"
 
 	"github.com/waynenilsen/power-pro-v3/internal/database"
 	"github.com/waynenilsen/power-pro-v3/internal/server"
@@ -25,10 +28,50 @@ type TestServer struct {
 	cleanups []func()
 }
 
+type inProcessRoundTripper struct {
+	baseHost string
+	handler  http.Handler
+	fallback http.RoundTripper
+}
+
+func (rt *inProcessRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	if req == nil || req.URL == nil {
+		return nil, errors.New("nil request")
+	}
+
+	if !strings.EqualFold(req.URL.Host, rt.baseHost) {
+		if rt.fallback != nil {
+			return rt.fallback.RoundTrip(req)
+		}
+		return nil, fmt.Errorf("unexpected host %q (expected %q)", req.URL.Host, rt.baseHost)
+	}
+
+	if req.Body != nil {
+		defer req.Body.Close()
+	}
+
+	r := req.Clone(req.Context())
+	r.RequestURI = req.URL.RequestURI()
+	if r.Host == "" {
+		r.Host = rt.baseHost
+	}
+	if r.RemoteAddr == "" {
+		r.RemoteAddr = "127.0.0.1:0"
+	}
+
+	rec := httptest.NewRecorder()
+	rt.handler.ServeHTTP(rec, r)
+
+	res := rec.Result()
+	res.Request = req
+	return res, nil
+}
+
 // NewTestServer creates and starts a new test server with an isolated database.
 // It automatically enables test mode (POWERPRO_TEST_MODE=true) to allow X-User-ID
 // and X-Admin headers to work for authentication in tests.
 func NewTestServer() (*TestServer, error) {
+	originalTestMode, hadOriginalTestMode := os.LookupEnv("POWERPRO_TEST_MODE")
 	// Enable test mode for X-User-ID header authentication
 	os.Setenv("POWERPRO_TEST_MODE", "true")
 
@@ -56,43 +99,74 @@ func NewTestServer() (*TestServer, error) {
 		return nil, fmt.Errorf("failed to open database: %w", err)
 	}
 
-	// Find available port
-	port, err := server.FindAvailablePort()
-	if err != nil {
-		db.Close()
-		os.Remove(dbPath)
-		return nil, fmt.Errorf("failed to find available port: %w", err)
-	}
-
-	// Create server
+	// Create server without binding to an actual TCP port.
+	//
+	// The test suite routes HTTP requests directly into the handler via a custom
+	// http.RoundTripper. This makes tests work in sandboxed environments where
+	// binding/listening on TCP ports is not allowed.
 	srv := server.New(server.Config{
-		Port: port,
+		Port: 0,
 		DB:   db,
 	})
 
-	// Start server in goroutine
-	errCh := make(chan error, 1)
-	go func() {
-		if err := srv.Start(); err != nil && err != http.ErrServerClosed {
-			errCh <- err
-		}
-	}()
-
-	// Wait for server to be ready
-	baseURL := fmt.Sprintf("http://localhost:%d", port)
-	if err := waitForServer(baseURL, 5*time.Second); err != nil {
+	baseURL := "http://powerpro.test"
+	parsedBaseURL, err := url.Parse(baseURL)
+	if err != nil {
 		db.Close()
 		os.Remove(dbPath)
-		return nil, fmt.Errorf("server failed to start: %w", err)
+		return nil, fmt.Errorf("failed to parse base url: %w", err)
+	}
+
+	originalTransport := http.DefaultClient.Transport
+	fallbackTransport := originalTransport
+	if fallbackTransport == nil {
+		fallbackTransport = http.DefaultTransport
+	}
+
+	http.DefaultClient.Transport = &inProcessRoundTripper{
+		baseHost: parsedBaseURL.Host,
+		handler:  srv.Handler(),
+		fallback: fallbackTransport,
+	}
+
+	// Basic readiness check against /health.
+	req, err := http.NewRequest(http.MethodGet, baseURL+"/health", nil)
+	if err != nil {
+		http.DefaultClient.Transport = originalTransport
+		db.Close()
+		os.Remove(dbPath)
+		return nil, fmt.Errorf("failed to create health request: %w", err)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		http.DefaultClient.Transport = originalTransport
+		db.Close()
+		os.Remove(dbPath)
+		return nil, fmt.Errorf("server failed health check: %w", err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		http.DefaultClient.Transport = originalTransport
+		db.Close()
+		os.Remove(dbPath)
+		return nil, fmt.Errorf("server health check failed: status %d", resp.StatusCode)
 	}
 
 	ts := &TestServer{
 		Server:  srv,
 		BaseURL: baseURL,
-		port:    port,
+		port:    0,
 		dbPath:  dbPath,
 		db:      db,
 		cleanups: []func(){
+			func() { http.DefaultClient.Transport = originalTransport },
+			func() {
+				if hadOriginalTestMode {
+					_ = os.Setenv("POWERPRO_TEST_MODE", originalTestMode)
+					return
+				}
+				_ = os.Unsetenv("POWERPRO_TEST_MODE")
+			},
 			func() { _ = srv.Stop(context.Background()) },
 			func() { db.Close() },
 			func() { _ = os.Remove(dbPath) },
@@ -135,25 +209,6 @@ const TestUserID = "test-user-001"
 
 // TestAdminID is the standard test admin ID used in tests.
 const TestAdminID = "test-admin-001"
-
-// waitForServer waits for the server to be ready by polling the health endpoint.
-func waitForServer(baseURL string, timeout time.Duration) error {
-	deadline := time.Now().Add(timeout)
-	client := &http.Client{Timeout: 1 * time.Second}
-
-	for time.Now().Before(deadline) {
-		resp, err := client.Get(baseURL + "/health")
-		if err == nil {
-			resp.Body.Close()
-			if resp.StatusCode == http.StatusOK {
-				return nil
-			}
-		}
-		time.Sleep(50 * time.Millisecond)
-	}
-
-	return fmt.Errorf("server not ready after %v", timeout)
-}
 
 // findMigrationsPath finds the migrations directory path.
 func findMigrationsPath() (string, error) {

@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/waynenilsen/power-pro-v3/internal/domain/liftmax"
 	"github.com/waynenilsen/power-pro-v3/internal/testutil"
 )
 
@@ -524,8 +525,8 @@ func TestStateMachineProgressionEvents(t *testing.T) {
 		} else {
 			// ON_FAILURE progression may require specific failure context setup
 			// Document this for future implementation
-			t.Logf("Note: ON_FAILURE progression requires failure context to be properly configured. " +
-				"TotalApplied=%d, TotalSkipped=%d. " +
+			t.Logf("Note: ON_FAILURE progression requires failure context to be properly configured. "+
+				"TotalApplied=%d, TotalSkipped=%d. "+
 				"This test documents the expected behavior when failure tracking is fully integrated.",
 				triggerResult.Data.TotalApplied, triggerResult.Data.TotalSkipped)
 
@@ -728,8 +729,22 @@ func getLiftMaxValue(t *testing.T, ts *testutil.TestServer, userID, liftID, maxT
 func createOrUpdateLiftMax(t *testing.T, ts *testutil.TestServer, userID, liftID, maxType string, value float64) {
 	t.Helper()
 
+	// Training Maxes are derived from 1RMs in the LiftMax API (TM = 90% of 1RM).
+	// Updating TRAINING_MAX directly is not allowed, so when callers ask to set a
+	// TRAINING_MAX we update the corresponding ONE_RM that will generate it.
+	targetType := maxType
+	targetValue := value
+	if maxType == "TRAINING_MAX" {
+		targetType = "ONE_RM"
+		oneRM, err := liftmax.NewMaxCalculator().ConvertToOneRM(value, nil)
+		if err != nil {
+			t.Fatalf("Failed to convert TRAINING_MAX %.2f to 1RM: %v", value, err)
+		}
+		targetValue = oneRM
+	}
+
 	// First try to get the existing lift max
-	url := fmt.Sprintf("%s?lift_id=%s&type=%s", ts.URL("/users/"+userID+"/lift-maxes"), liftID, maxType)
+	url := fmt.Sprintf("%s?lift_id=%s&type=%s", ts.URL("/users/"+userID+"/lift-maxes"), liftID, targetType)
 	req, _ := http.NewRequest(http.MethodGet, url, nil)
 	req.Header.Set("X-User-ID", userID)
 
@@ -744,7 +759,7 @@ func createOrUpdateLiftMax(t *testing.T, ts *testutil.TestServer, userID, liftID
 	if len(listResp.Data) > 0 {
 		// Update existing - PUT to /lift-maxes/{id}
 		liftMaxID := listResp.Data[0].ID
-		updateBody := fmt.Sprintf(`{"value": %f}`, value)
+		updateBody := fmt.Sprintf(`{"value": %f}`, targetValue)
 		updateReq, _ := http.NewRequest(http.MethodPut, ts.URL("/lift-maxes/"+liftMaxID), bytes.NewBufferString(updateBody))
 		updateReq.Header.Set("Content-Type", "application/json")
 		updateReq.Header.Set("X-User-ID", userID)

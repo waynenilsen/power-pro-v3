@@ -34,26 +34,39 @@ ORDER BY ws.finished_at DESC
 LIMIT ?;
 
 -- name: GetCurrentMaxesByUser :many
--- Get the most recent max for each lift a user has recorded
--- For each lift, find the record with the maximum effective_date
+-- Get the most recent max for each lift a user has recorded.
+--
+-- LiftMaxHandler auto-creates TRAINING_MAX entries with the same effective_date
+-- as the corresponding ONE_RM. In that case, prefer returning TRAINING_MAX for
+-- dashboard display.
 SELECT
-    lm.id,
-    lm.lift_id,
-    l.name AS lift_name,
-    lm.type,
-    lm.value,
-    lm.effective_date
-FROM lift_maxes lm
-JOIN lifts l ON lm.lift_id = l.id
-WHERE lm.user_id = ?
-    AND NOT EXISTS (
-        SELECT 1
-        FROM lift_maxes lm2
-        WHERE lm2.user_id = lm.user_id
-        AND lm2.lift_id = lm.lift_id
-        AND lm2.effective_date > lm.effective_date
-    )
-ORDER BY l.name ASC;
+    id,
+    lift_id,
+    lift_name,
+    type,
+    value,
+    effective_date
+FROM (
+    SELECT
+        lm.id,
+        lm.lift_id,
+        l.name AS lift_name,
+        lm.type,
+        lm.value,
+        lm.effective_date,
+        ROW_NUMBER() OVER (
+            PARTITION BY lm.lift_id
+            ORDER BY
+                lm.effective_date DESC,
+                CASE lm.type WHEN 'TRAINING_MAX' THEN 0 ELSE 1 END ASC,
+                lm.created_at DESC
+        ) AS rn
+    FROM lift_maxes lm
+    JOIN lifts l ON lm.lift_id = l.id
+    WHERE lm.user_id = ?
+)
+WHERE rn = 1
+ORDER BY lift_name ASC;
 
 -- name: GetDayForWeekPosition :one
 -- Get the day at a specific position in a week for a program

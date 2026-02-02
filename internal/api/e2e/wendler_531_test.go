@@ -46,13 +46,18 @@ func TestWendler531BBBProgram(t *testing.T) {
 	squatID := "00000000-0000-0000-0000-000000000001"
 	benchID := "00000000-0000-0000-0000-000000000002"
 
-	// Wendler training maxes (90% of 1RM typically)
-	squatTM := 315.0 // Squat training max
-	benchTM := 225.0 // Bench training max
+	// Wendler training maxes (TM is typically ~90% of 1RM).
+	//
+	// Note: the LiftMax API creates 1RMs and auto-derives TMs at 90% of 1RM, so
+	// we seed 1RMs that produce the desired starting TMs.
+	squatTM := 315.0 // Desired squat training max
+	benchTM := 225.0 // Desired bench training max
+	squatOneRM := squatTM / 0.9
+	benchOneRM := benchTM / 0.9
 
-	// Create training maxes for the user
-	createLiftMax(t, ts, userID, squatID, "TRAINING_MAX", squatTM)
-	createLiftMax(t, ts, userID, benchID, "TRAINING_MAX", benchTM)
+	// Create 1RMs (TMs will be auto-created at 90% of these values)
+	createLiftMax(t, ts, userID, squatID, "ONE_RM", squatOneRM)
+	createLiftMax(t, ts, userID, benchID, "ONE_RM", benchOneRM)
 
 	// =============================================================================
 	// Create Weekly Lookup (5/3/1 percentages for 4-week cycle)
@@ -368,8 +373,8 @@ func TestWendler531BBBProgram(t *testing.T) {
 
 		// Verify squat weight increased
 		squat := workout.Data.Exercises[0]
-		newSquatTM := squatTM + 10.0                 // 325
-		expectedWeight := newSquatTM * 0.85          // 325 * 0.85 = 276.25
+		newSquatTM := squatTM + 10.0        // 325
+		expectedWeight := newSquatTM * 0.85 // 325 * 0.85 = 276.25
 		if !withinTolerance(squat.Sets[0].Weight, expectedWeight, 5.0) {
 			t.Errorf("Expected weight ~%.1f (85%% of new TM %f), got %.1f", expectedWeight, newSquatTM, squat.Sets[0].Weight)
 		}

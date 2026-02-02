@@ -166,6 +166,12 @@ func (h *LiftMaxHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Type is ignored (we always create ONE_RM), but if provided it must be valid.
+	if req.Type != "" && req.Type != string(liftmax.OneRM) && req.Type != string(liftmax.TrainingMax) {
+		writeDomainError(w, apperrors.NewBadRequest("invalid max type"))
+		return
+	}
+
 	// Verify lift exists
 	lift, err := h.liftRepo.GetByID(req.LiftID)
 	if err != nil {

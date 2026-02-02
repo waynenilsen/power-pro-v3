@@ -26,6 +26,7 @@ Thumbs.db
 # Build artifacts
 *.log
 *.tmp
+.gocache/
 
 # Loop control
 .stop

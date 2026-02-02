@@ -53,6 +53,13 @@ func Open(cfg Config) (*sql.DB, error) {
 func runMigrations(db *sql.DB, migrationsPath string) error {
 	goose.SetBaseFS(nil)
 
+	// Keep tests quiet: goose prints per-migration logs in verbose mode, which
+	// makes `go test` output extremely noisy.
+	if os.Getenv("POWERPRO_TEST_MODE") == "true" {
+		goose.SetLogger(goose.NopLogger())
+		goose.SetVerbose(false)
+	}
+
 	if err := goose.SetDialect("sqlite3"); err != nil {
 		return fmt.Errorf("failed to set goose dialect: %w", err)
 	}
